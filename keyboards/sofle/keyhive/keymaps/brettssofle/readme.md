@@ -25,14 +25,15 @@ Keymap for a Keyhive Sofle v2 with:
 | Move a finger | Move the cursor (with glide/momentum on release) |
 | Slide around the outer ring | Circular scroll: start on the **right** side of the ring for vertical scroll, on the **left** side for horizontal |
 | Tap | Left click (double tap = double click) |
+| Press harder | **Left button held** while you press (click, or press and move to drag). Releases when you ease off or lift |
 
 While (and shortly after) you touch the trackpad, the **Mouse layer** turns on
 automatically:
 
 | Key | Mouse layer |
 | --- | --- |
-| **T** | Left button — hold T and move your finger to **drag** windows / select text |
-| **R** | Right button |
+| **T** / **Y** | Left button — hold and move your finger to **drag** windows / select text |
+| **R** / **U** | Right button |
 | H | Drag scroll (hold, then move your finger to scroll) |
 | J / K / L | Left / right / middle button |
 
@@ -44,20 +45,24 @@ be remapped in Vial.
 Two-finger taps aren't possible: in the absolute mode needed for glide and
 circular scroll, the Pinnacle reports only one finger.
 
-#### Trackpad Z experiment (`TRACKPAD_Z_DEBUG`, on in this build)
+#### Press-to-click and `trackpad_z.html`
 
-Z is the Cirque's signal strength / contact size (0–63), not true force. To
-see whether a light touch and a firm press are distinguishable:
+The Cirque reports **Z** (signal strength / contact size, 0–63, not true
+force). Pressing harder than the **threshold** (default 51) for two polls
+(~20 ms) holds the left button; it releases when Z drops below
+`threshold − hysteresis` (default 47) or the finger lifts. The cursor is held
+still for 60 ms at press and release so a hard press doesn't nudge it, a press
+never also counts as a tap, and it's ignored during ring scrolls.
 
-* **Right OLED** shows `Z` (live, plus a bar; `Z` is highlighted while touching),
-  `PEAK` (this touch), `LAST` (peak of the previous touch) and a `TOUCH` counter.
-* **Browser**: open `trackpad_z.html` straight from disk in Edge/Chrome (close
-  the Vial tab first), click *Connect*, then use *Record LIGHT* / *Record FIRM*
-  and touch the pad ~10 times each. It graphs Z live and says whether the two
-  groups overlap. It uses raw HID command `0xF5`.
+To tune it, open `trackpad_z.html` straight from disk in Edge/Chrome (close the
+Vial tab first) and click *Connect*. It graphs Z live with the press/release
+lines, has *Record LIGHT* / *Record FIRM* modes to measure your touches, and
+lets you switch press-to-click on/off and change the threshold and hysteresis.
+*Apply & save* stores them on the keyboard (EEPROM; a new firmware build resets
+them to the defaults). It talks raw HID command `0xF5`.
 
-Comment out `TRACKPAD_Z_DEBUG` in `config.h` to go back to the normal OLED status.
-
+Uncomment `TRACKPAD_Z_DEBUG` in `config.h` to also show live Z, peak, last
+peak and a touch counter on the right OLED.
 #### Tuning
 
 Change these in `config.h` and rebuild:
@@ -69,6 +74,10 @@ Change these in `config.h` and rebuild:
 | `TRACKPAD_DRAG_SCROLL_DIVISOR` | 8 | Higher = slower drag scroll |
 | `TRACKPAD_LONG_PRESS_RIGHT_CLICK` | off | Touch and hold still = right click (can misfire during slow ring scrolls) |
 | `TRACKPAD_LONG_PRESS_TERM` | 500 ms | Hold time for the long-press right click |
+| `TRACKPAD_PRESS_DEFAULT_ENABLED` / `_THRESHOLD` / `_HYSTERESIS` | 1 / 51 / 4 | Press-to-click defaults (live values are set in `trackpad_z.html`) |
+| `TRACKPAD_PRESS_DEBOUNCE` | 2 polls | Polls Z must stay at/above the threshold before pressing |
+| `TRACKPAD_PRESS_MIN_MS` | 30 ms | Shortest press before easing off can release it |
+| `TRACKPAD_PRESS_FREEZE_MS` | 60 ms | Cursor held still after press and release |
 | `AUTO_MOUSE_TIME` | 650 ms | How long the Mouse layer stays on after you lift your finger |
 | `CIRQUE_PINNACLE_TIMEOUT` | 5 ms | Give up on a failed trackpad I2C transfer after this long |
 

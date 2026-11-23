@@ -1,39 +1,76 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// TRACKPAD_Z_DEBUG: live Cirque Z (signal strength / contact size, 0-63) for
-// testing whether a light touch and a firm press can be told apart.
+// Cirque Z (signal strength / contact size, 0-63) for press-to-click, plus the
+// press-to-click settings (saved in EECONFIG_USER) and a raw HID interface
+// used by trackpad_z.html over WebHID:
 //
-//   - The master reads Z while a finger is down and keeps the peak per touch.
-//   - The values are synced to the right half and shown on its OLED.
-//   - Raw HID command 0xF5 returns them (used by trackpad_z.html over WebHID):
-//       request:  [0xF5]
-//       response: [0xF5, z, peak, last_peak, touching, touches_lo, touches_hi]
+//   get:  [0xF5, 0x00]
+//   set:  [0xF5, 0x01, enabled, threshold, hysteresis]   (saved to EEPROM)
+//   reply to both:
+//         [0xF5, z, peak, last_peak, touching, touches_lo, touches_hi,
+//          enabled, threshold, hysteresis, pressed]
+//
+// With TRACKPAD_Z_DEBUG the values are also synced to the right half for its
+// OLED.
 
 #include "brettssofle.h"
 
-#if defined(TRACKPAD_Z_DEBUG) && defined(POINTING_DEVICE_ENABLE)
+#ifdef POINTING_DEVICE_ENABLE
 
 #    include "transactions.h"
 
 // Cirque PACKETBYTE_5 (HostReg 0x17): Z in absolute mode.
 #    define TP_Z_REG_PACKETBYTE_5 0x17
-
 #    define TP_Z_RAW_HID_ID 0xF5
+#    define TP_Z_CMD_GET 0x00
+#    define TP_Z_CMD_SET 0x01
+#    define TP_CONFIG_VERSION 1
+
 #    ifndef TP_Z_SYNC_INTERVAL_MS
 #        define TP_Z_SYNC_INTERVAL_MS 30
+#    endif
+#    ifndef TRACKPAD_PRESS_DEFAULT_ENABLED
+#        define TRACKPAD_PRESS_DEFAULT_ENABLED 1
+#    endif
+#    ifndef TRACKPAD_PRESS_DEFAULT_THRESHOLD
+#        define TRACKPAD_PRESS_DEFAULT_THRESHOLD 51
+#    endif
+#    ifndef TRACKPAD_PRESS_DEFAULT_HYSTERESIS
+#        define TRACKPAD_PRESS_DEFAULT_HYSTERESIS 4
 #    endif
 
 // Public in the Cirque I2C driver.
 void RAP_ReadBytes(uint8_t address, uint8_t *data, uint8_t count);
 
+// EECONFIG_USER layout (shared with future config-page settings):
+//   bits 0-3   version
+//   bit  4     press-to-click enabled
+//   bits 5-10  press-to-click Z threshold (default 51)
+//   bits 11-13 RGB idle timeout index (reserved, 1 = 1 min)
+//   bits 14-17 press-to-click hysteresis
+//   bits 18-31 reserved
+typedef union {
+    uint32_t raw;
+    struct {
+        uint32_t version : 4;
+        uint32_t press_enabled : 1;
+        uint32_t press_threshold : 6;
+        uint32_t rgb_idle_timeout_idx : 3;
+        uint32_t press_hysteresis : 4;
+        uint32_t reserved : 14;
+    };
+} tp_config_t;
+_Static_assert(sizeof(tp_config_t) == sizeof(uint32_t), "tp_config_t must fit EECONFIG_USER");
+
 static trackpad_z_t tp_z;
+static tp_config_t  tp_config;
 
 const trackpad_z_t *trackpad_z_get(void) {
     return &tp_z;
 }
 
-void trackpad_z_update(bool touch) {
+uint8_t trackpad_z_update(bool touch) {
     if (touch) {
         uint8_t packet5 = 0;
         RAP_ReadBytes(TP_Z_REG_PACKETBYTE_5, &packet5, 1);
@@ -50,19 +87,69 @@ void trackpad_z_update(bool touch) {
         tp_z.z         = 0;
     }
     tp_z.touching = touch;
+    return tp_z.z;
 }
 
+void trackpad_z_set_pressed(bool pressed) {
+    tp_z.pressed = pressed;
+}
+
+/* ---------------------------------------------------------------------------
+ * Press-to-click settings
+ * ------------------------------------------------------------------------ */
+
+static void tp_config_set_defaults(void) {
+    tp_config.raw              = 0;
+    tp_config.version          = TP_CONFIG_VERSION;
+    tp_config.press_enabled    = TRACKPAD_PRESS_DEFAULT_ENABLED;
+    tp_config.press_threshold  = TRACKPAD_PRESS_DEFAULT_THRESHOLD;
+    tp_config.press_hysteresis = TRACKPAD_PRESS_DEFAULT_HYSTERESIS;
+    tp_config.rgb_idle_timeout_idx = 1;
+}
+
+static bool tp_config_valid(void) {
+    return tp_config.version == TP_CONFIG_VERSION && tp_config.press_threshold >= 1 && tp_config.press_hysteresis < tp_config.press_threshold;
+}
+
+void eeconfig_init_user(void) {
+    tp_config_set_defaults();
+    eeconfig_update_user(tp_config.raw);
+}
+
+bool trackpad_press_enabled(void) {
+    return tp_config.press_enabled;
+}
+uint8_t trackpad_press_threshold(void) {
+    return tp_config.press_threshold;
+}
+uint8_t trackpad_press_hysteresis(void) {
+    return tp_config.press_hysteresis;
+}
+
+/* ---------------------------------------------------------------------------
+ * Split sync for the right OLED (debug only)
+ * ------------------------------------------------------------------------ */
+
+#    ifdef TRACKPAD_Z_DEBUG
 static void tp_z_slave_handler(uint8_t in_len, const void *in_data, uint8_t out_len, void *out_data) {
     if (in_len == sizeof(tp_z)) {
         memcpy(&tp_z, in_data, sizeof(tp_z));
     }
 }
+#    endif
 
 void trackpad_z_post_init(void) {
+    tp_config.raw = eeconfig_read_user();
+    if (!tp_config_valid()) {
+        eeconfig_init_user();
+    }
+#    ifdef TRACKPAD_Z_DEBUG
     transaction_register_rpc(RPC_ID_USER_TP_Z, tp_z_slave_handler);
+#    endif
 }
 
 void trackpad_z_sync_task(void) {
+#    ifdef TRACKPAD_Z_DEBUG
     static trackpad_z_t last_sent;
     static uint16_t     last_time;
     if (!is_keyboard_master() || timer_elapsed(last_time) < TP_Z_SYNC_INTERVAL_MS || memcmp(&last_sent, &tp_z, sizeof(tp_z)) == 0) {
@@ -72,19 +159,45 @@ void trackpad_z_sync_task(void) {
         last_sent = tp_z;
     }
     last_time = timer_read();
+#    endif
 }
+
+/* ---------------------------------------------------------------------------
+ * Raw HID
+ * ------------------------------------------------------------------------ */
 
 void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
-    if (data[0] == TP_Z_RAW_HID_ID && length >= 7) {
-        data[1] = tp_z.z;
-        data[2] = tp_z.peak;
-        data[3] = tp_z.last_peak;
-        data[4] = tp_z.touching;
-        data[5] = tp_z.touches & 0xFF;
-        data[6] = tp_z.touches >> 8;
+    if (data[0] != TP_Z_RAW_HID_ID || length < 11) {
+        data[0] = id_unhandled;
         return;
     }
-    data[0] = id_unhandled;
+
+    if (data[1] == TP_Z_CMD_SET && data[3] <= 63 && data[4] <= 15) {
+        tp_config_t new_config = tp_config;
+        new_config.press_enabled    = data[2] ? 1 : 0;
+        new_config.press_threshold  = data[3];
+        new_config.press_hysteresis = data[4];
+        tp_config_t old_config      = tp_config;
+        tp_config                   = new_config;
+        if (tp_config_valid()) {
+            if (tp_config.raw != old_config.raw) {
+                eeconfig_update_user(tp_config.raw);
+            }
+        } else {
+            tp_config = old_config;
+        }
+    }
+
+    data[1]  = tp_z.z;
+    data[2]  = tp_z.peak;
+    data[3]  = tp_z.last_peak;
+    data[4]  = tp_z.touching;
+    data[5]  = tp_z.touches & 0xFF;
+    data[6]  = tp_z.touches >> 8;
+    data[7]  = tp_config.press_enabled;
+    data[8]  = tp_config.press_threshold;
+    data[9]  = tp_config.press_hysteresis;
+    data[10] = tp_z.pressed;
 }
 
-#endif
+#endif // POINTING_DEVICE_ENABLE

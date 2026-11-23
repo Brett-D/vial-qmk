@@ -4,10 +4,12 @@
 // Trackpad behaviour on top of the QMK Cirque Pinnacle driver (absolute mode):
 //
 //   tap                  -> left click (sent when the finger lifts)
+//   press harder         -> left button held while Z (signal strength) stays
+//                           above the threshold: click, or press and move to drag
 //   hold DRAG_SCROLL key -> trackpad movement scrolls
 //
-// Clicking and dragging is done with keys on the auto mouse layer (see
-// keymap.c): hold T and move to drag, R is right click.
+// Mouse buttons are also on the auto mouse layer (see keymap.c): T/Y = left
+// (hold and move to drag), R/U = right.
 //
 // Optional (off by default, enable in config.h):
 //   TRACKPAD_LONG_PRESS_RIGHT_CLICK -> touch and hold still = right click
@@ -33,6 +35,15 @@ void trackpad_set_drag_scroll(bool enable) {}
 #    endif
 #    ifndef TRACKPAD_DRAG_SCROLL_DIVISOR
 #        define TRACKPAD_DRAG_SCROLL_DIVISOR 8
+#    endif
+#    ifndef TRACKPAD_PRESS_DEBOUNCE
+#        define TRACKPAD_PRESS_DEBOUNCE 2
+#    endif
+#    ifndef TRACKPAD_PRESS_MIN_MS
+#        define TRACKPAD_PRESS_MIN_MS 30
+#    endif
+#    ifndef TRACKPAD_PRESS_FREEZE_MS
+#        define TRACKPAD_PRESS_FREEZE_MS 60
 #    endif
 
 #    ifdef TRACKPAD_DEBUG
@@ -67,6 +78,60 @@ void trackpad_set_drag_scroll(bool enable) {
 
 static inline uint16_t tp_abs(int16_t v) {
     return v < 0 ? -v : v;
+}
+
+/* ---------------------------------------------------------------------------
+ * Press-to-click: Z (signal strength) above a threshold holds the left button.
+ * ------------------------------------------------------------------------ */
+
+static struct {
+    bool     down;
+    bool     blocked; // ring scroll during this touch
+    uint8_t  above;   // consecutive polls at/above the threshold
+    uint16_t down_timer;
+    bool     freeze;
+    uint16_t freeze_timer;
+} press;
+
+static void tp_press_set(bool down) {
+    press.down         = down;
+    press.down_timer   = timer_read();
+    press.freeze       = true; // a hard press/release can nudge the finger
+    press.freeze_timer = timer_read();
+    tp_dprintf("trackpad: press %s\n", down ? "down" : "up");
+}
+
+static void tp_press_step(bool touch, uint8_t z, bool scrolling) {
+    if (!touch) {
+        press.blocked = false;
+        press.above   = 0;
+        if (press.down) {
+            tp_press_set(false);
+        }
+        return;
+    }
+    if (scrolling && !press.down) {
+        press.blocked = true;
+    }
+    if (!trackpad_press_enabled() || press.blocked) {
+        press.above = 0;
+        if (press.down) {
+            tp_press_set(false);
+        }
+        return;
+    }
+
+    uint8_t threshold = trackpad_press_threshold();
+    if (!press.down) {
+        if (z < threshold) {
+            press.above = 0;
+        } else if (++press.above >= TRACKPAD_PRESS_DEBOUNCE) {
+            tp.cancelled = true; // a press is not also a tap on lift
+            tp_press_set(true);
+        }
+    } else if (z + trackpad_press_hysteresis() < threshold && timer_elapsed(press.down_timer) >= TRACKPAD_PRESS_MIN_MS) {
+        tp_press_set(false);
+    }
 }
 
 static void tp_gesture_step(bool touch, uint16_t motion) {
@@ -147,12 +212,22 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     uint16_t motion = tp_abs(mouse_report.x) + tp_abs(mouse_report.y) + tp_abs(mouse_report.h) + tp_abs(mouse_report.v);
 
     tp_gesture_step(touch, motion);
-#    ifdef TRACKPAD_Z_DEBUG
-    trackpad_z_update(touch);
-#    endif
+    uint8_t z = trackpad_z_update(touch);
+    // Ring scroll reports wheel motion; don't let a firm press click mid-scroll.
+    tp_press_step(touch, z, mouse_report.h != 0 || mouse_report.v != 0);
+    trackpad_z_set_pressed(press.down);
+
+    if (press.freeze) {
+        if (timer_elapsed(press.freeze_timer) < TRACKPAD_PRESS_FREEZE_MS) {
+            mouse_report.x = 0;
+            mouse_report.y = 0;
+        } else {
+            press.freeze = false;
+        }
+    }
 
     static uint8_t owned = 0;
-    uint8_t        out   = tp_click_step();
+    uint8_t        out   = tp_click_step() | (press.down ? BTN_LEFT : 0);
     // Only clear buttons this module pressed; mouse keys share the same bits.
     mouse_report.buttons = (mouse_report.buttons & ~(owned & ~out)) | out;
     owned                = out;
