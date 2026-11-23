@@ -90,11 +90,12 @@
 // OLED, to see whether a light touch and a firm press are distinguishable.
 // trackpad_z.html works without it (raw HID). Off by default.
 // #define TRACKPAD_Z_DEBUG
-// RPC_ID_USER_CFG mirrors config mode to the right OLED (config_mode.c).
+// RPC_ID_USER_CFG mirrors config mode to the right OLED (config_mode.c);
+// RPC_ID_USER_LEDMAP sends the measured LED map to the right half (led_map.c).
 #ifdef TRACKPAD_Z_DEBUG
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP
 #else
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP
 #endif
 
 // Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE
@@ -123,6 +124,9 @@
 #    undef RGB_MATRIX_MAXIMUM_BRIGHTNESS
 #    define RGB_MATRIX_MAXIMUM_BRIGHTNESS 100 // power cap, as keyhive's rgblight max_brightness
 // Each half drives only its own 37 LEDs; see rgb_driver.c.
+// EEPROM keyboard datablock (unused by the sofle code): the measured LED map
+// (led_map.c). EECONFIG_USER keeps the 32-bit settings word.
+#    define EECONFIG_KB_DATA_SIZE 80
 #    define WS2812_LED_COUNT 37
 #    define RGB_MATRIX_KEYPRESSES // reactive / splash effects
 #    define RGB_MATRIX_FRAMEBUFFER_EFFECTS

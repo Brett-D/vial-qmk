@@ -34,6 +34,7 @@
 #include "brettssofle.h"
 #include "bridge.h"
 #include "config_picker.h"
+#include "led_map.h"
 #include "dynamic_keymap.h"
 #include "keymap_introspection.h"
 #include "raw_hid.h"
@@ -60,7 +61,8 @@
 //   [0xF6, sub, args...] -> [0xF6, sub, proto, hid state, keyboard-only state,
 //                            led idle idx, led max val, led mode count,
 //                            led enabled, vial unlocked, ask seconds left,
-//                            effect (VialRGB id), zone, underglow hue, underglow sat]
+//                            effect (VialRGB id), zone, underglow hue, underglow sat,
+//                            calibration LED (0xFE = off), map flags (1 measured, 2 last commit ok)]
 #define CFG_RAW_HID_ID 0xF6
 enum cfg_hid_cmd {
     CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
@@ -71,6 +73,12 @@ enum cfg_hid_cmd {
     CMD_LED_ENABLE  = 0x05, // arg: 0/1 = lights off/on (preview; saved by VIA lighting save)
     CMD_SET_ZONE    = 0x06, // args: zone, underglow hue, underglow sat (preview)
     CMD_SAVE_ZONE   = 0x07, // save the previewed zone settings
+    CMD_CAL_LIGHT   = 0x08, // arg: physical LED 0-73 to light alone (0xFF = all off); starts calibration
+    CMD_CAL_END     = 0x09, // end calibration, effects resume
+    CMD_MAP_READ    = 0x0A, // arg: offset -> [.., .., offset, LED count, 26 map entries]
+    CMD_MAP_WRITE   = 0x0B, // args: offset, len (<= 26), entries (staged)
+    CMD_MAP_COMMIT  = 0x0C, // validate + save + apply the staged map (status byte 16 bit 1 = ok)
+    CMD_MAP_RESET   = 0x0D, // back to the built-in map
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -180,6 +188,7 @@ static struct {
 typedef struct {
     uint8_t state, tab, layer, hid;
     uint8_t zone, ug_hue, ug_sat; // LED zones, for the right half's LEDs
+    uint8_t cal;                  // LED calibration: 0 off, 1 all dark, 2 + LED index
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -290,7 +299,46 @@ static void zones_color(uint8_t *hue, uint8_t *sat) {
     *sat = is_keyboard_master() ? zones.sat : oled_state.ug_sat;
 }
 
+/* LED calibration: light one physical LED (raw chain index, independent of the
+ * LED map) so the page can ask which key it is under. */
+#    define CAL_OFF 0xFE
+#    define CAL_DARK 0xFF
+static uint8_t cal = CAL_OFF;
+static bool    cal_was_enabled;
+static bool    map_commit_ok;
+
+static void cal_set(uint8_t index) {
+    if (cal == CAL_OFF) {
+        cal_was_enabled = rgb_matrix_is_enabled();
+        if (!cal_was_enabled) {
+            rgb_matrix_enable_noeeprom();
+        }
+    }
+    cal = index < LED_MAP_COUNT ? index : CAL_DARK;
+}
+
+static void cal_end(void) {
+    if (cal != CAL_OFF) {
+        cal = CAL_OFF;
+        if (!cal_was_enabled) {
+            rgb_matrix_disable_noeeprom();
+        }
+    }
+}
+
+static uint8_t cal_code(void) {
+    return cal == CAL_OFF ? 0 : cal == CAL_DARK ? 1 : 2 + cal;
+}
+
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    uint8_t code = is_keyboard_master() ? cal_code() : oled_state.cal;
+    if (code) {
+        for (uint8_t i = led_min; i < led_max; i++) {
+            uint8_t v = code >= 2 && i == code - 2 ? RGB_MATRIX_MAXIMUM_BRIGHTNESS : 0;
+            rgb_matrix_set_color(i, v, v, v);
+        }
+        return false;
+    }
     uint8_t zone = zones_zone();
     if (zone == ZONE_ALL) {
         return false;
@@ -628,6 +676,31 @@ static void cfg_raw_hid(uint8_t *data) {
                 user_config_set_led_zone(zones.zone, zones.hue, zones.sat);
             }
             break;
+        case CMD_CAL_LIGHT:
+            if (hid_writes_allowed()) {
+                cal_set(arg);
+            }
+            break;
+        case CMD_CAL_END:
+            cal_end();
+            break;
+        case CMD_MAP_READ:
+            data[3] = LED_MAP_COUNT;
+            led_map_read(arg, &data[4], 26);
+            return;
+        case CMD_MAP_WRITE:
+            if (hid_writes_allowed() && data[3] <= 26) {
+                led_map_write(arg, &data[4], data[3]);
+            }
+            break;
+        case CMD_MAP_COMMIT:
+            map_commit_ok = hid_writes_allowed() && led_map_commit();
+            break;
+        case CMD_MAP_RESET:
+            if (hid_writes_allowed()) {
+                led_map_reset();
+            }
+            break;
         case CMD_LED_ENABLE:
             if (hid_writes_allowed()) {
                 if (arg) {
@@ -663,6 +736,8 @@ static void cfg_raw_hid(uint8_t *data) {
     data[12] = zones.zone;
     data[13] = zones.hue;
     data[14] = zones.sat;
+    data[15] = cal;
+    data[16] = (led_map_is_measured() ? 1 : 0) | (map_commit_ok ? 2 : 0);
 #endif
     data[9]  = vial_unlocked ? 1 : 0;
     data[10] = (ask_left + 999) / 1000;
@@ -1143,8 +1218,8 @@ static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_l
 static void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
-    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat};
-    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE;
+    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat, cal_code()};
+    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal;
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || (active && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
         last_sent = now;
@@ -1204,6 +1279,7 @@ void config_mode_init(void) {
     transaction_register_rpc(RPC_ID_USER_CFG, oled_sync_handler);
 #ifdef RGB_MATRIX_ENABLE
     zones_load();
+    led_map_init();
 #endif
 }
 
@@ -1230,6 +1306,10 @@ static void knob_combo_task(void) {
 void config_mode_task(void) {
 #ifdef RGB_MATRIX_ENABLE
     zones_apply_flags(zones_zone());
+    led_map_task();
+    if (cal != CAL_OFF && hid.state != HS_ACTIVE) {
+        cal_end(); // the page went away mid-calibration
+    }
 #endif
     if (!is_keyboard_master()) {
         return;

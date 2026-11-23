@@ -83,6 +83,12 @@
   .peaks span.click { background:#1d4630; }
   #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1d4630; color:#c9f7dd; padding:8px 16px; border-radius:8px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; z-index:5; }
   #toast.show { opacity:1; } #toast.bad { background:#4c1d23; color:#ffd0d5; }
+  #calKb { position:relative; height:310px; margin-top:10px; }
+  #calKb .k { cursor:pointer; } #calKb .k:hover { outline:2px solid var(--acc); }
+  #calKb .k.done { background:#1d4630; } #calKb .k.other { opacity:.35; }
+  .calBtns { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .calStep { font-size:18px; font-weight:700; margin:6px 0; }
+  #calJson { width:100%; height:120px; font:11px ui-monospace,monospace; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:6px; }
   .adv { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
   .adv .line { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
 </style>
@@ -156,6 +162,21 @@
           <div class="row ugRow"><span>Underglow saturation</span><input type="range" id="ugSat" min="0" max="255"><span class="v" id="ugSatV"></span></div>
           <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
           <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
+          <div class="btns" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+            <button id="calStart">Calibrate LED positions…</button><button id="mapReset">Use built-in LED map</button>
+            <span class="dim small" id="mapState"></span>
+          </div>
+        </div>
+        <div id="calView" class="hidden">
+          <div class="calStep" id="calTitle"></div>
+          <div id="calText"></div>
+          <div class="calBtns" id="calBtns"></div>
+          <div id="calKb"></div>
+          <div id="calDone" class="hidden">
+            <p>Result (LED index → key). <b>Save to keyboard</b> makes effects like splash use it right away; it is kept across power-offs.</p>
+            <textarea id="calJson" readonly></textarea>
+            <div class="calBtns"><button id="calSave" class="primary">Save to keyboard</button><button id="calCopy">Copy result</button><button id="calRestart">Start over</button><button id="calClose">Close</button></div>
+          </div>
         </div>
       </div>
       <div id="padView" class="panel hidden">
@@ -273,6 +294,7 @@ document.addEventListener("keydown", (e) => {
   if (feedCode(e.code)) e.preventDefault();
 }, true);
 window.addEventListener("blur", () => document.body.classList.add("blurred"));
+window.addEventListener("resize", () => { scheduleRender(); if (CAL.on && CAL.phase !== "choice") calDrawKb(CAL.phase === "done" ? -1 : calCurrent()); });
 window.addEventListener("focus", () => document.body.classList.remove("blurred"));
 $("focusWarn").addEventListener("click", () => window.focus());
 
@@ -439,6 +461,7 @@ async function startHidSession(st) {
 function readStatus(st) {
   S.hidState = st[3]; S.bridgeOn = st[4] !== 0; S.vialUnlocked = !!st[9];
   S.ledInfo = { idle: st[5], max: st[6], modes: st[7], enabled: st[8] };
+  S.mapMeasured = !!(st[16] & 1);
 }
 
 async function pollStatus() {
@@ -503,6 +526,7 @@ async function hidLoadTp() {
 
 async function closeHid() {
   clearInterval(HID.poll); HID.poll = null; stopZPoll();
+  if (CAL.on && HID.dev && HID.dev.opened) await calStop();
   if (S.mode === "hid" && S.led && S.led.dirty && HID.dev && HID.dev.opened) { try { await cmd([0xf6, 0x04]); } catch (e) { /* gone */ } }
   const dev = HID.dev; HID.dev = null;
   if (dev) {
@@ -619,6 +643,179 @@ function buildLedSelects() {
 $("ledSave").addEventListener("click", ledSave);
 $("ledRevert").addEventListener("click", ledRevert);
 
+// ---------------------------------------------------------------- LED calibration wizard
+// Lights one physical LED at a time (0-36 left chain, 37-73 right chain) and
+// asks which key it is under. The result can be saved on the keyboard.
+const HALF = 37;
+const CAL = { on: false, phase: "", idx: 0, res: [], verify: [], vi: 0, hyp: null };
+const keyAt = {};
+DATA.layout.forEach((k) => (keyAt[k.r + "," + k.c] = k));
+// Left key -> right key at the mirrored position.
+const mirrorOf = {};
+DATA.layout.forEach((k) => {
+  const m = DATA.layout.find((o) => o.x === 15.5 - k.x && o.y === k.y);
+  if (m && k.r < 5) mirrorOf[k.r + "," + k.c] = m.r + "," + m.c;
+});
+const calLabel = (v) => v === undefined || v === null ? "skipped" : v;
+
+async function calLight(i) { await cmd([0xf6, 0x08, i]); }
+async function calStart() {
+  CAL.on = true; CAL.phase = "left"; CAL.idx = 0; CAL.res = Array(2 * HALF).fill(undefined); CAL.hyp = null;
+  $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden"); $("calDone").classList.add("hidden");
+  await calShow();
+}
+async function calStop() {
+  if (!CAL.on) return;
+  CAL.on = false;
+  try { await cmd([0xf6, 0x09]); } catch (e) { /* gone */ }
+  $("calView").classList.add("hidden"); $("ledCtl").classList.remove("hidden");
+}
+function calCurrent() { return CAL.phase === "verify" ? HALF + CAL.verify[CAL.vi] : CAL.idx; }
+
+async function calShow() {
+  const btn = (id, label, cls = "") => `<button id="${id}" class="${cls}">${label}</button>`;
+  $("calDone").classList.add("hidden");
+  $("calKb").classList.remove("hidden");
+  if (CAL.phase === "choice") {
+    await calLight(0xff);
+    $("calTitle").textContent = "Left half done";
+    $("calText").innerHTML = "The right half is usually wired as a mirror image of the left. Check that with 4 LEDs, or measure all 37.";
+    $("calBtns").innerHTML = btn("calMirror", "Mirror the left half (check 4 LEDs)", "primary") + btn("calAllRight", "Measure all 37 right LEDs") + btn("calCancel", "Cancel");
+    $("calKb").classList.add("hidden");
+    $("calMirror").onclick = calStartVerify;
+    $("calAllRight").onclick = () => { CAL.phase = "right"; CAL.idx = HALF; calShow(); };
+    $("calCancel").onclick = calStop;
+    return;
+  }
+  if (CAL.phase === "done") { await calLight(0xff); calFinish(); return; }
+  const i = calCurrent(), half = i < HALF ? "left" : "right";
+  await calLight(i);
+  $("calTitle").textContent = CAL.phase === "verify"
+    ? `Checking the mirror: ${CAL.vi + 1} of ${CAL.verify.length} (LED ${i})`
+    : `LED ${i} — ${half} half, ${i % HALF + 1} of ${HALF}`;
+  $("calText").innerHTML = `One LED on the <b>${half}</b> half is lit white; the rest are off. Click the key it is under. If it glows from under the board (not under a key), click <b>Underglow</b>. If you see nothing, click <b>Nothing lit</b>.`;
+  $("calBtns").innerHTML = btn("calUg", "Underglow / not under a key") + btn("calNone", "Nothing lit") +
+    (CAL.phase === "verify" ? "" : btn("calBack", "Back") + btn("calSkip", "Skip")) + btn("calCancel", "Cancel");
+  $("calUg").onclick = () => calAnswer("underglow");
+  $("calNone").onclick = () => calAnswer("none");
+  if ($("calBack")) $("calBack").onclick = calBack;
+  if ($("calSkip")) $("calSkip").onclick = () => calAnswer(undefined);
+  $("calCancel").onclick = calStop;
+  calDrawKb(i);
+}
+
+function calDrawKb(cur) {
+  const U = Math.min(50, Math.floor(($("calKb").clientWidth || 800) / 16.6)), leftHalf = cur < HALF;
+  const owner = {};
+  CAL.res.forEach((v, i) => { if (v && v.includes(",")) owner[v] = i; });
+  let html = "";
+  for (const k of DATA.layout) {
+    const key = k.r + "," + k.c, o = owner[key];
+    const other = (k.r < 5) !== leftHalf;
+    html += `<div class="k ${o !== undefined ? "done" : ""} ${other ? "other" : ""}" data-key="${key}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${o !== undefined ? "#" + o : ""}</div>`;
+  }
+  $("calKb").innerHTML = html;
+  $("calKb").style.height = (5.9 * U) + "px";
+}
+$("calKb").addEventListener("click", (e) => { const t = e.target.closest("[data-key]"); if (t && CAL.on) calAnswer(t.dataset.key); });
+
+async function calAnswer(v) {
+  const i = calCurrent();
+  if (CAL.phase === "verify") {
+    CAL.verifyAns[CAL.vi] = v;
+    if (++CAL.vi >= CAL.verify.length) return calDecideMirror();
+    return calShow();
+  }
+  if (v && v.includes(",")) {
+    const prev = CAL.res.findIndex((x, j) => x === v && j !== i);
+    if (prev >= 0) {
+      if (!confirm(`That key is already set for LED ${prev}. Move it to LED ${i}?`)) return;
+      CAL.res[prev] = undefined;
+    }
+  }
+  CAL.res[i] = v;
+  CAL.idx++;
+  if (CAL.phase === "left" && CAL.idx >= HALF) CAL.phase = "choice";
+  else if (CAL.phase === "right" && CAL.idx >= 2 * HALF) CAL.phase = "done";
+  calShow();
+}
+function calBack() {
+  if (CAL.idx === 0 || (CAL.phase === "right" && CAL.idx === HALF)) return;
+  CAL.idx--; calShow();
+}
+
+// Two common wirings: the right chain runs the same way as the left (j <-> j)
+// or reversed (j <-> 36 - j). Predict, check 4 LEDs, keep the one that fits.
+function mirrorPrediction(reversed) {
+  const out = [];
+  for (let j = 0; j < HALF; j++) {
+    const v = CAL.res[reversed ? HALF - 1 - j : j];
+    out.push(v && v.includes(",") ? mirrorOf[v] || null : v);
+  }
+  return out;
+}
+function calStartVerify() {
+  const a = mirrorPrediction(false), b = mirrorPrediction(true);
+  const keyed = [...Array(HALF).keys()].filter((j) => (a[j] && a[j].includes(",")) || (b[j] && b[j].includes(",")));
+  const differ = keyed.filter((j) => a[j] !== b[j]);
+  const pool = differ.length >= 4 ? differ : keyed;
+  CAL.verify = [0, 1, 2, 3].map((n) => pool[Math.floor(n * pool.length / 4)]).filter((j, n, arr) => j !== undefined && arr.indexOf(j) === n);
+  CAL.verifyAns = []; CAL.vi = 0; CAL.pred = { a, b }; CAL.phase = "verify";
+  calShow();
+}
+function calDecideMirror() {
+  const fits = (pred) => CAL.verify.every((j, n) => (pred[j] ?? undefined) === CAL.verifyAns[n]);
+  const pick = fits(CAL.pred.a) ? CAL.pred.a : fits(CAL.pred.b) ? CAL.pred.b : null;
+  if (!pick) {
+    toast("The right half doesn't mirror the left — measuring all 37 right LEDs", true);
+    CAL.phase = "right"; CAL.idx = HALF;
+    return calShow();
+  }
+  pick.forEach((v, j) => (CAL.res[HALF + j] = v === null ? "none" : v));
+  CAL.hyp = pick === CAL.pred.a ? "same order" : "reversed";
+  CAL.phase = "done";
+  calShow();
+}
+function calResultJson() {
+  return JSON.stringify({ leds: CAL.res.map((v) => (v === undefined || v === null ? "none" : v)),
+                          note: CAL.hyp ? `right half mirrored (${CAL.hyp}), 4 LEDs checked` : "all measured" });
+}
+function calFinish() {
+  const skipped = CAL.res.filter((v) => v === undefined).length;
+  $("calTitle").textContent = "LED map measured";
+  $("calText").innerHTML = skipped ? `<span style="color:var(--warn)">${skipped} LED(s) were skipped and will stay dark.</span>` : "";
+  $("calBtns").innerHTML = "";
+  calDrawKb(-1);
+  $("calJson").value = calResultJson();
+  $("calDone").classList.remove("hidden");
+}
+async function calSave() {
+  const codes = CAL.res.map((v) => v === "underglow" ? 0xfe : v && v.includes(",") ? (([r, c]) => r * DATA.cols + c)(v.split(",").map(Number)) : 0xff);
+  try {
+    for (let off = 0; off < codes.length; off += 26) {
+      const part = codes.slice(off, off + 26);
+      const d = await cmd([0xf6, 0x0b, off, part.length, ...part]);
+      if (d[0] === 0xff) throw new Error("refused — reconnect");
+    }
+    const st = await cmd([0xf6, 0x0c]);
+    if (!(st[16] & 2)) throw new Error("the keyboard rejected the map (a key used twice?)");
+    readStatus(st);
+    toast("LED map saved on the keyboard");
+    await calStop();
+    render();
+  } catch (e) { toast("Not saved: " + e.message, true); }
+}
+$("calStart").addEventListener("click", calStart);
+$("calSave").addEventListener("click", calSave);
+$("calCopy").addEventListener("click", async () => { $("calJson").select(); try { await navigator.clipboard.writeText($("calJson").value); toast("Copied"); } catch (e) { document.execCommand("copy"); toast("Copied"); } });
+$("calRestart").addEventListener("click", calStart);
+$("calClose").addEventListener("click", calStop);
+$("mapReset").addEventListener("click", async () => {
+  if (!confirm("Go back to the built-in LED map (forget the measured one)?")) return;
+  try { const d = await cmd([0xf6, 0x0d]); if (d[0] === 0xff) throw new Error("refused"); readStatus(await cmd([0xf6, 0x00, 1])); toast("Using the built-in LED map"); render(); }
+  catch (e) { toast("Failed: " + e.message, true); }
+});
+
 // Trackpad: live Z through 0xF5 get; settings saved with Save.
 function tpInput() {
   const t = S.tp;
@@ -657,7 +854,7 @@ function stopZPoll() { clearInterval(HID.zpoll); HID.zpoll = null; }
 
 async function setTab(tab) {
   if (S.mode !== "hid" || !S.ui || tab === S.ui.tab) return;
-  if (S.ui.tab === 2) await ledRevert();
+  if (S.ui.tab === 2) { await calStop(); await ledRevert(); }
   if (S.ui.tab === 3 && S.tp && S.tp.dirty) await hidLoadTp();
   S.ui.tab = tab;
   if (tab === 2) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
@@ -794,7 +991,7 @@ function renderKeys(ui) {
   const hid = S.mode === "hid";
   setHtml($("layers"), DATA.layerNames.slice(0, S.ready.layers).map((n, i) =>
     `<button type="button" class="layer ${i === ui.layer ? "on" : ""}" data-layer="${i}" ${hid ? "" : "tabindex=-1"}>${i} ${n}${i === S.ready.defLayer ? " (default)" : ""}</button>`).join(""));
-  const U = 52, km = S.keymap[ui.layer];
+  const U = Math.min(52, Math.floor(($("kb").clientWidth || 860) / 16.6)), km = S.keymap[ui.layer];
   let html = "";
   for (const k of DATA.layout) {
     const isKnob = (k.r === KNOB_L[0] && k.c === KNOB_L[1]) || (k.r === KNOB_R[0] && k.c === KNOB_R[1]);
@@ -908,6 +1105,7 @@ function renderLeds(ui) {
     $("ledSatV").textContent = Math.round(l.sat / 255 * 100) + "%";
     $("ledValV").textContent = Math.round(l.val / Math.max(l.max, 1) * 100) + "%";
     $("ledSpeedV").textContent = Math.round(l.speed / 255 * 100) + "%";
+    $("mapState").textContent = S.mapMeasured ? "LED map: measured ✓" : "LED map: built-in (may not match your board)";
     setIfIdle("ledZone", l.zone); setIfIdle("ugHue", l.ugHue); setIfIdle("ugSat", l.ugSat);
     document.querySelectorAll(".ugRow").forEach((r) => r.classList.toggle("hidden", l.zone !== 1));
     $("ugHueV").textContent = Math.round(l.ugHue / 256 * 360) + "°";

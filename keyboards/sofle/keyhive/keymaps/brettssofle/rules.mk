@@ -44,5 +44,5 @@ SRC += trackpad.c trackpad_z.c oled.c
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
 SRC += config_mode.c bridge.c
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
-    SRC += rgb_driver.c rgb_layout.c
+    SRC += rgb_driver.c rgb_layout.c led_map.c
 endif

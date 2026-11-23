@@ -86,17 +86,29 @@ Change these in `config.h` and rebuild:
 
 The I2C bus runs at QMK's 100 kHz default, like the original firmware.
 
-### LED layout
+### LED layout and calibration
 
 The Keyhive Sofle v2 has 37 LEDs per half: 30 under the keys (29 keys plus the
-encoder/key slot) and 7 underglow. `rgb_layout.c` maps them for RGB Matrix in
-physical chain order. It was derived from keyhive's rgblight `led_map` applied
-to the Sofle RGB chain order in `keyboards/sofle/info.json` (the right half's
-chain mirrors the left), not measured, so check it once: pick the effect
-**Reactive: pressed key lights** and press keys; each key should light itself.
-If a key lights a different LED, note which and fix its entry in
-`rgb_layout.c`'s `matrix_co` table. `config.h` sets the 74-LED count and the
-37/37 split (`sofle/info.json`'s 72-LED Sofle RGB values would otherwise win).
+encoder/key slot) and 7 underglow. Which physical LED sits under which key is
+board-specific, so **measure it once** with the config page (mouse mode):
+
+1. Connect, open the **LEDs** tab and click **Calibrate LED positions…**.
+2. One LED lights up white at a time. Click the key it is under, or
+   **Underglow / not under a key**, or **Nothing lit** (Back / Skip available).
+3. After the left half's 37 LEDs, choose **Mirror the left half** — the page
+   lights 4 right-half LEDs to confirm the mirror (same or reversed chain
+   order) — or measure all 37 right LEDs. If the check fails it measures them
+   all automatically.
+4. **Save to keyboard**. Effects (splash, reactive, …) use the measured map
+   right away; it is kept in EEPROM on the left half and sent to the right
+   half (`led_map.c`). **Use built-in LED map** forgets it. **Copy result**
+   gives a JSON you can bake in as the built-in map:
+   `python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_rgb_layout.py --map led.json`
+
+The built-in map in `rgb_layout.c` is derived from keyhive's rgblight
+`led_map` + the Sofle RGB chain order and does not match every board.
+`config.h` sets the 74-LED count and 37/37 split (`sofle/info.json`'s 72-LED
+Sofle RGB values would otherwise win).
 
 ## Config mode
 
