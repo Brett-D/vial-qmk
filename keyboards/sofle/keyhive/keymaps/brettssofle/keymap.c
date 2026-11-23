@@ -38,7 +38,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
    KC_GRV, KC_1   , KC_2   , KC_3   , KC_4   , KC_5   ,                         KC_6    , KC_7   , KC_8   , KC_9   , KC_0   , KC_GRV ,
    KC_ESC, KC_Q   , KC_W   , KC_E   , KC_R   , KC_T   ,                         KC_Y    , KC_U   , KC_I   , KC_O   , KC_P   , KC_BSPC,
    KC_TAB, KC_A   , KC_S   , KC_D   , KC_F   , KC_G   ,                         KC_H    , KC_J   , KC_K   , KC_L   , KC_SCLN, KC_QUOT,
-  KC_LSFT, KC_Z   , KC_X   , KC_C   , KC_V   , KC_B   , KC_MUTE, KC_NO,         KC_N    , KC_M   , KC_COMM, KC_DOT , KC_SLSH, KC_RSFT,
+  KC_LSFT, KC_Z   , KC_X   , KC_C   , KC_V   , KC_B   , KC_MUTE, OLED_PAGE,     KC_N    , KC_M   , KC_COMM, KC_DOT , KC_SLSH, KC_RSFT,
                   KC_LGUI, KC_LALT, KC_LCTL, MO(_LOWER), KC_SPC ,         KC_ENT  , MO(_RAISE), KC_RCTL, KC_RALT, KC_RGUI
 ),
 /*
@@ -117,7 +117,11 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   _______, _______, _______, _______, _______, _______, _______,    _______,    _______    , _______, _______, _______, _______, _______,
                    _______, _______, _______, _______, _______,          _______, _______, _______, _______, _______
 ),
-[5] = LAYOUT(
+/* ADJUST: Lower + Raise held together (any keys mapped to MO(Lower) and
+ * MO(Raise) work). Empty (transparent) to start; fill it in Vial or the
+ * config page.
+ */
+[_ADJUST] = LAYOUT(
   _______, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
   _______, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
   _______, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
@@ -134,9 +138,14 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
     [_LOWER]   = { ENCODER_CCW_CW(_______, _______), ENCODER_CCW_CW(_______, _______) },
     [_RAISE]   = { ENCODER_CCW_CW(_______, _______), ENCODER_CCW_CW(_______, _______) },
     [_MOUSE]   = { ENCODER_CCW_CW(_______, _______), ENCODER_CCW_CW(_______, _______) },
-    [5]        = { ENCODER_CCW_CW(_______, _______), ENCODER_CCW_CW(_______, _______) },
+    [_ADJUST]  = { ENCODER_CCW_CW(_______, _______), ENCODER_CCW_CW(_______, _______) },
 };
 #endif
+
+// Adjust is on while both Lower and Raise are on, however they were turned on.
+layer_state_t layer_state_set_user(layer_state_t state) {
+    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+}
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
@@ -153,6 +162,17 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 config_mode_toggle();
             }
             return false;
+        case OLED_PAGE: {
+            // On release, and not after a long hold (the hold-both-knobs
+            // config combo takes 2 s), so entering config mode keeps the page.
+            static uint16_t pressed_at;
+            if (record->event.pressed) {
+                pressed_at = timer_read();
+            } else if (timer_elapsed(pressed_at) < 1000) {
+                oled_page_next();
+            }
+            return false;
+        }
     }
     return true;
 }
@@ -185,6 +205,7 @@ void keyboard_post_init_user(void) {
 #ifdef POINTING_DEVICE_ENABLE
     trackpad_z_post_init();
 #endif
+    oled_pages_init();
     config_mode_init();
 }
 
@@ -198,5 +219,6 @@ void housekeeping_task_user(void) {
 #ifdef POINTING_DEVICE_ENABLE
     trackpad_z_sync_task();
 #endif
+    oled_pages_task();
     config_mode_task();
 }

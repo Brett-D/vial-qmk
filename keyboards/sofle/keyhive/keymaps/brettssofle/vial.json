@@ -22,6 +22,11 @@
       "name": "Config\nmode",
       "title": "Toggle config mode (edit the keyboard from sofle-config.html)",
       "shortName": "CONFIG"
+    },
+    {
+      "name": "OLED\npage",
+      "title": "Next page on the right OLED: status, trackpad, LEDs, info",
+      "shortName": "OLEDPG"
     }
   ],
   "layouts": {

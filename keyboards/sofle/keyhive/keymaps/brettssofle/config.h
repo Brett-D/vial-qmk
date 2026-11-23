@@ -91,11 +91,12 @@
 // trackpad_z.html works without it (raw HID). Off by default.
 // #define TRACKPAD_Z_DEBUG
 // RPC_ID_USER_CFG mirrors config mode to the right OLED (config_mode.c);
-// RPC_ID_USER_LEDMAP sends the measured LED map to the right half (led_map.c).
+// RPC_ID_USER_LEDMAP sends the measured LED map to the right half (led_map.c);
+// RPC_ID_USER_VIEW sends the right OLED's page and its values (oled_pages.c).
 #ifdef TRACKPAD_Z_DEBUG
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW
 #else
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW
 #endif
 
 // Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE

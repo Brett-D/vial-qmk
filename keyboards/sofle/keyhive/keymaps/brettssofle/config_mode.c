@@ -27,7 +27,7 @@
 //   left knob press      next tab; hold ~1 s = resend everything to the page
 //   right knob turn      pick keycode / change value (fast turns jump faster)
 //   right knob held+turn jump to the next/previous keycode category
-//   right knob press     apply (Layout) / save (LEDs, Trackpad)
+//   right knob press     apply (Layout) / save (LEDs, Trackpad); hold 0.6 s = next tab
 //   any key (Layout)     select it; while holding it, tap another key to copy
 //                        that key's default-layer keycode. With a knob action
 //                        selected, hold the left knob and tap a key to copy.
@@ -57,6 +57,8 @@
 #define CONFIG_MODE_FAST_TURN_MS 80
 #define CONFIG_MODE_TPZ_INTERVAL_MS 100
 #define CONFIG_MODE_OLED_SYNC_MS 1000
+#define CONFIG_KNOB_LONG_MS 600     // right knob long press: next tab (page and keyboard-only mode)
+#define CONFIG_NAV_IDLE_MS 1500     // page stopped polling: the right knob works normally again
 #define CONFIG_MODE_PROTOCOL 2
 
 // Raw HID command for the page (keep in sync with page.html):
@@ -65,7 +67,8 @@
 //                            led enabled, vial unlocked, ask seconds left,
 //                            effect (VialRGB id), zone, underglow hue, underglow sat,
 //                            calibration state (led_cal.h), map flags (1 measured, 2 last commit ok),
-//                            capture seq, row, col, flags, right half map (0 ?, 1 same, 2 differs)]
+//                            capture seq, row, col, flags, right half map (0 ?, 1 same, 2 differs),
+//                            knob nav (CMD_NAV only): turns (int8), presses, long presses, nav on]
 #define CFG_RAW_HID_ID 0xF6
 enum cfg_hid_cmd {
     CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
@@ -83,6 +86,7 @@ enum cfg_hid_cmd {
     CMD_MAP_COMMIT  = 0x0C, // validate + save + apply the staged map (status byte 16 bit 1 = ok)
     CMD_MAP_RESET   = 0x0D, // back to the built-in map
     CMD_CAL_TEST    = 0x0E, // light the mapped LED of each pressed key (ends with CMD_CAL_END)
+    CMD_NAV         = 0x12, // arg 1: page focused, the right knob drives it (events returned + cleared); 0: release it
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -166,8 +170,7 @@ static struct {
     uint16_t last_value_turn;
     bool     esc_down;
     uint32_t esc_time;
-    uint8_t  held_layer; // layer of the held layer key (0 = none)
-    uint8_t  held_layer_row, held_layer_col;
+    layer_state_t held_layers; // layers of the held layer keys (they're swallowed too)
 
     led_edit_t led;
     bool       led_load_pending;
@@ -190,11 +193,21 @@ static struct {
     uint32_t time; // ask start / last poll / deny time
 } hid;
 
+// Right knob driving the focused config page (web session): its turns and
+// presses are reported to the page instead of acting normally.
+static struct {
+    bool     on, down, long_sent;
+    int8_t   turns;
+    uint8_t  presses, longs;
+    uint32_t time, down_time; // last page poll / knob press
+} nav;
+
 // State mirrored to the right half for its OLED.
 typedef struct {
     uint8_t state, tab, layer, hid;
     uint8_t zone, ug_hue, ug_sat; // LED zones, for the right half's LEDs
     uint8_t cal;                  // LED calibration / test state (led_cal.h)
+    uint8_t nav;                  // right knob drives the page
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -208,6 +221,21 @@ static bool is_knob(uint8_t row, uint8_t col) {
 
 static uint16_t default_layer_keycode(uint8_t row, uint8_t col) {
     return keycode_at_keymap_location(get_highest_layer(default_layer_state), row, col);
+}
+
+// Keycode the held layer keys would give at (row, col), like the real layer
+// stack: highest active layer first, transparent falls through (0 = none).
+static uint16_t held_layers_keycode(uint8_t row, uint8_t col) {
+    layer_state_t state = update_tri_layer_state(cfg.held_layers, _LOWER, _RAISE, _ADJUST);
+    for (int8_t layer = LAYERS - 1; layer > 0; layer--) {
+        if (state & ((layer_state_t)1 << layer)) {
+            uint16_t kc = keycode_at_keymap_location(layer, row, col);
+            if (kc != KC_TRANSPARENT) {
+                return kc;
+            }
+        }
+    }
+    return 0;
 }
 
 static uint16_t basic_of(uint16_t kc) {
@@ -694,6 +722,13 @@ static void cfg_raw_hid(uint8_t *data) {
                 config_mode_exit();
             }
             break;
+        case CMD_NAV:
+            if (hid.state == HS_ACTIVE) {
+                hid.time = timer_read32();
+            }
+            nav.on   = arg && hid.state == HS_ACTIVE && cfg.state == ST_OFF;
+            nav.time = timer_read32();
+            break;
         case CMD_REQUEST:
             hid_request();
             break;
@@ -719,6 +754,14 @@ static void cfg_raw_hid(uint8_t *data) {
 #endif
     data[9]  = vial_unlocked ? 1 : 0;
     data[10] = (ask_left + 999) / 1000;
+    if (data[1] == CMD_NAV) {
+        data[22]    = (uint8_t)nav.turns;
+        data[23]    = nav.presses;
+        data[24]    = nav.longs;
+        data[25]    = nav.on;
+        nav.turns   = 0;
+        nav.presses = nav.longs = 0;
+    }
 }
 
 bool via_command_kb(uint8_t *data, uint8_t length) {
@@ -920,6 +963,8 @@ static void knob_press(uint8_t knob, bool pressed) {
         } else {
             next_tab();
         }
+    } else if (timer_elapsed32(cfg.knob_time[1]) >= CONFIG_KNOB_LONG_MS) {
+        next_tab(); // same gesture as on the web page
     } else {
         apply();
     }
@@ -942,8 +987,9 @@ static void key_event(uint8_t row, uint8_t col, bool pressed) {
         cfg.esc_time = timer_read32();
     }
 
-    // Layer keys are swallowed too, so remember which layer key is held: the
-    // CONFIG key on that layer (Raise by default) still exits.
+    // Layer keys are swallowed too, so track which layers they would turn on
+    // (plus Adjust for Lower + Raise): the CONFIG key on them (Raise by
+    // default, also reached through Adjust) still exits.
     uint8_t layer_of_key = 0xFF;
     if (raw >= QK_MOMENTARY && raw <= QK_MOMENTARY_MAX) {
         layer_of_key = raw & 0x1F;
@@ -952,16 +998,14 @@ static void key_event(uint8_t row, uint8_t col, bool pressed) {
     } else if (raw >= QK_LAYER_TAP && raw <= QK_LAYER_TAP_MAX) {
         layer_of_key = (raw >> 8) & 0xF;
     }
-    if (layer_of_key != 0xFF) {
+    if (layer_of_key < 32) {
         if (pressed) {
-            cfg.held_layer     = layer_of_key;
-            cfg.held_layer_row = row;
-            cfg.held_layer_col = col;
-        } else if (row == cfg.held_layer_row && col == cfg.held_layer_col) {
-            cfg.held_layer = 0;
+            cfg.held_layers |= (layer_state_t)1 << layer_of_key;
+        } else {
+            cfg.held_layers &= ~((layer_state_t)1 << layer_of_key);
         }
     }
-    if (pressed && (raw == CONFIG_MODE || (cfg.held_layer && keycode_at_keymap_location(cfg.held_layer, row, col) == CONFIG_MODE))) {
+    if (pressed && (raw == CONFIG_MODE || held_layers_keycode(row, col) == CONFIG_MODE)) {
         config_mode_exit();
         return;
     }
@@ -1029,6 +1073,33 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
     uint8_t     row = ev->key.row, col = ev->key.col;
 
     bool asking = cfg.state == ST_ASK || hid.state == HS_ASK;
+
+    if (nav.on && cfg.state == ST_OFF && !asking) {
+        if (IS_ENCODEREVENT(*ev) && ev->key.col == 1) {
+            if (ev->pressed) {
+                int8_t dir = ev->type == ENCODER_CW_EVENT ? 1 : -1;
+                if ((dir > 0 && nav.turns < 100) || (dir < 0 && nav.turns > -100)) {
+                    nav.turns += dir;
+                }
+            }
+            return false;
+        }
+        if (is_key && row == KNOB_R_ROW && col == KNOB_R_COL) {
+            if (ev->pressed) {
+                held_swallowed[row] |= (matrix_row_t)1 << col;
+                nav.down      = true;
+                nav.long_sent = false;
+                nav.down_time = timer_read32();
+            } else {
+                held_swallowed[row] &= ~((matrix_row_t)1 << col);
+                if (nav.down && !nav.long_sent && nav.presses < 255) {
+                    nav.presses++;
+                }
+                nav.down = false;
+            }
+            return false;
+        }
+    }
 
     if (cfg.state == ST_OFF && !asking) {
         if (is_key && !ev->pressed && (held_swallowed[row] & ((matrix_row_t)1 << col))) {
@@ -1207,7 +1278,7 @@ static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_l
 static void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
-    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat, led_cal_code()};
+    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat, led_cal_code(), nav.on};
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal;
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || (active && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
@@ -1221,7 +1292,7 @@ bool config_mode_oled_task(void) {
     static uint8_t last_screen;
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
-    uint8_t        screen = active ? 1 + (asking ? 0x80 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    uint8_t        screen = active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
     if (screen != last_screen) {
         oled_clear();
         last_screen = screen;
@@ -1242,6 +1313,9 @@ bool config_mode_oled_task(void) {
     switch (oled_state.state) {
         case ST_OFF: // web session only
             oled_write_P(PSTR("Web  page "), false);
+            if (oled_state.nav) {
+                oled_write_P(PSTR("     Knob nav  "), false); // right knob drives the page
+            }
             break;
         case ST_CHALLENGE:
             oled_write_P(PSTR("Press"), false);
@@ -1306,6 +1380,17 @@ void config_mode_task(void) {
     knob_combo_task();
     oled_sync_task();
 
+    if (nav.on && (hid.state != HS_ACTIVE || cfg.state != ST_OFF || timer_elapsed32(nav.time) >= CONFIG_NAV_IDLE_MS)) {
+        nav.on = nav.down = false;
+        nav.turns         = 0;
+        nav.presses = nav.longs = 0;
+    }
+    if (nav.on && nav.down && !nav.long_sent && timer_elapsed32(nav.down_time) >= CONFIG_KNOB_LONG_MS) {
+        nav.long_sent = true;
+        if (nav.longs < 255) {
+            nav.longs++;
+        }
+    }
     if (hid.state == HS_ASK && timer_elapsed32(hid.time) >= CONFIG_MODE_ASK_MS) {
         hid.state = HS_TIMEOUT;
     } else if (hid.state == HS_ACTIVE && timer_elapsed32(hid.time) >= CONFIG_HID_SESSION_IDLE_MS) {

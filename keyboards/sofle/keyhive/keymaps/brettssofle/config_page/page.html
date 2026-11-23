@@ -94,6 +94,7 @@
   #calBar { height:100%; width:0; background:var(--acc); transition:width .2s; }
   .calSteps li { margin:4px 0; } .warnText { color:var(--warn); }
   .calBig:empty, .calNote:empty, #calText:empty, .calBtns:empty { display:none; }
+  .navf { outline:3px solid #ffb020 !important; outline-offset:1px; } .navedit { outline:3px solid #4cd964 !important; outline-offset:1px; }
   #calClickBox { margin-top:14px; } #calClickBox summary { cursor:pointer; color:var(--dim); }
   #calJson { width:100%; height:120px; font:11px ui-monospace,monospace; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:6px; }
   .adv { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
@@ -923,6 +924,115 @@ $("mapReset").addEventListener("click", async () => {
   catch (e) { toast("Failed: " + e.message, true); }
 });
 
+// ---------------------------------------------------------------- Right-knob navigation
+// While connected and this page has focus, the keyboard reports the right
+// knob to the page (0xF6 0x12) instead of acting on it: turn = move the
+// highlight, press = select / edit, long press = next tab. Losing focus (or
+// hiding the page) hands the knob back; the keyboard also takes it back by
+// itself if the page stops asking (1.5 s).
+const NAV = { on: false, idx: 0, mode: "move", pick: 0, editEl: null, lastTurn: 0 };
+function navWanted() { return S.mode === "hid" && S.state === "ready" && !S.sessionLost && !!HID.dev && document.hasFocus() && !document.hidden; }
+const navVisible = (el) => el && el.offsetParent !== null && !el.disabled;
+function navItems() {
+  if (!S.ui) return [];
+  if (NAV.mode === "pick") return [...$("hidList").querySelectorAll("[data-kc]")];
+  if (S.ui.tab === 0) {
+    const keys = [...$("kb").querySelectorAll("[data-r]")].map((el) => {
+      const k = keyAt[el.dataset.r + "," + el.dataset.c];
+      return { el, y: Math.floor(k.y + 0.3), x: k.x };
+    }).sort((a, b) => a.y - b.y || a.x - b.x).map((o) => o.el);
+    return [...$("layers").querySelectorAll("[data-layer]"), ...keys, ...$("knobs").querySelectorAll("[data-slot]")];
+  }
+  const root = S.ui.tab === 1 ? (CAL.on ? $("calView") : $("ledCtl")) : $("padView");
+  return [...root.querySelectorAll("input, select, button, summary")].filter(navVisible);
+}
+function navPaint(scroll = true) {
+  document.querySelectorAll(".navf, .navedit").forEach((el) => el.classList.remove("navf", "navedit"));
+  if (!NAV.on) return;
+  const items = navItems();
+  if (!items.length) return;
+  const i = NAV.mode === "pick" ? NAV.pick : NAV.idx;
+  const el = items[Math.max(0, Math.min(i, items.length - 1))];
+  el.classList.add(NAV.mode === "edit" ? "navedit" : "navf");
+  if (scroll) el.scrollIntoView({ block: "nearest" });
+}
+function navTurn(n) {
+  const now = performance.now(), fast = Math.abs(n) > 2 || now - NAV.lastTurn < 90;
+  NAV.lastTurn = now;
+  if (NAV.mode === "edit") {
+    const el = NAV.editEl;
+    if (!el || !navVisible(el)) { NAV.mode = "move"; return navPaint(); }
+    if (el.tagName === "SELECT") {
+      el.selectedIndex = Math.max(0, Math.min(el.options.length - 1, el.selectedIndex + Math.sign(n)));
+    } else {
+      const step = +el.step || 1, span = +el.max - +el.min;
+      const mult = fast && span / step > 40 ? 4 : 1;
+      el.value = Math.max(+el.min, Math.min(+el.max, +el.value + n * step * mult));
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return navPaint();
+  }
+  const items = navItems();
+  if (!items.length) return;
+  const step = NAV.mode === "pick" && fast ? n * 4 : n;
+  if (NAV.mode === "pick") NAV.pick = Math.max(0, Math.min(items.length - 1, NAV.pick + step));
+  else NAV.idx = ((NAV.idx + step) % items.length + items.length) % items.length;
+  navPaint();
+}
+async function navPress() {
+  const items = navItems();
+  if (NAV.mode === "edit") { NAV.mode = "move"; NAV.editEl = null; return navPaint(); }
+  if (NAV.mode === "pick") {
+    const el = items[NAV.pick];
+    NAV.mode = "move";
+    if (el) el.click(); // assign() saves it
+    return navPaint();
+  }
+  const el = items[NAV.idx];
+  if (!el) return;
+  if (el.matches("#kb [data-r], #knobs [data-slot]")) {
+    el.click();
+    await sleep(50);
+    const cur = currentValue(S.ui), list = [...$("hidList").querySelectorAll("[data-kc]")];
+    NAV.mode = "pick";
+    NAV.pick = Math.max(0, list.findIndex((o) => +o.dataset.kc === cur));
+  } else if ((el.tagName === "INPUT" && el.type === "range") || el.tagName === "SELECT") {
+    NAV.mode = "edit"; NAV.editEl = el;
+  } else {
+    el.click();
+  }
+  navPaint();
+}
+async function navLong() {
+  if (NAV.mode !== "move") { NAV.mode = "move"; NAV.editEl = null; return navPaint(); } // back out of the picker / slider
+  NAV.idx = 0;
+  await setTab((S.ui.tab + 1) % TABS.length);
+  navPaint();
+}
+async function navTick() {
+  const want = navWanted();
+  if (!want && !NAV.on) return;
+  let d;
+  try { d = await cmd([0xf6, 0x12, want ? 1 : 0]); } catch (e) { NAV.on = false; return; }
+  const was = NAV.on;
+  NAV.on = want && !!d[25];
+  if (NAV.on !== was) { if (!NAV.on) NAV.mode = "move"; renderNote(); navPaint(); }
+  if (!NAV.on) return;
+  const turns = (d[22] << 24) >> 24;
+  for (let i = 0; i < d[24]; i++) await navLong();
+  if (turns) navTurn(turns);
+  for (let i = 0; i < d[23]; i++) await navPress();
+}
+(async function navLoop() {
+  for (;;) {
+    await navTick();
+    await sleep(NAV.on ? 50 : 250);
+  }
+})();
+window.addEventListener("blur", () => navTick());
+document.addEventListener("visibilitychange", () => navTick());
+
 // Trackpad: live Z through 0xF5 get; settings saved with Save.
 function tpInput() {
   const t = S.tp;
@@ -1080,6 +1190,7 @@ function render() {
   if (ui.tab === 0) { renderKeys(ui); renderPicker(ui); }
   if (ui.tab === 1) renderLeds(ui);
   if (ui.tab === 2) renderPad(ui);
+  if (NAV.on) navPaint(false);
 }
 
 function renderNote() {
@@ -1089,6 +1200,7 @@ function renderNote() {
   } else if (S.mode === "hid") {
     let s = "";
     if (S.sessionLost) s += `<div class="note">The keyboard ended the session (idle, or unplugged). <button id="reconnectBtn">Reconnect</button></div>`;
+    if (NAV.on) s += `<div class="info"><b>Right knob:</b> turn to move the orange highlight, press to select or change it (turn, then press again to finish), hold to switch tab.</div>`;
     if (S.bridgeOn) s += `<div class="note">Keyboard-only mode is also on, so the keyboard isn't typing. <button id="exitBridgeBtn">Turn it off</button></div>`;
     setHtml(el, s);
     const rc = $("reconnectBtn"); if (rc) rc.onclick = async () => { S.sessionLost = false; clearInterval(HID.poll); await requestSession(); };
@@ -1282,7 +1394,8 @@ function renderHelp() {
     items = [["Layout", "Click a key, or a knob action (turn left / turn right / press), then click a keycode in the list. It's saved right away."],
              ["Layers", "Click a layer name above the keyboard."], ["Hold/tap keys", "Use the box under the keycode list."],
              ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them. Effects light the wrong keys? Click Calibrate LED positions and press the key on top of each lit LED."],
-             ["Trackpad", "Touch the pad to see Z live. Click Save to keep settings."]];
+             ["Trackpad", "Touch the pad to see Z live. Click Save to keep settings."],
+             ["Right knob", "While this page has focus: turn to move the highlight, press to select or change, hold to switch tab."]];
     foot = "The keyboard keeps typing normally while connected. Disconnect (or close the page) to end the session.";
   } else if (S.mode === "bridge" && S.state === "ready" && S.ui) {
     const per = {
@@ -1294,7 +1407,7 @@ function renderHelp() {
       1: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
       2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
     };
-    items = per[S.ui.tab].concat([["Left knob press", "Next tab (hold ~1 s: resend everything)"]]);
+    items = per[S.ui.tab].concat([["Left knob press", "Next tab (hold ~1 s: resend everything)"], ["Hold right knob ~0.6 s", "Next tab"]]);
     foot = "Exit: Raise + Config, hold both knob buttons 2 s, hold Esc 2 s, or 5 min without input. Unsaved LED/trackpad changes are dropped on exit.";
   } else {
     items = navigator.hid

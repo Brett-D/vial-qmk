@@ -56,7 +56,7 @@ PICKER = [
                 "KC_KP_ENTER"] + [f"KC_KP_{i}" for i in range(1, 10)] + ["KC_KP_0", "KC_KP_DOT", "KC_KP_EQUAL"]),
     ("Lighting", ["RM_TOGG", "RM_NEXT", "RM_PREV", "RM_HUEU", "RM_HUED", "RM_SATU", "RM_SATD",
                   "RM_VALU", "RM_VALD", "RM_SPDU", "RM_SPDD"]),
-    ("Special", ["CONFIG_MODE", "CYCLE", "DRAG_SCROLL", "CW_TOGG", "QK_BOOT"]),
+    ("Special", ["CONFIG_MODE", "OLED_PAGE", "CYCLE", "DRAG_SCROLL", "CW_TOGG", "QK_BOOT"]),
 ]
 
 # Short labels for the page (anything missing falls back to the QMK name).
@@ -83,12 +83,12 @@ LABELS = {
     "RM_TOGG": "RGB on/off", "RM_NEXT": "RGB mode+", "RM_PREV": "RGB mode-", "RM_HUEU": "Hue+",
     "RM_HUED": "Hue-", "RM_SATU": "Sat+", "RM_SATD": "Sat-", "RM_VALU": "Bright+", "RM_VALD": "Bright-",
     "RM_SPDU": "Speed+", "RM_SPDD": "Speed-", "CW_TOGG": "CapsWord", "QK_BOOT": "Bootloader",
-    "CONFIG_MODE": "Config mode", "CYCLE": "Cycle base", "DRAG_SCROLL": "Drag scroll",
+    "CONFIG_MODE": "Config mode", "OLED_PAGE": "OLED page", "CYCLE": "Cycle base", "DRAG_SCROLL": "Drag scroll",
 }
 for i in range(10):
     LABELS[f"KC_KP_{i}"] = f"P{i}"
 
-LAYER_NAMES = ["QWERTY", "Colemak", "Lower", "Raise", "Mouse", "Layer 5"]
+LAYER_NAMES = ["QWERTY", "Colemak", "Lower", "Raise", "Mouse", "Adjust"]
 
 # Friendlier names for some VialRGB effects (the rest are derived from the enum).
 EFFECT_NAMES = {
@@ -138,7 +138,7 @@ def main():
     kc = parse_keycodes()
     vial = json.loads((KEYMAP_DIR / "vial.json").read_text(encoding="utf-8"))
     custom = vial.get("customKeycodes", [])
-    c_custom_names = ["CYCLE", "DRAG_SCROLL", "CONFIG_MODE"]
+    c_custom_names = ["CYCLE", "DRAG_SCROLL", "CONFIG_MODE", "OLED_PAGE"]
     for i, name in enumerate(c_custom_names):
         kc[name] = kc["QK_KB_0"] + i if "QK_KB_0" in kc else 0x7E00 + i
 

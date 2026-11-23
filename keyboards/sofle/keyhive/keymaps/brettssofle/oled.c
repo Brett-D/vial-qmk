@@ -1,7 +1,8 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// OLED status for the right half (the only OLED on this board). The right half
+// OLED status for the right half (the only OLED on this board); the other
+// pages (trackpad, LEDs, info; right knob press) are in oled_pages.c. The right half
 // is the split target, so layer, LED, mod and activity state are synced to it
 // (see config.h). The left half has no OLED and renders nothing.
 
@@ -42,6 +43,9 @@ static void render_layer(void) {
             break;
         case _MOUSE:
             oled_write_P(PSTR("Mouse"), false);
+            break;
+        case _ADJUST:
+            oled_write_P(PSTR("Adjst"), false);
             break;
         default:
             oled_write_P(PSTR("Undef"), false);
@@ -132,11 +136,15 @@ bool oled_task_user(void) {
         return false;
     }
 
+    if (oled_pages_render()) {
+        return false;
+    }
 #    if defined(TRACKPAD_Z_DEBUG) && defined(POINTING_DEVICE_ENABLE)
     print_status_z();
 #    else
     print_status_narrow();
 #    endif
+    oled_pages_status_footer();
     return false;
 }
 

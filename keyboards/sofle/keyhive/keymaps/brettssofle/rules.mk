@@ -38,7 +38,7 @@ else
     CONSOLE_ENABLE = no
 endif
 
-SRC += trackpad.c trackpad_z.c oled.c
+SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
 # Config mode + keystroke bridge (config_page/sofle-config.html). After
 # editing config_page/gen_config.py or page.html, rerun:
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py

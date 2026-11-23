@@ -12,12 +12,12 @@ Keymap for a Keyhive Sofle v2 with:
 | Feature | Details |
 | --- | --- |
 | Vial | Configure everything live at [vial.rocks](https://vial.rocks) (Chrome/Edge, WebHID) or the Vial desktop app. Unlock combo: hold the four corner keys (top-left `` ` ``, top-right `` ` ``, Left Shift, Right Shift). |
-| Layers | 0 QWERTY, 1 Colemak-DH, 2 Lower, 3 Raise, 4 Mouse (automatic), 5 spare |
+| Layers | 0 QWERTY, 1 Colemak-DH, 2 Lower, 3 Raise, 4 Mouse (automatic), 5 Adjust (hold Lower + Raise together; empty to start) |
 | `CYCLE` (Raise + top-left) | Switches the default layer between QWERTY and Colemak-DH (saved) |
 | `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
-| Encoders | Left: volume, press = mute. Right: page up/down |
+| Encoders | Left: volume, press = mute. Right: page up/down, press = next OLED page (`OLED_PAGE`) |
 | LEDs | Per-key RGB Matrix: rainbow, reactive and **splash** effects (light bursts out from each key you press). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode or Vial (VialRGB) |
-| Right OLED | Default layer, active layer, Caps/Num lock, active mods (S C A G). Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
+| Right OLED | Four pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime). Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
 
 ### Trackpad
 
@@ -131,6 +131,15 @@ copy on any computer). Nothing to install, no internet. Two ways to use it:
 3. Click a key or a knob action, then click a keycode — it's saved
    immediately. LEDs and trackpad have sliders with live preview and **Save**.
 
+**Right knob control:** while the page has focus, the right knob drives it
+instead of paging up/down: **turn** moves the orange highlight (layer
+buttons, keys, knob actions, LED/trackpad controls), **press** selects it
+(on a key or knob action: turn to choose a keycode, press to apply; on a
+slider or list: turn to change, press to finish; long press backs out),
+**hold ~0.6 s** switches tab. Click elsewhere (another window) and the knob
+works normally again; the keyboard also takes it back by itself 1.5 s after
+the page stops asking (`CMD_NAV` 0xF6 0x12).
+
 The keyboard keeps typing normally while connected. The session ends when you
 click **Disconnect**, close the page, or 90 s after the page stops polling.
 Close Vial/VIA first (only one app can use the config channel). On Linux the
@@ -164,6 +173,7 @@ Keys don't type normally while it is on.
 | Left knob turn | Change layer | Choose setting |
 | Hold left knob + turn | Select a knob action (left/right knob: turn left, turn right, press) | – |
 | Left knob press | Next tab (hold ~1 s: resend everything to the page) | ← |
+| Hold right knob ~0.6 s (no turn) | Next tab | ← |
 | Right knob turn | Choose keycode (turn fast to skip ahead) | Change value (LEDs preview live) |
 | Hold right knob + turn | Jump to the next/previous keycode category | – |
 | Right knob press | Apply to the selected key or knob action | Save |

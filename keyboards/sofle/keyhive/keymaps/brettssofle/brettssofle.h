@@ -10,7 +10,8 @@ enum layers {
     _COLEMAK,
     _LOWER,
     _RAISE,
-    _MOUSE, // must match AUTO_MOUSE_DEFAULT_LAYER
+    _MOUSE,  // must match AUTO_MOUSE_DEFAULT_LAYER
+    _ADJUST, // Lower + Raise held together (tri-layer, keymap.c)
 };
 
 // QK_KB_n so Vial shows them by name (order must match vial.json customKeycodes).
@@ -18,6 +19,7 @@ enum custom_keycodes {
     CYCLE = QK_KB_0, // cycle the default layer between QWERTY and Colemak-DH
     DRAG_SCROLL,     // hold: trackpad movement scrolls instead of moving the cursor
     CONFIG_MODE,     // toggle config mode (sofle-config.html)
+    OLED_PAGE,       // next right-OLED page (status / trackpad / LEDs / info)
 };
 
 // Number of default layers CYCLE rotates through.
@@ -57,5 +59,15 @@ uint32_t user_config_rgb_idle_ms(void);
 // solid underglow colour, saved in EECONFIG_USER bits 20-31 (trackpad_z.c).
 void user_config_get_led_zone(uint8_t *zone, uint8_t *hue, uint8_t *sat);
 void user_config_set_led_zone(uint8_t zone, uint8_t hue, uint8_t sat);
+
+// Right OLED pages (oled_pages.c).
+enum oled_pages { OLED_PAGE_STATUS, OLED_PAGE_TRACKPAD, OLED_PAGE_LEDS, OLED_PAGE_INFO, OLED_PAGE_COUNT };
+void oled_pages_init(void); // keyboard_post_init_user, both halves
+void oled_page_next(void);  // master
+void oled_pages_task(void); // housekeeping, master syncs the right half
+#ifdef OLED_ENABLE
+bool oled_pages_render(void); // right half: false = status page
+void oled_pages_status_footer(void);
+#endif
 
 #include "config_mode.h"
