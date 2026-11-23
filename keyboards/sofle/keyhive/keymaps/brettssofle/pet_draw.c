@@ -131,11 +131,11 @@ static uint8_t mood_icon(uint8_t mood) {
 
 // The selected care action: big icon, label, position dots.
 static void action(const pet_view_t *v) {
-    static const char *const labels[] = {"", "Feed", "Play", "Sleep", "Clean", "New"};
+    static const char *const labels[] = {"", "Feed", "Play", "Sleep", "Clean", "New", "Next"};
     bool    asleep = v->flags & PV_ASLEEP, choosing = v->flags & PV_MENU;
     uint8_t a      = v->sel < PET_ACTION_COUNT ? v->sel : PET_FEED;
     uint8_t sp     = v->species < PET_SPECIES_COUNT ? v->species : 0;
-    uint8_t i      = a == PET_FEED ? pet_food_icon[sp] : a == PET_PLAY ? pet_play_icon[sp] : a == PET_SLEEP ? (asleep ? PET_ICON_SPARKLE : PET_ICON_MOON) : a == PET_CLEAN ? PET_ICON_SPARKLE : PET_ICON_EGG;
+    uint8_t i      = a == PET_FEED ? pet_food_icon[sp] : a == PET_PLAY ? pet_play_icon[sp] : a == PET_SLEEP ? (asleep ? PET_ICON_SPARKLE : PET_ICON_MOON) : a == PET_CLEAN ? PET_ICON_SPARKLE : a == PET_NEXT ? PET_ICON_NEXT : PET_ICON_EGG;
     const char *label = a == PET_SLEEP && asleep ? "Wake" : labels[a];
     icon(i, 8, ACT_Y + 2, 2);
     if (choosing) {
@@ -149,12 +149,21 @@ static void action(const pet_view_t *v) {
         }
     }
     centred(14, label, strlen(label), false);
-    if (v->flags & PV_DEAD) {
-        return; // the only choice: a new egg
+    if (!choosing) {
+        return; // "Next": a tap goes to the next page
     }
-    for (uint8_t n = 0; n < 4; n++) {
-        uint8_t x = 6 + n * 6;
-        if (n + 1 == a) {
+    // Which menu item: the same lists as pet.c.
+    static const uint8_t alive[] = {PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN, PET_NEXT};
+    static const uint8_t ghost[] = {PET_NEW, PET_NEXT};
+    const uint8_t       *items   = v->flags & PV_DEAD ? ghost : alive;
+    uint8_t              n       = v->flags & PV_DEAD ? 2 : v->stage == PET_STAGE_EGG ? 1 : 5;
+    if (n < 2) {
+        return;
+    }
+    uint8_t x0 = (32 - (n * 6 - 3)) / 2;
+    for (uint8_t k = 0; k < n; k++) {
+        uint8_t x = x0 + k * 6;
+        if (n == 1 || items[k] == a) {
             box(x, 122, x + 2, 124, true);
         } else {
             oled_write_pixel(x + 1, 123, true);

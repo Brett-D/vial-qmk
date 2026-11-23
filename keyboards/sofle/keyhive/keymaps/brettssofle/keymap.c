@@ -170,28 +170,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 wiggler_toggle();
             }
             return false;
-        case OLED_PAGE: {
-            // On release, and not after a long hold (the hold-both-knobs
-            // config combo takes 2 s), so entering config mode keeps the page.
-            // On the pet page: a tap cares for the pet (pet.c), a 0.5-2 s
-            // hold goes to the next page.
-            static uint16_t pressed_at;
-            if (record->event.pressed) {
-                pressed_at = timer_read();
-            } else {
-                uint16_t held = timer_elapsed(pressed_at);
-                if (oled_page_current() == OLED_PAGE_PET && pet_enabled()) {
-                    if (held < 500) {
-                        pet_press();
-                    } else if (held < 2000) {
-                        oled_page_next();
-                    }
-                } else if (held < 1000) {
-                    oled_page_next();
-                }
-            }
+        case OLED_PAGE:
+            oled_page_key(record); // next page / pet care menu (page_key.c)
             return false;
-        }
     }
     return true;
 }

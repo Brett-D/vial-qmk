@@ -19,8 +19,9 @@
 // with no food and no joy at all turns it into a ghost; "new pet" hatches a
 // new egg).
 //
-// On the pet page (right OLED): right knob turn = choose Feed / Play / Sleep /
-// Clean, short press = do it, hold 0.5-2 s = next OLED page.
+// On the pet page (right OLED; page_key.c): a right-knob turn opens the care
+// menu (Feed / Play / Sleep / Clean / Next, wraps), a tap does the choice;
+// with the menu closed a tap goes to the next page, as on every page.
 //
 // Saved in the last 32 bytes of the EEPROM (taken off the end of Vial's macro
 // buffer, so nothing else moves): every 10 min if something changed, and
@@ -285,13 +286,36 @@ static bool act(uint8_t a) {
     return ok;
 }
 
+// The care menu: always ends with "Next" (leave the page).
+static uint8_t menu_items(const uint8_t **items) {
+    static const uint8_t alive[] = {PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN, PET_NEXT};
+    static const uint8_t ghost[] = {PET_NEW, PET_NEXT};
+    static const uint8_t egg[]   = {PET_NEXT};
+    if (p.flags & F_DEAD) {
+        *items = ghost;
+        return sizeof(ghost);
+    }
+    if (p.stage == PET_STAGE_EGG) {
+        *items = egg;
+        return sizeof(egg);
+    }
+    *items = alive;
+    return sizeof(alive);
+}
+
 static uint8_t menu_count(void) {
-    return p.flags & F_DEAD ? 1 : 4;
+    const uint8_t *items;
+    return menu_items(&items);
 }
 
 static uint8_t menu_action(uint8_t i) {
-    static const uint8_t items[4] = {PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN};
-    return p.flags & F_DEAD ? PET_NEW : items[i % 4];
+    const uint8_t *items;
+    uint8_t        n = menu_items(&items);
+    return items[i % n];
+}
+
+void pet_menu_close(void) {
+    menu_on = false;
 }
 
 bool pet_process(keyrecord_t *record, bool pet_page) {
@@ -317,7 +341,7 @@ bool pet_process(keyrecord_t *record, bool pet_page) {
         if (menu_on) {
             sel = (uint8_t)((sel + n + dir) % n);
         } else {
-            sel %= n;
+            sel = 0; // the menu always opens on its first choice
         }
         menu_on = true;
         menu_t  = timer_read32();
@@ -326,16 +350,20 @@ bool pet_process(keyrecord_t *record, bool pet_page) {
     return false;
 }
 
-void pet_press(void) {
-    if (!(p.flags & F_ON)) {
-        return;
+bool pet_press(void) {
+    if (!(p.flags & F_ON) || !menu_on) {
+        return false; // menu closed: the tap leaves the page
     }
-    if (menu_on) {
-        act(menu_action(sel));
+    uint8_t a = menu_action(sel);
+    if (a == PET_NEXT) {
+        menu_on = false;
+        sel     = 0;
+        return false;
     }
+    act(a);
     sel %= menu_count();
-    menu_on = true; // the first press only shows the menu
-    menu_t  = timer_read32();
+    menu_t = timer_read32();
+    return true;
 }
 
 void pet_task(void) {
@@ -362,7 +390,7 @@ void pet_task(void) {
 void pet_view(pet_view_t *v) {
     v->flags = (p.flags & F_ON ? PV_ON : 0) | (p.flags & F_ASLEEP ? PV_ASLEEP : 0) | (p.flags & F_DEAD ? PV_DEAD : 0) | (menu_on ? PV_MENU : 0);
     memcpy(&v->food, p.stat, 4);
-    v->sel  = menu_action(sel);
+    v->sel  = menu_on ? menu_action(sel) : PET_NEXT; // what a tap does now
     v->anim = anim;
     v->mood = mood();
     memcpy(v->name, p.name, sizeof(v->name));

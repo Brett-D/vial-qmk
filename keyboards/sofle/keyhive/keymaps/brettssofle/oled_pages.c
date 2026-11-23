@@ -54,20 +54,13 @@ void oled_pages_init(void) {
     if (is_keyboard_master()) {
         uint8_t ee[2];
         eeconfig_read_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee));
-        view.page = ee[0] == VIEW_EE_MAGIC && ee[1] < OLED_PAGE_COUNT ? ee[1] : 0;
+        oled_page_set(ee[0] == VIEW_EE_MAGIC ? ee[1] : 0);
     }
 }
 
-uint8_t oled_page_current(void) {
-    return view.page;
-}
-
-void oled_page_next(void) {
-    view.page = (view.page + 1) % OLED_PAGE_COUNT;
-    if (view.page == OLED_PAGE_PET && !pet_enabled()) {
-        view.page = (view.page + 1) % OLED_PAGE_COUNT; // no pet: skip its page
-    }
-    uint8_t ee[2]      = {VIEW_EE_MAGIC, view.page};
+// The page itself and the OLED_PAGE key: page_key.c. Saved here when changed.
+void oled_page_changed(uint8_t page) {
+    uint8_t ee[2] = {VIEW_EE_MAGIC, page};
     eeconfig_update_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee));
 }
 
@@ -79,10 +72,10 @@ void oled_pages_task(void) {
     if (!is_keyboard_master()) {
         return;
     }
-    if (view.page == OLED_PAGE_PET && !pet_enabled()) {
-        view.page = 0; // the pet was switched off on the config page
+    if (oled_page_current() == OLED_PAGE_PET && !pet_enabled()) {
+        oled_page_set(0); // the pet was switched off on the config page
     }
-    view_t              now = {.page = view.page, .wiggle = wiggler_on()};
+    view_t              now = {.page = oled_page_current(), .wiggle = wiggler_on()};
     if (now.page == OLED_PAGE_PET) {
         pet_view(&now.pet);
     }
@@ -344,7 +337,7 @@ static void page_info(void) {
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
     oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR(" v14 "), false);
+    oled_write_P(PSTR(" v15 "), false);
     static const char boots[5][6] = {"power", "reset", "CRASH", "wdog ", "other"};
     oled_write_P(PSTR("Boot "), false);
     oled_write(boots[view.boot < 5 ? view.boot : 4], view.boot == BOOT_CRASH);

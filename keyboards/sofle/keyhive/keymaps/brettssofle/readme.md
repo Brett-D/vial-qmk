@@ -136,6 +136,9 @@ copy on any computer). Nothing to install, no internet. Two ways to use it:
 
 ### USB network mode (keyboard at 192.168.7.1)
 
+*Verified on real hardware with Windows 11 (v11 and later): the NCM adapter
+binds by itself, DHCP gives 192.168.7.2, and the page and its API work.*
+
 Press `CONFIG` (or hold both knobs), and at **CONF?** press **N**. The
 keyboard reconnects as a composite USB device (keyboard, mouse, raw HID and
 a CDC-NCM network adapter, product ID `0x1288`); typing and the trackpad keep
@@ -328,11 +331,13 @@ clean), then the selected care action as a big icon with its name.
   apple/ball, fish/yarn, bone/ball, mouse/feather, coal/flame, jelly/bubble,
   worm/bubbles. A happy dragon puffs a little flame.
 
-- **Right knob on the pet page:** turn = choose Feed / Play / Sleep (Wake) /
-  Clean (a big icon shows the choice for 6 s); **tap** = do it (the first tap
-  only shows the menu); **hold 0.5–2 s** = next OLED page. (Longer holds are
-  left to the hold-both-knobs config combo.) Elsewhere the knob works as
-  before.
+- **Right knob on the pet page** (`page_key.c`): with the care menu closed the
+  bottom shows **▸ Next** and a **tap goes to the next page**, as on every
+  page. **Turn** to open the menu: Feed / Play / Sleep (Wake) / Clean / Next
+  (it wraps; a ghost has New / Next, an egg only Next); a **tap** does the
+  choice, and Next leaves. The menu closes 6 s after the last turn. A
+  0.5–2 s **hold** also leaves; longer holds are left to the hold-both-knobs
+  config combo. The left knob and typing are never taken.
 - **Stats** drift while the keyboard is on: at *normally*, a full stat lasts
   about a day (*slowly* ≈ 2 days, *quickly* ≈ 12 h). Typing is exercise:
   every 40 key presses, fun +1 and energy −1. Sleep refills energy and it

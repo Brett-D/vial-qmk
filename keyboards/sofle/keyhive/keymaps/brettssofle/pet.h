@@ -11,7 +11,7 @@
 #include "action.h"
 #include "pet_ids.h"
 
-enum pet_action { PET_NONE, PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN, PET_NEW, PET_ACTION_COUNT };
+enum pet_action { PET_NONE, PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN, PET_NEW, PET_NEXT, PET_ACTION_COUNT }; // NEXT: leave the page
 // What the right OLED animates for a moment (pet view anim & 15).
 enum pet_anim { ANIM_NONE, ANIM_EAT, ANIM_PLAY, ANIM_SLEEP, ANIM_WAKE, ANIM_CLEAN, ANIM_NO, ANIM_HATCH, ANIM_GROW };
 enum pet_mood { MOOD_HAPPY, MOOD_OK, MOOD_HUNGRY, MOOD_SAD, MOOD_TIRED, MOOD_DIRTY, MOOD_ASLEEP, MOOD_DEAD, MOOD_OFF, MOOD_EGG };
@@ -20,7 +20,7 @@ enum pet_mood { MOOD_HAPPY, MOOD_OK, MOOD_HUNGRY, MOOD_SAD, MOOD_TIRED, MOOD_DIR
 typedef struct {
     uint8_t flags; // PV_*
     uint8_t food, joy, energy, clean;
-    uint8_t sel;     // the selected care action (enum pet_action)
+    uint8_t sel;     // what a tap does now (enum pet_action; PET_NEXT while the menu is closed)
     uint8_t anim;    // (seq << 4) | enum pet_anim: a change starts the animation
     uint8_t mood;    // enum pet_mood
     char    name[5]; // the first 5 letters (one OLED line), not terminated
@@ -33,10 +33,14 @@ void pet_init(void); // master
 void pet_task(void); // master: time, saving
 bool pet_enabled(void);
 void pet_view(pet_view_t *v);
-// Master input while the pet page is shown (right knob): turn = choose, short
-// press = do it. Returns true when the event was used.
+// Master input while the pet page is shown (right knob): a turn opens the care
+// menu and chooses (Feed / Play / Sleep / Clean / Next, wraps). Returns true
+// when the event was used.
 bool pet_process(keyrecord_t *record, bool pet_page);
-void pet_press(void);
+// A tap on the pet page: true = did the care action shown in the open menu;
+// false = leave the page (menu closed, or "Next" chosen).
+bool pet_press(void);
+void pet_menu_close(void);
 // Raw HID 0xF6 0x18 (get) / 0x19 (action; new pet: species in data[3]) /
 // 0x1A (settings) / 0x1B (species + stage, for restoring a backup); writes
 // need `allowed`.
