@@ -9,20 +9,23 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "action.h"
+#include "pet_ids.h"
 
 enum pet_action { PET_NONE, PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN, PET_NEW, PET_ACTION_COUNT };
-// What the right OLED animates for a moment (pet view anim & 7).
-enum pet_anim { ANIM_NONE, ANIM_EAT, ANIM_PLAY, ANIM_SLEEP, ANIM_WAKE, ANIM_CLEAN, ANIM_NO, ANIM_HATCH };
-enum pet_mood { MOOD_HAPPY, MOOD_OK, MOOD_HUNGRY, MOOD_SAD, MOOD_TIRED, MOOD_DIRTY, MOOD_ASLEEP, MOOD_DEAD, MOOD_OFF };
+// What the right OLED animates for a moment (pet view anim & 15).
+enum pet_anim { ANIM_NONE, ANIM_EAT, ANIM_PLAY, ANIM_SLEEP, ANIM_WAKE, ANIM_CLEAN, ANIM_NO, ANIM_HATCH, ANIM_GROW };
+enum pet_mood { MOOD_HAPPY, MOOD_OK, MOOD_HUNGRY, MOOD_SAD, MOOD_TIRED, MOOD_DIRTY, MOOD_ASLEEP, MOOD_DEAD, MOOD_OFF, MOOD_EGG };
 
 // Synced to the right half inside the OLED view (oled_pages.c).
 typedef struct {
     uint8_t flags; // PV_*
     uint8_t food, joy, energy, clean;
     uint8_t sel;     // the selected care action (enum pet_action)
-    uint8_t anim;    // (seq << 3) | enum pet_anim: a change starts the animation
+    uint8_t anim;    // (seq << 4) | enum pet_anim: a change starts the animation
     uint8_t mood;    // enum pet_mood
     char    name[5]; // the first 5 letters (one OLED line), not terminated
+    uint8_t species; // PET_SP_* (pet_art.h)
+    uint8_t stage;   // PET_STAGE_*: egg, baby, child, adult
 } pet_view_t;
 enum { PV_ON = 1, PV_ASLEEP = 2, PV_DEAD = 4, PV_MENU = 8 };
 
@@ -34,7 +37,9 @@ void pet_view(pet_view_t *v);
 // press = do it. Returns true when the event was used.
 bool pet_process(keyrecord_t *record, bool pet_page);
 void pet_press(void);
-// Raw HID 0xF6 0x18 (get) / 0x19 (action) / 0x1A (settings); writes need `allowed`.
+// Raw HID 0xF6 0x18 (get) / 0x19 (action; new pet: species in data[3]) /
+// 0x1A (settings) / 0x1B (species + stage, for restoring a backup); writes
+// need `allowed`.
 void pet_raw_hid(uint8_t *data, bool allowed);
 // Backup: settings + name.
 

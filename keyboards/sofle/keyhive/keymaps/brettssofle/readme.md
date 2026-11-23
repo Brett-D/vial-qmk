@@ -310,9 +310,23 @@ unchanged. (The first flash of a firmware with this, v11, still resets once.)
 
 ### OLED pet
 
-Pip is a little pixel pet (original art, `config_page/gen_pet_art.py`) that
-lives on the right OLED's fifth page; that page shows only the pet, with tiny
-bars for food, fun, energy and clean at the bottom.
+A little pixel pet lives on the right OLED's fifth page: **Pip, cat, dog,
+owl, dragon, blob or axolotl** (all original art, drawn by
+`config_page/gen_pet_art.py`, which writes the firmware's `pet_art.h` and the
+page's copy from the same source). The page is laid out for the tall, narrow
+screen: name and mood icon, the pet, four stat bars (food, fun, energy,
+clean), then the selected care action as a big icon with its name.
+
+- **Growing up:** egg → baby → child → adult. The egg hatches after about 10
+  minutes, it's a child at 1 day and an adult at 3 days (counted while the
+  keyboard is on; *slowly* doubles that, *quickly* halves it; poor care
+  slows it down, nothing makes it shrink). Each stage has its own size (the
+  adult dragon gets wings) and growing up gets a little celebration. An egg
+  needs no care.
+- **Each species** has its own idle animation (antenna wobble, tail flick,
+  wag, head tilt, wing flap, squish, gill wiggle) and its own food and toy:
+  apple/ball, fish/yarn, bone/ball, mouse/feather, coal/flame, jelly/bubble,
+  worm/bubbles. A happy dragon puffs a little flame.
 
 - **Right knob on the pet page:** turn = choose Feed / Play / Sleep (Wake) /
   Clean (a big icon shows the choice for 6 s); **tap** = do it (the first tap
@@ -327,10 +341,12 @@ bars for food, fun, energy and clean at the bottom.
 - **Forgiving:** it gets hungry, sad, tired or dirty (poop appears), but never
   dies unless **Can die** is on; then a whole day with no food and no fun turns
   it into a ghost, and the knob menu offers a new egg.
-- **Config page → Pet tab** (WebHID or network): live view and stats, the same
-  care buttons, name, on/off, care speed, can die, new pet. Raw HID 0xF6
-  0x18 (get), 0x19 (care), 0x1A (settings); care and settings need the
-  confirmed session. Backups include the pet's settings and name.
+- **Config page → Pet tab** (WebHID or network): live view, stats, stage and
+  growth, the same care buttons, name, on/off, care speed, can die, and **New
+  pet…** with a species picker (a new egg). Raw HID 0xF6 0x18 (get), 0x19
+  (care; 5 = new egg + species), 0x1A (settings), 0x1B (species + stage, for
+  restoring); all but 0x18 need the confirmed session. Backups include the
+  pet's settings, name, species and stage.
 - **Saved** in the last 32 EEPROM bytes (taken off the end of Vial's macro
   buffer, 1887 → 1855 bytes, so nothing else moves and settings survive):
   every 10 minutes if something changed, and 15 s after care or a settings

@@ -6,8 +6,9 @@
 //
 //   y   0-  7  name (first 5 letters)                         text line 0
 //   y   9- 16  mood icon: heart / smile / apple / tear / bolt / poop / moon
-//   y  18- 27  effects: zzz, ball, apple, sparkles, "no"
-//   y  28- 52  Pip, 24 x 24, bobbing; poop beside it when dirty
+//   y  18- 27  effects: zzz, its food and toy, sparkles, stars, "no"
+//   y  18- 54  the pet, standing on y 54: egg 16x18, baby 18x16, child 22x20,
+//              adult 28x25 (winged dragon 32 wide); poop beside it when dirty
 //   y  57      ...........
 //   y  60- 87  food / fun / energy / clean: tiny icon + bar
 //   y  90      ...........
@@ -22,20 +23,30 @@
 #include "pet.h"
 #include "pet_art.h"
 
-#define PET_X 4
-#define PET_Y 28
-#define FX_Y 19 // effects band
+#define FLOOR_Y 54 // the pet stands on this line
+#define FX_Y 19    // effects band
 #define STAT_Y 60
 #define ACT_Y 92
 #define ANIM_MS 2000
 
-static void sprite(uint8_t spr, int8_t x, int8_t y) {
-    for (uint8_t r = 0; r < 24; r++) {
-        uint32_t row = pet_sprites[spr][r];
-        for (uint8_t c = 0; c < 24; c++) {
-            if (row & (1ul << (23 - c)) && x + c >= 0 && y + r >= 0) {
+// A pre-rendered frame (pet_art.h), centred, standing on FLOOR_Y.
+static void sprite(uint8_t idx, int8_t dx, int8_t dy) {
+    const pet_frame_t *f = &pet_frames[idx];
+    int8_t             x = (int8_t)((32 - f->w) / 2 + dx), y = (int8_t)(FLOOR_Y + 1 - f->h + dy);
+    for (uint8_t r = 0; r < f->h; r++) {
+        uint32_t row = pet_rows[f->row + r];
+        for (uint8_t c = 0; c < f->w; c++) {
+            if (row & (1ul << (f->w - 1 - c)) && x + c >= 0 && x + c < 32 && y + r >= 0) {
                 oled_write_pixel(x + c, y + r, true);
             }
+        }
+    }
+}
+
+static void unpaint(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
+    for (uint8_t y = y0; y <= y1; y++) {
+        for (uint8_t x = x0; x <= x1; x++) {
+            oled_write_pixel(x, y, false);
         }
     }
 }
@@ -111,6 +122,8 @@ static uint8_t mood_icon(uint8_t mood) {
             return PET_ICON_MOON;
         case MOOD_DEAD:
             return PET_ICON_NO;
+        case MOOD_EGG:
+            return PET_ICON_EGG;
         default:
             return PET_ICON_SMILE;
     }
@@ -121,7 +134,8 @@ static void action(const pet_view_t *v) {
     static const char *const labels[] = {"", "Feed", "Play", "Sleep", "Clean", "New"};
     bool    asleep = v->flags & PV_ASLEEP, choosing = v->flags & PV_MENU;
     uint8_t a      = v->sel < PET_ACTION_COUNT ? v->sel : PET_FEED;
-    uint8_t i      = a == PET_FEED ? PET_ICON_APPLE : a == PET_PLAY ? PET_ICON_BALL : a == PET_SLEEP ? (asleep ? PET_ICON_SPARKLE : PET_ICON_MOON) : a == PET_CLEAN ? PET_ICON_SPARKLE : PET_ICON_EGG;
+    uint8_t sp     = v->species < PET_SPECIES_COUNT ? v->species : 0;
+    uint8_t i      = a == PET_FEED ? pet_food_icon[sp] : a == PET_PLAY ? pet_play_icon[sp] : a == PET_SLEEP ? (asleep ? PET_ICON_SPARKLE : PET_ICON_MOON) : a == PET_CLEAN ? PET_ICON_SPARKLE : PET_ICON_EGG;
     const char *label = a == PET_SLEEP && asleep ? "Wake" : labels[a];
     icon(i, 8, ACT_Y + 2, 2);
     if (choosing) {
@@ -155,11 +169,12 @@ void pet_draw(const pet_view_t *v, bool force) {
     static bool       started;
     uint32_t          now = timer_read32();
     if (!started || v->anim != last.anim) {
-        anim_type = started ? v->anim & 7 : ANIM_NONE; // no replay after a restart
+        anim_type = started ? v->anim & 15 : ANIM_NONE; // no replay after a restart
         anim_t    = now;
         started   = true;
     }
-    bool     animating = anim_type != ANIM_NONE && timer_elapsed32(anim_t) < ANIM_MS;
+    uint16_t anim_ms   = anim_type == ANIM_GROW || anim_type == ANIM_HATCH ? 3000 : ANIM_MS;
+    bool     animating = anim_type != ANIM_NONE && timer_elapsed32(anim_t) < anim_ms;
     uint32_t frame     = (now / 250) | (animating ? 0x80000000u : 0);
     if (!force && frame == last_frame && memcmp(v, &last, sizeof(last)) == 0) {
         return;
@@ -170,9 +185,11 @@ void pet_draw(const pet_view_t *v, bool force) {
     if (!(v->flags & PV_ON)) {
         return;
     }
-    uint8_t ph     = (uint8_t)(now / 250);
-    bool    asleep = v->flags & PV_ASLEEP, dead = v->flags & PV_DEAD;
-    bool    poop   = !dead && v->clean < 40;
+    uint8_t ph = (uint8_t)(now / 250);
+    uint8_t sp = v->species < PET_SPECIES_COUNT ? v->species : 0;
+    uint8_t st = v->stage < PET_STAGE_COUNT ? v->stage : PET_STAGE_ADULT;
+    bool    asleep = v->flags & PV_ASLEEP, dead = v->flags & PV_DEAD, egg = st == PET_STAGE_EGG;
+    bool    poop   = !dead && !egg && v->clean < 40;
     uint8_t name_len = 0;
     while (name_len < 5 && v->name[name_len]) {
         name_len++;
@@ -180,68 +197,83 @@ void pet_draw(const pet_view_t *v, bool force) {
 
     // Top: name and mood.
     centred(0, v->name, name_len, false);
-    icon(mood_icon(v->mood), 12, 9, 1);
+    bool grew = animating && anim_type == ANIM_GROW;
+    icon(grew ? PET_ICON_STAR : mood_icon(v->mood), 12, 9, 1);
 
     // Middle: the pet and what it's doing.
-    int8_t  x    = poop ? 0 : PET_X; // makes room for the poop
-    int8_t  y    = PET_Y + ((now / 500) & 1); // bob
-    uint8_t face = PET_SPR_IDLE;
+    int8_t  dx = 0, dy = 0;
+    uint8_t f  = (ph / 2) & 1 ? PET_FR_IDLE2 : PET_FR_IDLE; // its idle animation
     if (dead) {
-        face = PET_SPR_DEAD;
-        y    = PET_Y - 1 + (ph % 4 < 2 ? 0 : 2); // floats
+        f  = PET_FR_DEAD;
+        dy = ph % 4 < 2 ? -1 : 1; // floats
     } else if (asleep) {
-        face = PET_SPR_SLEEP;
-        y    = PET_Y + 1;
+        f = PET_FR_SLEEP;
     } else if (v->food < 20 || v->joy < 20) {
-        face = PET_SPR_SAD;
+        f = PET_FR_SAD;
     } else if (v->energy < 20) {
-        face = PET_SPR_TIRED;
+        f = PET_FR_TIRED;
     } else if (v->mood == MOOD_HAPPY && ph % 16 >= 12) {
-        face = PET_SPR_HAPPY;
+        f = PET_FR_HAPPY;
     }
     if (!dead && !asleep && ph % 16 == 5) {
-        face = PET_SPR_BLINK;
+        f = PET_FR_BLINK;
     }
+    bool show_egg = egg;
     if (animating) {
         switch (anim_type) {
             case ANIM_EAT:
-                face = ph & 1 ? PET_SPR_EAT : PET_SPR_IDLE; // chewing
+                f = ph & 1 ? PET_FR_EAT : PET_FR_IDLE; // chewing
                 if (timer_elapsed32(anim_t) < ANIM_MS / 2) {
-                    icon(PET_ICON_APPLE, x + 8, FX_Y, 1);
+                    icon(pet_food_icon[sp], 12, FX_Y, 1);
                 }
                 break;
             case ANIM_PLAY:
-                face = PET_SPR_HAPPY;
-                icon(PET_ICON_BALL, (int8_t)((ph % 4) * 8), ph & 1 ? FX_Y - 1 : FX_Y + 1, 1);
+                f = PET_FR_HAPPY;
+                icon(pet_play_icon[sp], (int8_t)((ph % 4) * 8), ph & 1 ? FX_Y - 1 : FX_Y + 1, 1);
                 break;
             case ANIM_CLEAN:
             case ANIM_WAKE:
                 icon(PET_ICON_SPARKLE, ph & 1 ? 0 : 24, FX_Y, 1);
-                icon(PET_ICON_SPARKLE, ph & 1 ? 24 : 0, FX_Y + 16, 1);
+                icon(PET_ICON_SPARKLE, ph & 1 ? 24 : 0, FX_Y + 14, 1);
                 break;
             case ANIM_NO:
-                if (!asleep && !dead) {
-                    face = PET_SPR_SAD;
-                    x += ph & 1 ? 1 : -1; // shakes its head
+                if (!asleep && !dead && !egg) {
+                    f  = PET_FR_SAD;
+                    dx = ph & 1 ? 1 : -1; // shakes its head
                 }
                 icon(PET_ICON_NO, 12, FX_Y, 1);
                 break;
-            case ANIM_HATCH:
-                face = timer_elapsed32(anim_t) < ANIM_MS * 3 / 4 ? PET_SPR_EGG : PET_SPR_HAPPY;
-                if (face == PET_SPR_EGG) {
-                    x += ph & 1 ? 1 : -1; // wobbles
+            case ANIM_HATCH: // the egg wobbles, then out it comes
+                if (timer_elapsed32(anim_t) < 1800) {
+                    show_egg = true;
+                    dx       = ph & 1 ? 1 : -1;
+                } else {
+                    f = PET_FR_HAPPY;
+                    icon(PET_ICON_SPARKLE, ph & 1 ? 0 : 24, FX_Y, 1);
                 }
+                break;
+            case ANIM_GROW: // grew up a stage (or a new egg arrived)
+                if (!egg) f = PET_FR_HAPPY;
+                icon(PET_ICON_STAR, ph & 1 ? 0 : 24, ph & 1 ? FX_Y : FX_Y + 6, 1);
+                icon(PET_ICON_SPARKLE, ph & 1 ? 24 : 0, ph & 1 ? FX_Y + 8 : FX_Y, 1);
                 break;
             default:
                 break;
         }
     }
+    if (egg && !animating && ph % 12 < 2) {
+        dx = ph & 1 ? 1 : -1; // something moves inside
+    }
     if (asleep && !(animating && anim_type == ANIM_NO)) {
         icon(PET_ICON_Z, 22, (int8_t)(FX_Y + 6 - (ph % 3) * 3), 1); // zzz floating up
     }
-    sprite(face, x, y);
+    if (sp == PET_SP_DRAGON && f == PET_FR_HAPPY && !egg && ph & 1) {
+        icon(PET_ICON_FLAME, 23, FX_Y + 2, 1); // a happy little puff of flame
+    }
+    sprite(show_egg ? pet_egg_index[sp] : pet_frame_index[sp][st - 1][f], dx, dy);
     if (poop) {
-        icon(PET_ICON_POOP, 24, 45, 1);
+        unpaint(23, 46, 31, FLOOR_Y);
+        icon(PET_ICON_POOP, 24, 47, 1);
     }
 
     // Below: stats, then the care action.

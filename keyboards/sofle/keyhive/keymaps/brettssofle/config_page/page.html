@@ -85,6 +85,10 @@
   .petInfo { flex:1; min-width:220px; }
   #petStats .row { display:grid; grid-template-columns:70px 1fr 40px; gap:12px; padding:4px 0; }
   #petStats .v { text-align:right; font-family:ui-monospace,monospace; }
+  .petPick { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+  .petPick button { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px; }
+  .petPick button.on { outline:2px solid var(--acc); background:#1c2a3d; }
+  .petPick canvas { width:64px; height:64px; background:#0a0a1e; border-radius:6px; image-rendering:pixelated; }
   .pbar { height:10px; background:#1b2333; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
   .pbar i { display:block; height:100%; background:var(--acc); }
   #restorePanel { margin:10px 16px; }
@@ -254,6 +258,11 @@
           <div class="row"><span>Needs care</span><select id="petDecay"><option value="0">Slowly (stats last ~2 days)</option><option value="1">Normally (~1 day)</option><option value="2">Quickly (~12 hours)</option></select><span></span></div>
           <div class="row"><span>Can die</span><label><input type="checkbox" id="petDie"> after a whole day with no food and no fun</label><span></span></div>
           <div class="btns"><button id="petNew">New pet…</button></div>
+          <div id="petPicker" class="hidden">
+            <p class="small">Choose who hatches from the new egg. It starts as an egg (about 10 minutes), is a baby until a day old, a child until three days, then an adult. Good care keeps it growing at full speed.</p>
+            <div class="petPick" id="petPick"></div>
+            <div class="btns"><button id="petHatch" class="primary">Hatch this egg</button><button id="petPickCancel">Cancel</button></div>
+          </div>
         </div>
         <p class="small dim">On the keyboard: press the right knob until the pet fills the right screen. There, turn the right knob to choose Feed / Play / Sleep / Clean, tap it to do it, and hold it about a second for the next screen. Typing counts as play, so normal use keeps the pet happy; it only gets hungry or sad, never dies, unless <b>Can die</b> is on.</p>
       </div>
@@ -1590,16 +1599,19 @@ const logLines = [];
 function log(s) { logLines.unshift(new Date().toLocaleTimeString() + "  " + s); logLines.length = Math.min(logLines.length, 200); $("log").textContent = logLines.join("\n"); }
 
 // ================================================================ the OLED pet (pet.c)
-// 0xF6 0x18 get, 0x19 care (1 feed, 2 play, 3 sleep/wake, 4 clean, 5 new),
-// 0x1A settings (flags 1 on / 2 can die, decay speed, name).
-const PET = { poll: null, busy: false };
-const PET_MOODS = ["happy", "fine", "hungry", "sad", "tired", "dirty", "asleep", "a ghost", "switched off"];
+// 0xF6 0x18 get, 0x19 care (1 feed, 2 play, 3 sleep/wake, 4 clean, 5 new egg
+// [species]), 0x1A settings (flags 1 on / 2 can die, decay speed, name),
+// 0x1B species + stage (restoring a backup).
+const PET = { poll: null, busy: false, pick: 0 };
+const PET_MOODS = ["happy", "fine", "hungry", "sad", "tired", "dirty", "asleep", "a ghost", "switched off", "still an egg"];
+const PET_STAGES = ["egg", "baby", "child", "adult"];
 function petParse(d) {
   if (d[0] !== 0xf6 || d[2] !== 0x9e) return null;
   let name = "";
   for (let i = 14; i < 24 && d[i]; i++) name += String.fromCharCode(d[i]);
   return { on: !!(d[3] & 1), canDie: !!(d[3] & 2), asleep: !!(d[3] & 4), dead: !!(d[3] & 8), food: d[4], joy: d[5], energy: d[6], clean: d[7],
-           decay: d[8], age: (d[9] | (d[10] << 8) | (d[11] << 16) | (d[12] << 24)) >>> 0, mood: d[13], name, result: d[26] };
+           decay: d[8], age: (d[9] | (d[10] << 8) | (d[11] << 16) | (d[12] << 24)) >>> 0, mood: d[13], name, result: d[26],
+           species: d[28] < 7 ? d[28] : 0, stage: d[29] < 4 ? d[29] : 3, progress: d[30] };
 }
 async function petLoad() { const p = petParse(await cmd([0xf6, 0x18])); S.pet = p; return p; }
 function startPetPoll() {
@@ -1613,13 +1625,14 @@ function startPetPoll() {
   }, 1000);
 }
 function stopPetPoll() { clearInterval(PET.poll); PET.poll = null; }
-async function petAct(a) {
+const speciesName = (i) => DATA.petArt.speciesNames[i] || "Pip";
+async function petAct(a, species) {
   try {
-    const p = petParse(await cmd([0xf6, 0x19, a]));
+    const p = petParse(await cmd(species === undefined ? [0xf6, 0x19, a] : [0xf6, 0x19, a, species]));
     if (!p) throw new Error("this firmware has no pet");
     S.pet = p;
-    const done = ["", "Fed", "Played", p.asleep ? "Good night" : "Woke up", "Cleaned", "A new egg hatched"][a];
-    toast(p.result === 1 ? done : p.result === 2 ? `${p.name || "The pet"} doesn't want to right now` : "Refused — confirm the connection on the keyboard again", p.result !== 1);
+    const done = ["", "Fed", "Played", p.asleep ? "Good night" : "Woke up", "Cleaned", `A new ${speciesName(p.species).toLowerCase()} egg`][a];
+    toast(p.result === 1 ? done : p.result === 2 ? (p.stage === 0 ? "It's still an egg — wait for it to hatch" : `${p.name || "The pet"} doesn't want to right now`) : "Refused — confirm the connection on the keyboard again", p.result !== 1);
   } catch (e) { toast("Failed: " + e.message, true); }
   render();
 }
@@ -1628,8 +1641,12 @@ async function petSettings(over) {
   const name = (s.name || "").replace(/[^\x20-\x7e]/g, "").slice(0, 9) || "Pip";
   const b = [0xf6, 0x1a, (s.on ? 1 : 0) | (s.canDie ? 2 : 0), s.decay];
   for (let i = 0; i < 10; i++) b.push(i < name.length ? name.charCodeAt(i) : 0);
-  const p = petParse(await cmd(b));
+  let p = petParse(await cmd(b));
   if (!p || p.result !== 1) throw new Error("refused");
+  if (s.species !== undefined && s.stage !== undefined && (s.species !== p.species || s.stage !== p.stage)) {
+    p = petParse(await cmd([0xf6, 0x1b, s.species, s.stage]));
+    if (!p || p.result !== 1) throw new Error("refused");
+  }
   S.pet = p;
   return p;
 }
@@ -1637,48 +1654,80 @@ async function petSettingsInput() {
   try { await petSettings(); toast("Pet settings saved"); } catch (e) { toast("Not saved: " + e.message, true); }
   render();
 }
-function petSprite(p, t) {
-  if (p.dead) return "dead";
-  if (p.asleep) return "sleep";
-  if (p.food < 20 || p.joy < 20) return "sad";
-  if (p.energy < 20) return "tired";
-  if ((t / 250 | 0) % 16 === 5) return "blink";
-  return (p.food + p.joy + p.energy + p.clean) / 4 >= 70 && (t / 250 | 0) % 16 >= 12 ? "happy" : "idle";
+// The same frame choice as pet_draw.c.
+function petFrame(p, t) {
+  const ph = (t / 250) | 0;
+  let f = ((ph >> 1) & 1) ? "idle2" : "idle";
+  if (p.dead) f = "dead";
+  else if (p.asleep) f = "sleep";
+  else if (p.food < 20 || p.joy < 20) f = "sad";
+  else if (p.energy < 20) f = "tired";
+  else if (p.mood === 0 && ph % 16 >= 12) f = "happy";
+  if (!p.dead && !p.asleep && ph % 16 === 5) f = "blink";
+  return f;
+}
+// Pre-rendered frame (gen_pet_art.py): [width, hex row, ...].
+function petBitmap(species, stage, frame) {
+  const A = DATA.petArt, sp = A.species[species] || "pip";
+  return stage === 0 ? A.egg[sp] : A.frame[`${sp}/${A.stages[stage]}/${frame}`];
+}
+function drawBitmap(g, bm, ox, oy, S4) {
+  const w = bm[0];
+  for (let y = 1; y < bm.length; y++) {
+    const v = parseInt(bm[y], 16);
+    for (let x = 0; x < w; x++) if ((v >> (w - 1 - x)) & 1) g.fillRect((ox + x) * S4, (oy + y - 1) * S4, S4 - 1, S4 - 1);
+  }
 }
 function drawPet(p) {
-  const cv = $("petCanvas"), g = cv.getContext("2d"), t = Date.now(), A = DATA.petArt, S4 = 4;
+  const cv = $("petCanvas"), g = cv.getContext("2d"), t = Date.now(), A = DATA.petArt, S4 = 3;
   g.fillStyle = "#0a0a1e"; g.fillRect(0, 0, cv.width, cv.height);
   if (!p.on) return;
   g.fillStyle = "#8cdcff";
-  const dot = (x, y) => g.fillRect(x * S4, y * S4, S4 - 1, S4 - 1);
-  const bob = p.dead ? ((t / 500 | 0) % 2) * 2 - 1 : (t / 500 | 0) % 2;
-  A.sprites[petSprite(p, t)].forEach((row, y) => { for (let x = 0; x < 24; x++) if (row[x] === "#") dot(x + 3, y + 4 + bob); });
-  const icon = (name, ox, oy) => A.icons[name].forEach((row, y) => { for (let x = 0; x < 8; x++) if (row[x] === "#") dot(x + ox, y + oy); });
-  if (p.asleep) icon("z", 21, 0);
-  if (!p.dead && p.clean < 40) icon("poop", 21, 21);
+  const bm = petBitmap(p.species, p.stage, petFrame(p, t));
+  const wob = p.stage === 0 && ((t / 250) | 0) % 12 < 2 ? (((t / 250) | 0) & 1 ? 1 : -1) : 0;
+  const dy = p.dead ? ((((t / 250) | 0) % 4 < 2) ? -1 : 1) : 0;
+  drawBitmap(g, bm, ((40 - bm[0]) >> 1) + wob, 38 - (bm.length - 1) + dy, S4); // stands on y 38 of 40
+  const icon = (name, ox, oy) => A.icons[name].forEach((row, y) => { for (let x = 0; x < 8; x++) if (row[x] === "#") g.fillRect((ox + x) * S4, (oy + y) * S4, S4 - 1, S4 - 1); });
+  if (p.asleep) icon("z", 31, 2);
+  if (!p.dead && p.stage && p.clean < 40) icon("poop", 31, 30);
+}
+function renderPetPicker() {
+  setHtml($("petPick"), DATA.petArt.species.map((sp, i) => `<button type="button" class="${i === PET.pick ? "on" : ""}" data-sp="${i}"><canvas width="96" height="96" data-sp="${i}"></canvas><span>${speciesName(i)}</span></button>`).join(""));
+  $("petPick").querySelectorAll("canvas").forEach((cv) => {
+    const g = cv.getContext("2d"), i = +cv.dataset.sp, bm = petBitmap(i, 3, "idle");
+    g.fillStyle = "#0a0a1e"; g.fillRect(0, 0, 96, 96); g.fillStyle = "#8cdcff";
+    drawBitmap(g, bm, (32 - bm[0]) >> 1, 30 - (bm.length - 1), 3);
+  });
 }
 function renderPet() {
   const p = S.pet;
   if (!p) return;
-  $("petTitle").textContent = `${p.name || "Pip"}, the OLED pet`;
+  const kind = speciesName(p.species).toLowerCase();
+  $("petTitle").textContent = `${p.name || "Pip"} the ${kind}`;
   const bar = (label, v) => `<div class="row"><span>${label}</span><div class="pbar"><i style="width:${v}%"></i></div><span class="v">${v}</span></div>`;
   setHtml($("petStats"), bar("Food", p.food) + bar("Fun", p.joy) + bar("Energy", p.energy) + bar("Clean", p.clean));
-  const d = Math.floor(p.age / 1440), h = Math.floor((p.age % 1440) / 60);
-  $("petMood").innerHTML = p.on ? `${escapeHtml(p.name || "Pip")} is <b>${PET_MOODS[p.mood] || "?"}</b> · age ${d ? d + " d " : ""}${h} h (counted while the keyboard is on)` : "The pet is switched off (its OLED page is skipped).";
+  const d = Math.floor(p.age / 1440), h = Math.floor((p.age % 1440) / 60), m = p.age % 60;
+  const stage = p.stage < 3 ? `${PET_STAGES[p.stage]} (${p.progress}% of the way to ${PET_STAGES[p.stage + 1]})` : "adult";
+  $("petMood").innerHTML = p.on ? `${escapeHtml(p.name || "Pip")} is <b>${PET_MOODS[p.mood] || "?"}</b> · ${stage} · age ${d ? d + " d " : ""}${d || h ? h + " h" : m + " min"} (counted while the keyboard is on)` : "The pet is switched off (its OLED page is skipped).";
   $("petSleepBtn").textContent = p.asleep ? "Wake up" : "Sleep";
-  $("petCare").querySelectorAll("button").forEach((b) => (b.disabled = !p.on || p.dead));
+  $("petCare").querySelectorAll("button").forEach((b) => (b.disabled = !p.on || p.dead || p.stage === 0));
   if (document.activeElement !== $("petOn")) $("petOn").checked = p.on;
   if (document.activeElement !== $("petDie")) $("petDie").checked = p.canDie;
   if (document.activeElement !== $("petDecay")) $("petDecay").value = p.decay;
   if (document.activeElement !== $("petName")) $("petName").value = p.name;
-  $("petNew").textContent = p.dead ? "Hatch a new egg" : "New pet…";
+  $("petNew").textContent = p.dead ? "Hatch a new egg…" : "New pet…";
   drawPet(p);
 }
 $("petCare").addEventListener("click", (e) => { const b = e.target.closest("[data-act]"); if (b) petAct(+b.dataset.act); });
 ["petOn", "petDie", "petDecay", "petName"].forEach((id) => $(id).addEventListener("change", petSettingsInput));
-$("petNew").addEventListener("click", () => {
-  if (S.pet && !S.pet.dead && !confirm(`Start over with a new egg? ${S.pet.name || "Your pet"}'s stats and age start again (the name and settings stay).`)) return;
-  petAct(5);
+$("petNew").addEventListener("click", () => { PET.pick = S.pet ? S.pet.species : 0; renderPetPicker(); $("petPicker").classList.remove("hidden"); });
+$("petPick").addEventListener("click", (e) => { const b = e.target.closest("[data-sp]"); if (b) { PET.pick = +b.dataset.sp; renderPetPicker(); } });
+$("petPickCancel").addEventListener("click", () => $("petPicker").classList.add("hidden"));
+$("petHatch").addEventListener("click", async () => {
+  const p = S.pet;
+  if (p && !p.dead && p.stage > 0 && !confirm(`Start over with a new ${speciesName(PET.pick).toLowerCase()} egg? ${p.name || "Your pet"} the ${speciesName(p.species).toLowerCase()} will be gone (the name and settings stay).`)) return;
+  $("petPicker").classList.add("hidden");
+  await petAct(5, PET.pick);
 });
 setInterval(() => { if (S.mode === "hid" && S.ui && S.ui.tab === 3 && S.pet) drawPet(S.pet); }, 250);
 
@@ -1708,7 +1757,7 @@ async function makeBackup() {
     ledMap: S.mapMeasured ? await calReadMap() : null, // null = the built-in map
     trackpad: { enable: S.tp.enable, threshold: S.tp.threshold, release: S.tp.release },
     wiggler: { on: S.wiggle.on, every: S.wiggle.every },
-    pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name } : undefined, // settings, not its stats
+    pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name, species: S.pet.species, stage: S.pet.stage } : undefined, // not its stats
   };
 }
 async function backupDownload() {
@@ -1773,9 +1822,10 @@ function backupDiff(b) {
   out.push({ id: "wiggler", title: "Mouse wiggler (until unplugged)", n: wg ? 1 : 0, data: b.wiggler,
     lines: wg ? [`${S.wiggle.on ? "on" : "off"} → ${b.wiggler.on ? "on" : "off"}, every ${($("wgEvery").options[b.wiggler.every] || {}).text || b.wiggler.every}`] : [] });
   if (b.pet && S.pet) {
-    const f = ["on", "canDie", "decay", "name"].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
-    const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name" }, val = (k, v) => (k === "decay" ? ["slowly", "normally", "quickly"][v] : typeof v === "boolean" ? (v ? "on" : "off") : v);
-    out.push({ id: "pet", title: "Pet settings", n: f.length, data: b.pet, lines: f.map((k) => `${lbl[k]}: ${val(k, S.pet[k])} → ${val(k, b.pet[k])}`) });
+    const f = ["on", "canDie", "decay", "name", "species", "stage"].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
+    const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name", species: "Species", stage: "Stage" };
+    const val = (k, v) => (k === "decay" ? ["slowly", "normally", "quickly"][v] : k === "species" ? speciesName(v) : k === "stage" ? PET_STAGES[v] : typeof v === "boolean" ? (v ? "on" : "off") : v);
+    out.push({ id: "pet", title: "Pet (settings, species, stage)", n: f.length, data: b.pet, lines: f.map((k) => `${lbl[k]}: ${val(k, S.pet[k])} → ${val(k, b.pet[k])}`) });
   }
   return out;
 }

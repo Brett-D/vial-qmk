@@ -1,7 +1,14 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Pip, the OLED pet: care and stats (master half).
+// The OLED pet: care, stats and growth (master half).
+//
+// Seven species (Pip, cat, dog, owl, dragon, blob, axolotl; art in
+// pet_art.h) grow egg -> baby -> child -> adult: the egg hatches after about
+// 10 minutes, it's a child at 1 day and an adult at 3 days of growth. Growth
+// runs at the care speed (slowly: half, quickly: double) and at half rate
+// while it's poorly cared for (average stat under 40); it never goes back.
+// An egg needs nothing: no care, no stat drift.
 //
 // Stats 0-100: food, joy, energy, clean. They drift slowly while the keyboard
 // is powered (per hour at "normal": food -5, joy -4, energy -3, clean -3, so
@@ -26,7 +33,7 @@
 #define PET_EE_ADDR ((void *)(uintptr_t)(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1))
 #define PET_EE_SIZE 32
 #define PET_MAGIC 0xB7
-#define PET_VERSION 1
+#define PET_VERSION 2
 #define PET_NAME_LEN 10
 #ifndef PET_SAVE_PERIOD_MS
 #    define PET_SAVE_PERIOD_MS 600000
@@ -46,8 +53,24 @@ typedef struct __attribute__((packed)) {
     uint8_t  neglect_h; // hours with no food and no joy
     uint32_t age_min;
     char     name[PET_NAME_LEN];
+    uint8_t  species; // PET_SP_*
+    uint8_t  stage;   // PET_STAGE_*
+    uint32_t growth;  // growth points (4 = one minute at normal speed and care)
     uint8_t  sum;
 } pet_store_t;
+
+// Version 1 (v13: Pip only): becomes an adult Pip, stats and name kept.
+typedef struct __attribute__((packed)) {
+    uint8_t  magic, version, flags;
+    uint8_t  stat[4];
+    uint8_t  decay, neglect_h;
+    uint32_t age_min;
+    char     name[PET_NAME_LEN];
+    uint8_t  sum;
+} pet_store_v1_t;
+
+// Growth points at which each stage starts (egg, baby, child, adult).
+static const uint32_t stage_at[PET_STAGE_COUNT] = {0, 10 * 4, 24 * 60 * 4, 72 * 60 * 4};
 _Static_assert(sizeof(pet_store_t) <= PET_EE_SIZE, "pet record too big");
 #ifdef TOTAL_EEPROM_BYTE_COUNT
 _Static_assert(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1 + PET_EE_SIZE <= TOTAL_EEPROM_BYTE_COUNT, "the pet needs the last 32 EEPROM bytes (config.h)");
@@ -62,21 +85,25 @@ static bool        menu_on;
 static uint32_t    menu_t;
 uint16_t           pet_saves; // EEPROM writes since boot (tests / diagnostics)
 
-static uint8_t checksum(const pet_store_t *s) {
+static uint8_t checksum_n(const void *s, uint8_t n) {
     const uint8_t *b   = (const uint8_t *)s;
     uint8_t        sum = 0x5A;
-    for (uint8_t i = 0; i < offsetof(pet_store_t, sum); i++) {
+    for (uint8_t i = 0; i < n; i++) {
         sum = (uint8_t)(sum * 31 + b[i]);
     }
     return sum;
 }
+#define checksum(s) checksum_n((s), offsetof(pet_store_t, sum))
 
+// A new egg (stats ready for when it hatches).
 static void hatch(void) {
     p.stat[S_FOOD] = p.stat[S_JOY] = p.stat[S_ENERGY] = 80;
     p.stat[S_CLEAN]                                   = 100;
     p.flags &= (uint8_t)~(F_DEAD | F_ASLEEP);
     p.age_min   = 0;
     p.neglect_h = 0;
+    p.stage     = PET_STAGE_EGG;
+    p.growth    = 0;
     neglect_min = 0;
 }
 
@@ -97,7 +124,17 @@ static void save_soon(void) {
 
 void pet_init(void) {
     eeprom_read_block(&p, PET_EE_ADDR, sizeof(p));
-    if (p.magic != PET_MAGIC || p.version != PET_VERSION || p.sum != checksum(&p) || p.decay > 2) {
+    pet_store_v1_t v1;
+    memcpy(&v1, &p, sizeof(v1));
+    if (v1.magic == PET_MAGIC && v1.version == 1 && v1.sum == checksum_n(&v1, offsetof(pet_store_v1_t, sum)) && v1.decay <= 2) {
+        memset(&p, 0, sizeof(p)); // v13's Pip grows up into this version
+        memcpy(&p, &v1, offsetof(pet_store_v1_t, sum));
+        p.version = PET_VERSION;
+        p.species = PET_SP_PIP;
+        p.stage   = PET_STAGE_ADULT;
+        p.growth  = stage_at[PET_STAGE_ADULT];
+        save_soon();
+    } else if (p.magic != PET_MAGIC || p.version != PET_VERSION || p.sum != checksum(&p) || p.decay > 2 || p.species >= PET_SPECIES_COUNT || p.stage >= PET_STAGE_COUNT) {
         defaults(); // first start (or the macro area's old bytes): a new egg
         save_soon();
     }
@@ -115,13 +152,14 @@ static void add(uint8_t s, int8_t d) {
 }
 
 static void animate(uint8_t type) {
-    anim_seq = (anim_seq + 1) & 31;
-    anim     = anim_seq << 3 | type;
+    anim_seq = (anim_seq + 1) & 15;
+    anim     = anim_seq << 4 | type;
 }
 
 static uint8_t mood(void) {
     if (!(p.flags & F_ON)) return MOOD_OFF;
     if (p.flags & F_DEAD) return MOOD_DEAD;
+    if (p.stage == PET_STAGE_EGG) return MOOD_EGG;
     if (p.flags & F_ASLEEP) return MOOD_ASLEEP;
     if (p.stat[S_FOOD] < 20) return MOOD_HUNGRY;
     if (p.stat[S_JOY] < 20) return MOOD_SAD;
@@ -130,15 +168,38 @@ static uint8_t mood(void) {
     return p.stat[S_FOOD] + p.stat[S_JOY] + p.stat[S_ENERGY] + p.stat[S_CLEAN] >= 280 ? MOOD_HAPPY : MOOD_OK;
 }
 
+// Growth: 4 points a minute at normal speed and care, never backwards.
+static void grow(void) {
+    if (p.stage >= PET_STAGE_ADULT) {
+        return;
+    }
+    uint8_t pts = p.decay == 0 ? 2 : p.decay == 2 ? 8 : 4;
+    if (p.stage != PET_STAGE_EGG && p.stat[S_FOOD] + p.stat[S_JOY] + p.stat[S_ENERGY] + p.stat[S_CLEAN] < 160) {
+        pts /= 2; // poorly cared for: grows slower
+    }
+    p.growth += pts;
+    if (p.growth >= stage_at[p.stage + 1]) {
+        p.stage++;
+        p.flags &= (uint8_t)~F_ASLEEP;
+        animate(p.stage == PET_STAGE_BABY ? ANIM_HATCH : ANIM_GROW);
+        save_soon();
+    }
+}
+
 // One minute of life.
 static void tick(void) {
     if (!(p.flags & F_ON) || (p.flags & F_DEAD)) {
         return;
     }
+    p.age_min++;
+    if (p.stage == PET_STAGE_EGG) {
+        grow(); // an egg only waits
+        dirty = true;
+        return;
+    }
     bool          asleep = p.flags & F_ASLEEP;
     const uint8_t m2     = p.decay == 0 ? 1 : p.decay == 2 ? 4 : 2; // speed x2
     const int8_t  per_h[4] = {-5, asleep ? -1 : -4, asleep ? 25 : -3, -3};
-    p.age_min++;
     for (uint8_t s = 0; s < 4; s++) {
         int8_t r = per_h[s];
         acc[s] += (uint16_t)((r < 0 ? -r : r) * m2);
@@ -165,14 +226,15 @@ static void tick(void) {
         neglect_min = 0;
         p.neglect_h = 0;
     }
+    grow();
     dirty = true;
 }
 
-// Care. Returns false when the pet won't (asleep, full, too tired...).
+// Care. Returns false when the pet won't (asleep, full, too tired, an egg...).
 static bool act(uint8_t a) {
     if (!(p.flags & F_ON)) return false;
     bool ok = true;
-    if (p.flags & F_DEAD) {
+    if (p.flags & F_DEAD || p.stage == PET_STAGE_EGG) {
         ok = a == PET_NEW;
     } else if ((p.flags & F_ASLEEP) && (a == PET_FEED || a == PET_PLAY)) {
         ok = false;
@@ -209,8 +271,8 @@ static bool act(uint8_t a) {
                 animate(ANIM_CLEAN);
                 break;
             case PET_NEW:
-                hatch();
-                animate(ANIM_HATCH);
+                hatch(); // a new egg
+                animate(ANIM_GROW);
                 break;
             default:
                 ok = false;
@@ -244,6 +306,9 @@ bool pet_process(keyrecord_t *record, bool pet_page) {
             if (p.stat[S_ENERGY] > 10) add(S_ENERGY, -1);
             dirty = true;
         }
+        return false;
+    }
+    if (ev->type == KEY_EVENT && p.stage == PET_STAGE_EGG) {
         return false;
     }
     if (pet_page && IS_ENCODEREVENT(*ev) && ev->key.col == 1) {
@@ -301,6 +366,8 @@ void pet_view(pet_view_t *v) {
     v->anim = anim;
     v->mood = mood();
     memcpy(v->name, p.name, sizeof(v->name));
+    v->species = p.species;
+    v->stage   = p.stage;
 }
 
 /* ---- config page: 0xF6 0x18 get, 0x19 care, 0x1A settings ---- */
@@ -308,7 +375,16 @@ void pet_view(pet_view_t *v) {
 void pet_raw_hid(uint8_t *d, bool allowed) {
     uint8_t result = 0;
     if (d[1] == 0x19 && allowed) {
+        if (d[2] == PET_NEW && d[3] < PET_SPECIES_COUNT) {
+            p.species = d[3]; // a new egg of another species
+        }
         result = act(d[2]) ? 1 : 2;
+    } else if (d[1] == 0x1B && allowed && d[2] < PET_SPECIES_COUNT && d[3] < PET_STAGE_COUNT) {
+        p.species = d[2]; // restoring a backup: same pet, its species and stage
+        p.stage   = d[3];
+        p.growth  = stage_at[p.stage];
+        save_soon();
+        result = 1;
     } else if (d[1] == 0x1A && allowed) {
         p.flags = (p.flags & (uint8_t)~(F_ON | F_CAN_DIE)) | (d[2] & 1 ? F_ON : 0) | (d[2] & 2 ? F_CAN_DIE : 0);
         p.decay = d[3] > 2 ? 1 : d[3];
@@ -335,7 +411,10 @@ void pet_raw_hid(uint8_t *d, bool allowed) {
     d[13] = mood();
     memcpy(d + 14, p.name, PET_NAME_LEN);
     d[24] = p.neglect_h;
-    d[25] = anim & 7;
+    d[25] = anim & 15;
     d[26] = result; // 0 read, 1 done, 2 the pet won't, 3 refused
     d[27] = menu_action(sel);
+    d[28] = p.species;
+    d[29] = p.stage;
+    d[30] = p.stage >= PET_STAGE_ADULT ? 100 : (uint8_t)((p.growth - stage_at[p.stage]) * 100 / (stage_at[p.stage + 1] - stage_at[p.stage]));
 }
