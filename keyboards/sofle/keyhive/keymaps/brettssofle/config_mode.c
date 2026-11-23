@@ -59,7 +59,8 @@
 // Raw HID command for the page (keep in sync with page.html):
 //   [0xF6, sub, args...] -> [0xF6, sub, proto, hid state, keyboard-only state,
 //                            led idle idx, led max val, led mode count,
-//                            led enabled, vial unlocked, ask seconds left]
+//                            led enabled, vial unlocked, ask seconds left,
+//                            effect (VialRGB id), zone, underglow hue, underglow sat]
 #define CFG_RAW_HID_ID 0xF6
 enum cfg_hid_cmd {
     CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
@@ -68,6 +69,8 @@ enum cfg_hid_cmd {
     CMD_EXIT_BRIDGE = 0x03, // end keyboard-only mode
     CMD_LED_REVERT  = 0x04, // drop unsaved lighting changes
     CMD_LED_ENABLE  = 0x05, // arg: 0/1 = lights off/on (preview; saved by VIA lighting save)
+    CMD_SET_ZONE    = 0x06, // args: zone, underglow hue, underglow sat (preview)
+    CMD_SAVE_ZONE   = 0x07, // save the previewed zone settings
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -98,14 +101,15 @@ enum frame_type {
     F_UI    = 0x04, // tab, layer, sel row, sel col, pick lo/hi, pending lo/hi, knob slot, led field, tp field, flags
     F_ROW   = 0x10, // layer, row, keycode x MATRIX_COLS (LE)
     F_ENC   = 0x11, // layer, left ccw, left cw, right ccw, right cw (LE)
-    F_LED   = 0x20, // enabled, mode, effect, variant, hue, sat, val, speed, idle, max val, unsaved
+    F_LED   = 0x20, // enabled, mode, effect (VialRGB id), 0, hue, sat, val, speed, idle, max val, unsaved, zone, underglow hue, underglow sat
     F_TP    = 0x21, // enabled, threshold, release z, unsaved
     F_TPZ   = 0x22, // z, peak, last peak, touching, pressed
 };
 
 enum cfg_state { ST_OFF, ST_ASK, ST_CHALLENGE, ST_READY, ST_CLOSING };
 enum cfg_tab { TAB_KEYS, TAB_KNOBS, TAB_LEDS, TAB_TRACKPAD, TAB_COUNT };
-enum led_field { LF_ENABLE, LF_EFFECT, LF_HUE, LF_SAT, LF_VAL, LF_SPEED, LF_IDLE, LF_COUNT };
+enum led_field { LF_ENABLE, LF_EFFECT, LF_HUE, LF_SAT, LF_VAL, LF_SPEED, LF_ZONE, LF_UG_HUE, LF_UG_SAT, LF_IDLE, LF_COUNT };
+enum led_zone { ZONE_ALL, ZONE_SOLID_UNDERGLOW, ZONE_KEYS_ONLY, ZONE_COUNT };
 enum tp_field { TF_ENABLE, TF_THRESHOLD, TF_RELEASE, TF_COUNT };
 // Knobs tab slots: left ccw/cw/press, right ccw/cw/press.
 #define KNOB_SLOTS 6
@@ -119,6 +123,7 @@ static const char challenge_letters[] = "ACDEFHJKLMNPRSTUWXY";
 typedef struct {
     bool    enable;
     uint8_t mode, hue, sat, val, speed, idle;
+    uint8_t zone, ug_hue, ug_sat;
     bool    dirty;
 } led_edit_t;
 
@@ -174,6 +179,7 @@ static struct {
 // State mirrored to the right half for its OLED.
 typedef struct {
     uint8_t state, tab, layer, hid;
+    uint8_t zone, ug_hue, ug_sat; // LED zones, for the right half's LEDs
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -237,76 +243,124 @@ static void load_pending_for_tab(void) {
  * Underglow and trackpad settings
  * ------------------------------------------------------------------------ */
 
-#ifdef RGBLIGHT_ENABLE
-enum led_effect { EFF_STATIC_LIGHT, EFF_BREATHING, EFF_RAINBOW_MOOD, EFF_RAINBOW_SWIRL, EFF_SNAKE, EFF_KNIGHT, EFF_CHRISTMAS, EFF_STATIC_GRADIENT, EFF_RGB_TEST, EFF_ALTERNATING, EFF_TWINKLE };
+#ifdef RGB_MATRIX_ENABLE
+// VialRGB effect ids (stable across builds) name the effects on the page.
+typedef struct {
+    uint16_t vialrgb_id;
+    uint16_t qmk_id;
+} vialrgb_supported_mode_t;
+#    include "vialrgb_effects.inc"
 
-// Effect of each rgblight mode number (index 0 unused).
-static const uint8_t PROGMEM led_mode_effect[] = {
-    0,
-#    define _RGBM_SINGLE_STATIC(sym) EFF_##sym,
-#    define _RGBM_SINGLE_DYNAMIC(sym) EFF_##sym,
-#    define _RGBM_MULTI_STATIC(sym) EFF_##sym,
-#    define _RGBM_MULTI_DYNAMIC(sym) EFF_##sym,
-#    define _RGBM_TMP_STATIC(sym, msym) EFF_##msym,
-#    define _RGBM_TMP_DYNAMIC(sym, msym) EFF_##msym,
-#    include "rgblight_modes.h"
-};
+// Enabled RGB Matrix modes are numbered 1..LED_MODE_COUNT.
+#    define LED_MODE_COUNT (RGB_MATRIX_EFFECT_MAX - 1)
 
 static uint8_t led_effect_of(uint8_t mode) {
-    return mode < sizeof(led_mode_effect) ? pgm_read_byte(&led_mode_effect[mode]) : 0;
+    for (uint8_t i = 0; i < sizeof(supported_modes) / sizeof(supported_modes[0]); i++) {
+        if (pgm_read_word(&supported_modes[i].qmk_id) == mode) {
+            return pgm_read_word(&supported_modes[i].vialrgb_id);
+        }
+    }
+    return 0;
 }
 
-static uint8_t led_variant_of(uint8_t mode) {
-    uint8_t effect  = led_effect_of(mode);
-    uint8_t variant = 0;
-    while (mode > 1 && led_effect_of(mode - 1) == effect) {
-        mode--;
-        variant++;
+/* LED zones: effect on keys + underglow, keys + solid underglow, keys only. */
+static struct {
+    uint8_t zone, hue, sat;
+} zones;
+
+static void zones_load(void) {
+    user_config_get_led_zone(&zones.zone, &zones.hue, &zones.sat);
+}
+
+static void zones_apply_flags(uint8_t zone) {
+    led_flags_t want = zone == ZONE_ALL ? LED_FLAG_ALL : LED_FLAG_KEYLIGHT;
+    if (rgb_matrix_get_flags() != want) {
+        rgb_matrix_set_flags_noeeprom(want);
     }
-    return variant;
+}
+
+// Runs on both halves; the right half gets the zone settings from the master
+// (oled_state, synced with the config-mode state).
+static uint8_t zones_zone(void) {
+    return is_keyboard_master() ? zones.zone : oled_state.zone;
+}
+
+static void zones_color(uint8_t *hue, uint8_t *sat) {
+    *hue = is_keyboard_master() ? zones.hue : oled_state.ug_hue;
+    *sat = is_keyboard_master() ? zones.sat : oled_state.ug_sat;
+}
+
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    uint8_t zone = zones_zone();
+    if (zone == ZONE_ALL) {
+        return false;
+    }
+    rgb_t rgb = {0, 0, 0};
+    if (zone == ZONE_SOLID_UNDERGLOW) {
+        uint8_t hue, sat;
+        zones_color(&hue, &sat);
+        rgb = hsv_to_rgb((hsv_t){hue, sat, rgb_matrix_get_val()});
+    }
+    for (uint8_t i = led_min; i < led_max; i++) {
+        if (HAS_FLAGS(g_led_config.flags[i], LED_FLAG_UNDERGLOW)) {
+            rgb_matrix_set_color(i, rgb.r, rgb.g, rgb.b);
+        }
+    }
+    return false;
 }
 
 static void led_load(void) {
-    cfg.led.enable = rgblight_is_enabled();
-    cfg.led.mode   = rgblight_get_mode();
-    cfg.led.hue    = rgblight_get_hue();
-    cfg.led.sat    = rgblight_get_sat();
-    cfg.led.val    = rgblight_get_val();
-    cfg.led.speed  = rgblight_get_speed();
+    cfg.led.enable = rgb_matrix_is_enabled();
+    cfg.led.mode   = rgb_matrix_get_mode();
+    cfg.led.hue    = rgb_matrix_get_hue();
+    cfg.led.sat    = rgb_matrix_get_sat();
+    cfg.led.val    = rgb_matrix_get_val();
+    cfg.led.speed  = rgb_matrix_get_speed();
     cfg.led.idle   = user_config_rgb_idle_idx();
+    zones_load();
+    cfg.led.zone   = zones.zone;
+    cfg.led.ug_hue = zones.hue;
+    cfg.led.ug_sat = zones.sat;
     cfg.led.dirty  = false;
     cfg.tx_led     = true;
 }
 
 // Live preview: change the lights without writing EEPROM.
 static void led_preview(void) {
+    zones.zone = cfg.led.zone;
+    zones.hue  = cfg.led.ug_hue;
+    zones.sat  = cfg.led.ug_sat;
+    zones_apply_flags(zones.zone);
     if (!cfg.led.enable) {
-        if (rgblight_is_enabled()) {
-            rgblight_disable_noeeprom();
+        if (rgb_matrix_is_enabled()) {
+            rgb_matrix_disable_noeeprom();
         }
         return;
     }
-    if (!rgblight_is_enabled()) {
-        rgblight_enable_noeeprom();
+    if (!rgb_matrix_is_enabled()) {
+        rgb_matrix_enable_noeeprom();
     }
-    if (rgblight_get_mode() != cfg.led.mode) {
-        rgblight_mode_noeeprom(cfg.led.mode);
+    if (rgb_matrix_get_mode() != cfg.led.mode) {
+        rgb_matrix_mode_noeeprom(cfg.led.mode);
     }
-    rgblight_sethsv_noeeprom(cfg.led.hue, cfg.led.sat, cfg.led.val);
-    rgblight_set_speed_noeeprom(cfg.led.speed);
+    rgb_matrix_sethsv_noeeprom(cfg.led.hue, cfg.led.sat, cfg.led.val);
+    rgb_matrix_set_speed_noeeprom(cfg.led.speed);
 }
 
 static void led_revert(void) {
     if (cfg.led.dirty) {
-        rgblight_reload_from_eeprom();
+        rgb_matrix_reload_from_eeprom();
+        zones_load();
+        zones_apply_flags(zones.zone);
     }
     cfg.led.dirty = false;
 }
 
 static void led_save(void) {
     led_preview();
-    eeconfig_update_rgblight_current();
+    eeconfig_force_flush_rgb_matrix();
     user_config_set_rgb_idle_idx(cfg.led.idle);
+    user_config_set_led_zone(cfg.led.zone, cfg.led.ug_hue, cfg.led.ug_sat);
     led_load();
 }
 
@@ -321,7 +375,7 @@ static void led_change(int8_t dir) {
             cfg.led.enable = !cfg.led.enable;
             break;
         case LF_EFFECT:
-            cfg.led.mode = cfg.led.mode + dir < 1 ? RGBLIGHT_MODES : cfg.led.mode + dir > RGBLIGHT_MODES ? 1 : cfg.led.mode + dir;
+            cfg.led.mode = cfg.led.mode + dir < 1 ? LED_MODE_COUNT : cfg.led.mode + dir > LED_MODE_COUNT ? 1 : cfg.led.mode + dir;
             break;
         case LF_HUE:
             cfg.led.hue += dir * 8;
@@ -330,10 +384,19 @@ static void led_change(int8_t dir) {
             cfg.led.sat = clamp_add(cfg.led.sat, dir * 16, 0, 255);
             break;
         case LF_VAL:
-            cfg.led.val = clamp_add(cfg.led.val, dir * 10, 0, RGBLIGHT_LIMIT_VAL);
+            cfg.led.val = clamp_add(cfg.led.val, dir * 10, 0, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
             break;
         case LF_SPEED:
-            cfg.led.speed = clamp_add(cfg.led.speed, dir, 0, 3);
+            cfg.led.speed = clamp_add(cfg.led.speed, dir * 16, 0, 255);
+            break;
+        case LF_ZONE:
+            cfg.led.zone = (cfg.led.zone + ZONE_COUNT + dir) % ZONE_COUNT;
+            break;
+        case LF_UG_HUE:
+            cfg.led.ug_hue += dir * 8;
+            break;
+        case LF_UG_SAT:
+            cfg.led.ug_sat = clamp_add(cfg.led.ug_sat, dir * 17, 0, 255);
             break;
         case LF_IDLE:
             cfg.led.idle = clamp_add(cfg.led.idle, dir, 0, LED_IDLE_CHOICES - 1);
@@ -415,7 +478,7 @@ static void finish_exit(void) {
 }
 
 static void config_mode_exit(void) {
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     led_revert();
 #endif
     if (cfg.state == ST_READY || cfg.state == ST_CHALLENGE) {
@@ -532,30 +595,45 @@ static void cfg_raw_hid(uint8_t *data) {
                 }
             }
             break;
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
         case CMD_SET_IDLE:
             if (hid_writes_allowed()) {
                 user_config_set_rgb_idle_idx(arg);
             }
             break;
         case CMD_MODE_TABLE:
-            data[3] = RGBLIGHT_MODES;
+            data[3] = LED_MODE_COUNT;
             for (uint8_t i = 0; i < 28; i++) {
                 uint8_t mode = arg + i;
-                data[4 + i]  = mode >= 1 && mode <= RGBLIGHT_MODES ? led_effect_of(mode) : 0xFF;
+                data[4 + i]  = mode >= 1 && mode <= LED_MODE_COUNT ? led_effect_of(mode) : 0xFF; // VialRGB id
             }
             return;
         case CMD_LED_REVERT:
             if (hid_writes_allowed()) {
-                rgblight_reload_from_eeprom();
+                rgb_matrix_reload_from_eeprom();
+                zones_load();
+                zones_apply_flags(zones.zone);
+            }
+            break;
+        case CMD_SET_ZONE: // preview: zone, underglow hue, underglow sat
+            if (hid_writes_allowed()) {
+                zones.zone = data[2] < ZONE_COUNT ? data[2] : ZONE_ALL;
+                zones.hue  = data[3];
+                zones.sat  = data[4];
+                zones_apply_flags(zones.zone);
+            }
+            break;
+        case CMD_SAVE_ZONE:
+            if (hid_writes_allowed()) {
+                user_config_set_led_zone(zones.zone, zones.hue, zones.sat);
             }
             break;
         case CMD_LED_ENABLE:
             if (hid_writes_allowed()) {
                 if (arg) {
-                    rgblight_enable_noeeprom();
+                    rgb_matrix_enable_noeeprom();
                 } else {
-                    rgblight_disable_noeeprom();
+                    rgb_matrix_disable_noeeprom();
                 }
             }
             break;
@@ -576,11 +654,15 @@ static void cfg_raw_hid(uint8_t *data) {
     data[2]           = CONFIG_MODE_PROTOCOL;
     data[3]           = hid.state;
     data[4]           = cfg.state;
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     data[5] = user_config_rgb_idle_idx();
-    data[6] = RGBLIGHT_LIMIT_VAL;
-    data[7] = RGBLIGHT_MODES;
-    data[8] = rgblight_is_enabled();
+    data[6] = RGB_MATRIX_MAXIMUM_BRIGHTNESS;
+    data[7] = LED_MODE_COUNT;
+    data[8]  = rgb_matrix_is_enabled();
+    data[11] = led_effect_of(rgb_matrix_get_mode()); // VialRGB id, also while off
+    data[12] = zones.zone;
+    data[13] = zones.hue;
+    data[14] = zones.sat;
 #endif
     data[9]  = vial_unlocked ? 1 : 0;
     data[10] = (ask_left + 999) / 1000;
@@ -631,7 +713,7 @@ static void resync(void) {
 
 static void become_ready(void) {
     cfg.state = ST_READY;
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     led_load();
 #endif
     tp_command(0);
@@ -656,7 +738,7 @@ static void challenge_key(uint16_t kc) {
  * ------------------------------------------------------------------------ */
 
 static void next_tab(void) {
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     led_revert();
 #endif
     cfg.tab = (cfg.tab + 1) % TAB_COUNT;
@@ -718,7 +800,7 @@ static void change_value(int8_t dir) {
         case TAB_KNOBS:
             pick_step(dir);
             break;
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
         case TAB_LEDS:
             led_change(dir);
             break;
@@ -750,7 +832,7 @@ static void apply(void) {
             }
             break;
         }
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
         case TAB_LEDS:
             led_save();
             break;
@@ -975,21 +1057,24 @@ uint8_t bridge_next_frame(uint8_t *buf) {
         buf[n++] = (cfg.led.dirty ? 1 : 0) | (cfg.tp.dirty ? 2 : 0) | (cfg.sel_held ? 4 : 0);
         return n;
     }
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     if (cfg.tx_led) {
         cfg.tx_led = false;
         buf[0]     = F_LED;
         buf[n++]   = cfg.led.enable;
         buf[n++]   = cfg.led.mode;
         buf[n++]   = led_effect_of(cfg.led.mode);
-        buf[n++]   = led_variant_of(cfg.led.mode);
+        buf[n++]   = 0;
         buf[n++]   = cfg.led.hue;
         buf[n++]   = cfg.led.sat;
         buf[n++]   = cfg.led.val;
         buf[n++]   = cfg.led.speed;
         buf[n++]   = cfg.led.idle;
-        buf[n++]   = RGBLIGHT_LIMIT_VAL;
+        buf[n++]   = RGB_MATRIX_MAXIMUM_BRIGHTNESS;
         buf[n++]   = cfg.led.dirty;
+        buf[n++]   = cfg.led.zone;
+        buf[n++]   = cfg.led.ug_hue;
+        buf[n++]   = cfg.led.ug_sat;
         return n;
     }
 #endif
@@ -1058,7 +1143,7 @@ static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_l
 static void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
-    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state};
+    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat};
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE;
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || (active && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
@@ -1117,6 +1202,9 @@ bool config_mode_oled_task(void) {
 
 void config_mode_init(void) {
     transaction_register_rpc(RPC_ID_USER_CFG, oled_sync_handler);
+#ifdef RGB_MATRIX_ENABLE
+    zones_load();
+#endif
 }
 
 static void knob_combo_task(void) {
@@ -1140,6 +1228,9 @@ static void knob_combo_task(void) {
 }
 
 void config_mode_task(void) {
+#ifdef RGB_MATRIX_ENABLE
+    zones_apply_flags(zones_zone());
+#endif
     if (!is_keyboard_master()) {
         return;
     }
@@ -1166,7 +1257,7 @@ void config_mode_task(void) {
         config_mode_exit();
     }
 
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     if (cfg.led_load_pending) {
         cfg.led_load_pending = false;
         led_load();

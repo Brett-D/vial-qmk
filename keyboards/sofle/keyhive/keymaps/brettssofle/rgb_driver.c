@@ -1,21 +1,25 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// rgblight driver that only drives this half's LEDs.
+// RGB Matrix driver that only drives this half's LEDs.
 //
-// With RGBLIGHT_SPLIT, QMK runs effects over all RGBLIGHT_LED_COUNT (74) LEDs
-// on both halves and maps them through led_map minus the half's clipping start.
-// The stock WS2812 driver then has a 74-entry buffer with no bounds check:
-// the left half sends 74 LEDs down its 37-LED chain on every update, and on the
-// right half the left LEDs' indices underflow (uint8_t, e.g. 28 - 37 = 247) and
-// get written past the end of the buffer, corrupting RAM.
-//
-// WS2812_LED_COUNT is set to one half (config.h) and other-half indices are
-// dropped here.
+// Each half has its own 37-LED chain (WS2812_LED_COUNT, config.h), but RGB
+// Matrix indexes all 74 LEDs, and rgb_matrix_set_color_all() / indicator code
+// touch the other half's indices too. The stock path would write those into
+// this half's buffer (left: past its end; right: over its own LEDs), so other
+// half indices are dropped here.
 
 #include "quantum.h"
 #include "ws2812.h"
-#include "rgblight_drivers.h"
+
+#define HALF_LEDS (RGB_MATRIX_LED_COUNT / 2)
+
+int rgb_matrix_led_index(int index) {
+    if (is_keyboard_left()) {
+        return index < HALF_LEDS ? index : -1;
+    }
+    return index >= HALF_LEDS ? index - HALF_LEDS : -1;
+}
 
 static void half_set_color(int index, uint8_t red, uint8_t green, uint8_t blue) {
     if (index >= 0 && index < WS2812_LED_COUNT) {
@@ -23,9 +27,9 @@ static void half_set_color(int index, uint8_t red, uint8_t green, uint8_t blue) 
     }
 }
 
-const rgblight_driver_t rgblight_driver = {
+const rgb_matrix_driver_t rgb_matrix_driver = {
     .init          = ws2812_init,
+    .flush         = ws2812_flush,
     .set_color     = half_set_color,
     .set_color_all = ws2812_set_color_all,
-    .flush         = ws2812_flush,
 };

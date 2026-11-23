@@ -37,7 +37,9 @@
   .note { color:#ffd58f; background:#3a3017; border:1px solid #6b5a2a; border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; }
   .info { color:#bcd8ff; background:#17283c; border:1px solid #2a4a6b; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
   .tabs { display:flex; gap:6px; margin-bottom:12px; }
-  .tab { padding:6px 14px; border-radius:8px; background:var(--key); color:var(--dim); font-weight:600; }
+  .tab { padding:6px 14px; border-radius:8px; background:var(--key); color:var(--dim); font-weight:600; border:none; }
+  button.layer { border:none; font:inherit; font-size:12px; }
+  body:not(.hid) button.tab, body:not(.hid) button.layer { cursor:default; }
   .tab.on { background:var(--acc); color:#06121f; }
   body.hid .tab, body.hid .layer, body.hid .k, body.hid .slot, body.hid .cat { cursor:pointer; }
   body.hid .tab:not(.on):hover, body.hid .k:hover, body.hid .slot:hover { outline:1px solid var(--acc); }
@@ -148,7 +150,10 @@
           <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
           <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
           <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
-          <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="3"><span class="v" id="ledSpeedV"></span></div>
+          <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="255"><span class="v" id="ledSpeedV"></span></div>
+          <div class="row"><span>LED zones</span><select id="ledZone"></select><span></span></div>
+          <div class="row ugRow"><span>Underglow colour</span><input type="range" id="ugHue" min="0" max="255"><span class="v"><span id="ugHueV"></span><span class="swatch" id="ugSwatch"></span></span></div>
+          <div class="row ugRow"><span>Underglow saturation</span><input type="range" id="ugSat" min="0" max="255"><span class="v" id="ugSatV"></span></div>
           <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
           <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
         </div>
@@ -320,7 +325,8 @@ function handleFrame(type, p) {
       S.enc[p[0]] = [[u16(p, 1), u16(p, 3)], [u16(p, 5), u16(p, 7)]];
       break;
     case F.LED:
-      S.led = { enable: p[0], mode: p[1], effect: p[2], variant: p[3], hue: p[4], sat: p[5], val: p[6], speed: p[7], idle: p[8], max: p[9], dirty: p[10] };
+      S.led = { enable: p[0], mode: p[1], effect: p[2], hue: p[4], sat: p[5], val: p[6], speed: p[7], idle: p[8], max: p[9], dirty: p[10],
+                zone: p[11], ugHue: p[12], ugSat: p[13] };
       break;
     case F.TP: S.tp = { enable: p[0], threshold: p[1], release: p[2], dirty: p[3] }; break;
     case F.TPZ: addZ({ z: p[0], peak: p[1], lastPeak: p[2], touching: p[3], pressed: p[4] }); break;
@@ -465,10 +471,16 @@ async function hidLoadAll() {
     S.enc[l] = [];
     for (let e = 0; e < 2; e++) { const d = await cmd([0xfe, 0x03, l, e]); S.enc[l][e] = [(d[0] << 8) | d[1], (d[2] << 8) | d[3]]; }
   }
-  S.modeEffects = [];
-  for (let first = 1; first <= S.ledInfo.modes; first += 28) {
-    const d = await cmd([0xf6, 0x02, first]);
-    for (let i = 0; i < 28 && first + i <= d[3]; i++) S.modeEffects[first + i] = d[4 + i];
+  S.effects = [];
+  for (let gt = 0, done = false; !done;) {
+    const d = await cmd([0x08, 0x42, gt & 0xff, gt >> 8]); // VialRGB: supported effects with id > gt
+    done = true;
+    for (let i = 2; i + 1 < 32; i += 2) {
+      const id = d[i] | (d[i + 1] << 8);
+      if (id === 0xffff) break;
+      if (id > gt) { S.effects.push(id); gt = id; done = false; }
+    }
+    if (S.effects.length > 64) break;
   }
   buildLedSelects();
   await hidLoadLed();
@@ -478,9 +490,10 @@ async function hidLoadAll() {
 
 async function hidLoadLed() {
   const st = await cmd([0xf6, 0x00, 1]); readStatus(st);
-  const val = (await cmd([0x08, 0x80]))[2], mode = (await cmd([0x08, 0x81]))[2], speed = (await cmd([0x08, 0x82]))[2];
-  const c = await cmd([0x08, 0x83]);
-  S.led = { enable: S.ledInfo.enabled, mode: mode || 1, hue: c[2], sat: c[3], val, speed, idle: S.ledInfo.idle, max: S.ledInfo.max, dirty: 0 };
+  const m = await cmd([0x08, 0x41]); // VialRGB mode: id, speed, h, s, v
+  const id = m[2] | (m[3] << 8);
+  S.led = { enable: S.ledInfo.enabled, mode: id || st[11], hue: m[5], sat: m[6], val: m[7], speed: m[4], idle: S.ledInfo.idle, max: S.ledInfo.max,
+            zone: st[12], ugHue: st[13], ugSat: st[14], dirty: 0 };
   S.ledSent = { ...S.led };
 }
 async function hidLoadTp() {
@@ -548,13 +561,21 @@ async function flushLed() {
   const send = async (bytes) => { const d = await cmd(bytes); if (d[0] === 0xff) throw new Error("refused — reconnect"); };
   try {
     for (;;) {
-      const l = S.led, s = S.ledSent;
-      // VIA's "set effect" also turns the lights on, so on/off goes last.
-      if (l.mode !== s.mode) { await send([0x07, 0x81, l.mode]); s.mode = l.mode; s.enable = -1; continue; }
-      if (l.hue !== s.hue || l.sat !== s.sat) { await send([0x07, 0x83, l.hue, l.sat]); s.hue = l.hue; s.sat = l.sat; continue; }
-      if (l.val !== s.val) { await send([0x07, 0x80, l.val]); s.val = l.val; continue; }
-      if (l.speed !== s.speed) { await send([0x07, 0x82, l.speed]); s.speed = l.speed; continue; }
-      if (l.enable !== s.enable) { await send([0xf6, 0x05, l.enable]); s.enable = l.enable; continue; }
+      // Snapshot first: sliders keep changing S.led while a command is in flight.
+      const l = { ...S.led }, s = S.ledSent;
+      const look = ["mode", "hue", "sat", "val", "speed"].some((k) => l[k] !== s[k]);
+      if (l.enable && (look || s.enable !== 1)) {
+        // VialRGB set mode: effect id, speed, h, s, v in one command (also turns the lights on).
+        await send([0x07, 0x41, l.mode & 0xff, l.mode >> 8, l.speed, l.hue, l.sat, l.val]);
+        Object.assign(s, { mode: l.mode, hue: l.hue, sat: l.sat, val: l.val, speed: l.speed, enable: 1 });
+        continue;
+      }
+      if (!l.enable && s.enable !== 0) { await send([0xf6, 0x05, 0]); s.enable = 0; continue; }
+      if (l.zone !== s.zone || l.ugHue !== s.ugHue || l.ugSat !== s.ugSat) {
+        await send([0xf6, 0x06, l.zone, l.ugHue, l.ugSat]);
+        Object.assign(s, { zone: l.zone, ugHue: l.ugHue, ugSat: l.ugSat });
+        continue;
+      }
       break;
     }
   } catch (e) { toast("Lighting change failed: " + e.message, true); }
@@ -565,6 +586,7 @@ function ledInput() {
   l.enable = $("ledOn").checked ? 1 : 0;
   l.mode = +$("ledMode").value; l.hue = +$("ledHue").value; l.sat = +$("ledSat").value;
   l.val = +$("ledVal").value; l.speed = +$("ledSpeed").value; l.idle = +$("ledIdle").value;
+  l.zone = +$("ledZone").value; l.ugHue = +$("ugHue").value; l.ugSat = +$("ugSat").value;
   l.dirty = 1;
   flushLed();
   render();
@@ -575,6 +597,7 @@ async function ledSave() {
     const d = await cmd([0x09]);
     if (d[0] === 0xff) throw new Error("refused");
     await cmd([0xf6, 0x01, S.led.idle]);
+    await cmd([0xf6, 0x07]);
     await hidLoadLed();
     toast("Underglow saved");
   } catch (e) { toast("Not saved: " + e.message, true); }
@@ -587,15 +610,12 @@ async function ledRevert() {
 }
 function buildLedSelects() {
   const sel = $("ledMode"); sel.innerHTML = "";
-  for (let m = 1; m < S.modeEffects.length; m++) {
-    const eff = S.modeEffects[m]; let v = 0;
-    while (m - v - 1 >= 1 && S.modeEffects[m - v - 1] === eff) v++;
-    sel.add(new Option(`${DATA.ledEffects[eff] || "Effect " + eff}${v || S.modeEffects[m + 1] === eff ? " " + (v + 1) : ""}`, m));
-  }
+  for (const id of S.effects) if (id) sel.add(new Option(DATA.ledEffects[id] || "Effect " + id, id));
+  $("ledZone").innerHTML = DATA.ledZones.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledIdle").innerHTML = DATA.ledIdle.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledVal").max = S.ledInfo.max;
 }
-["ledOn", "ledMode", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle"].forEach((id) => $(id).addEventListener("input", ledInput));
+["ledOn", "ledMode", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat"].forEach((id) => $(id).addEventListener("input", ledInput));
 $("ledSave").addEventListener("click", ledSave);
 $("ledRevert").addEventListener("click", ledRevert);
 
@@ -710,6 +730,10 @@ function hsvToCss(h, s, v) {
 // ================================================================ rendering
 let renderQueued = false;
 function scheduleRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(render); } }
+// Only touch the DOM when the markup changes: replacing elements 25x a second
+// (live Z) would swallow clicks whose mousedown and mouseup hit different nodes.
+const htmlCache = new Map();
+function setHtml(el, html) { if (htmlCache.get(el) !== html) { htmlCache.set(el, html); el.innerHTML = html; } }
 
 function render() {
   renderQueued = false;
@@ -743,7 +767,7 @@ function render() {
 
   const ui = S.ui;
   renderNote();
-  $("tabs").innerHTML = TABS.map((t, i) => `<span class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}">${t}</span>`).join("");
+  setHtml($("tabs"), TABS.map((t, i) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
   $("keysView").classList.toggle("hidden", ui.tab > 1);
   $("ledView").classList.toggle("hidden", ui.tab !== 2);
   $("padView").classList.toggle("hidden", ui.tab !== 3);
@@ -755,21 +779,21 @@ function render() {
 function renderNote() {
   const el = $("modeNote");
   if (S.mode === "bridge") {
-    el.innerHTML = `<div class="info"><b>Keyboard-only mode:</b> use the keyboard's knobs and keys (see “How to use”). Clicking does nothing in this mode${navigator.hid ? " — for mouse control, exit it and click Connect" : ""}.</div>`;
+    setHtml(el, `<div class="info"><b>Keyboard-only mode:</b> use the keyboard's knobs and keys (see “How to use”). Clicking does nothing in this mode${navigator.hid ? " — for mouse control, exit it and click Connect" : ""}.</div>`);
   } else if (S.mode === "hid") {
     let s = "";
     if (S.sessionLost) s += `<div class="note">The keyboard ended the session (idle, or unplugged). <button id="reconnectBtn">Reconnect</button></div>`;
     if (S.bridgeOn) s += `<div class="note">Keyboard-only mode is also on, so the keyboard isn't typing. <button id="exitBridgeBtn">Turn it off</button></div>`;
-    el.innerHTML = s;
+    setHtml(el, s);
     const rc = $("reconnectBtn"); if (rc) rc.onclick = async () => { S.sessionLost = false; clearInterval(HID.poll); await requestSession(); };
     const eb = $("exitBridgeBtn"); if (eb) eb.onclick = async () => { await cmd([0xf6, 0x03]); pollStatus(); };
-  } else el.innerHTML = "";
+  } else setHtml(el, "");
 }
 
 function renderKeys(ui) {
   const hid = S.mode === "hid";
-  $("layers").innerHTML = DATA.layerNames.slice(0, S.ready.layers).map((n, i) =>
-    `<span class="layer ${i === ui.layer ? "on" : ""}" data-layer="${i}">${i} ${n}${i === S.ready.defLayer ? " (default)" : ""}</span>`).join("");
+  setHtml($("layers"), DATA.layerNames.slice(0, S.ready.layers).map((n, i) =>
+    `<button type="button" class="layer ${i === ui.layer ? "on" : ""}" data-layer="${i}" ${hid ? "" : "tabindex=-1"}>${i} ${n}${i === S.ready.defLayer ? " (default)" : ""}</button>`).join(""));
   const U = 52, km = S.keymap[ui.layer];
   let html = "";
   for (const k of DATA.layout) {
@@ -782,10 +806,10 @@ function renderKeys(ui) {
     if (!hid && (selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
     html += `<div class="${cls}" data-r="${k.r}" data-c="${k.c}" title="${hid ? "Click to change" : ""}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${text}</div>`;
   }
-  $("kb").innerHTML = html;
+  setHtml($("kb"), html);
   $("kb").style.height = (5.9 * U) + "px";
   const enc = S.enc[ui.layer];
-  $("knobs").innerHTML = ["Left knob", "Right knob"].map((title, knob) => {
+  setHtml($("knobs"), ["Left knob", "Right knob"].map((title, knob) => {
     const pressKc = km[knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
     const vals = enc ? [enc[knob][0], enc[knob][1], pressKc] : [null, null, pressKc];
     return `<div class="knobbox"><b>${title}</b>` + vals.map((v, i) => {
@@ -793,7 +817,7 @@ function renderKeys(ui) {
       const pend = !hid && on && ui.pending !== v ? ` <span class="new" style="color:var(--warn)">→ ${escapeHtml(kcName(ui.pending))}</span>` : "";
       return `<div class="slot ${on ? "on" : ""}" data-slot="${slot}"><span>${SLOT_NAMES[i]}</span><span>${escapeHtml(kcName(v))}${pend}</span></div>`;
     }).join("") + "</div>";
-  }).join("");
+  }).join(""));
 }
 
 function currentValue(ui) {
@@ -883,20 +907,29 @@ function renderLeds(ui) {
     $("ledSwatch").style.background = hsvToCss(l.hue, l.sat, 255);
     $("ledSatV").textContent = Math.round(l.sat / 255 * 100) + "%";
     $("ledValV").textContent = Math.round(l.val / Math.max(l.max, 1) * 100) + "%";
-    $("ledSpeedV").textContent = l.speed;
+    $("ledSpeedV").textContent = Math.round(l.speed / 255 * 100) + "%";
+    setIfIdle("ledZone", l.zone); setIfIdle("ugHue", l.ugHue); setIfIdle("ugSat", l.ugSat);
+    document.querySelectorAll(".ugRow").forEach((r) => r.classList.toggle("hidden", l.zone !== 1));
+    $("ugHueV").textContent = Math.round(l.ugHue / 256 * 360) + "°";
+    $("ugSwatch").style.background = hsvToCss(l.ugHue, l.ugSat, 255);
+    $("ugSatV").textContent = Math.round(l.ugSat / 255 * 100) + "%";
     return;
   }
   const effect = DATA.ledEffects[l.effect] || "Effect " + l.effect;
+  const ug = `${Math.round(l.ugHue / 256 * 360)}°<span class="swatch" style="background:${hsvToCss(l.ugHue, l.ugSat, 255)}"></span>`;
   const rows = [
     ["Lights", l.enable ? "On" : "Off"],
-    ["Effect", `${effect}${l.variant ? " " + (l.variant + 1) : ""} <span class="dim small">(mode ${l.mode})</span>`],
+    ["Effect", `${effect} <span class="dim small">(mode ${l.mode})</span>`],
     ["Hue", `${Math.round(l.hue / 256 * 360)}°<span class="swatch" style="background:${hsvToCss(l.hue, l.sat, 255)}"></span>`],
     ["Saturation", Math.round(l.sat / 255 * 100) + "%"],
     ["Brightness", `${Math.round(l.val / Math.max(l.max, 1) * 100)}% <span class="dim small">(${l.val}/${l.max})</span>`],
-    ["Speed", `${l.speed} <span class="dim small">(0–3)</span>`],
+    ["Speed", Math.round(l.speed / 255 * 100) + "%"],
+    ["LED zones", DATA.ledZones[l.zone] || l.zone],
+    ["Underglow colour", l.zone === 1 ? ug : `<span class="dim">${ug} (used by “solid underglow”)</span>`],
+    ["Underglow saturation", Math.round(l.ugSat / 255 * 100) + "%"],
     ["Turn off after no use", DATA.ledIdle[l.idle] || l.idle],
   ];
-  $("ledRows").innerHTML = rows.map(([k, v], i) => `<div class="row ${i === ui.ledField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+  setHtml($("ledRows"), rows.map(([k, v], i) => `<div class="row ${i === ui.ledField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join(""));
 }
 
 function renderPad(ui) {
@@ -911,10 +944,10 @@ function renderPad(ui) {
     $("tpThrV").textContent = t.threshold; $("tpRelV").textContent = t.release;
   } else {
     const rows = [["Press-to-click", t.enable ? "On" : "Off"], ["Threshold (press)", t.threshold], ["Release Z", t.release]];
-    $("tpRows").innerHTML = rows.map(([k, v], i) => `<div class="row ${i === ui.tpField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+    setHtml($("tpRows"), rows.map(([k, v], i) => `<div class="row ${i === ui.tpField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join(""));
   }
   drawZ(t);
-  $("peaks").innerHTML = S.peaks.map((p) => `<span class="${p >= t.threshold ? "click" : ""}">${p}</span>`).join("") || "<span class='dim'>touch the trackpad…</span>";
+  setHtml($("peaks"), S.peaks.map((p) => `<span class="${p >= t.threshold ? "click" : ""}">${p}</span>`).join("") || "<span class='dim'>touch the trackpad…</span>");
 }
 
 function drawZ(t) {
@@ -963,7 +996,7 @@ function renderHelp() {
       ? [["With the mouse", "Click Connect, then press the right knob on the keyboard to confirm."], ["Without WebHID", "Use keyboard-only mode."]]
       : [["Keyboard-only mode", "Follow the steps on the left."]];
   }
-  $("help").innerHTML = items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  setHtml($("help"), items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(""));
   $("helpFoot").textContent = foot;
 }
 

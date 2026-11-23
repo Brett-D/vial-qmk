@@ -6,9 +6,11 @@ VIA_ENABLE = yes
 VIAL_ENABLE = yes
 QMK_SETTINGS = yes
 
-RGBLIGHT_ENABLE = yes
+# Per-key RGB Matrix (layout in keyhive/keyboard.json) with Vial's VialRGB.
+RGB_MATRIX_ENABLE = yes
+VIALRGB_ENABLE = yes
 # rgb_driver.c wraps the WS2812 driver so each half only drives its own LEDs.
-RGBLIGHT_DRIVER = custom
+RGB_MATRIX_DRIVER = custom
 WS2812_DRIVER_REQUIRED = yes
 ENCODER_MAP_ENABLE = yes
 EXTRAKEY_ENABLE = yes
@@ -41,6 +43,6 @@ SRC += trackpad.c trackpad_z.c oled.c
 # editing config_page/gen_config.py or page.html, rerun:
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
 SRC += config_mode.c bridge.c
-ifeq ($(strip $(RGBLIGHT_ENABLE)), yes)
-    SRC += rgb_driver.c
+ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
+    SRC += rgb_driver.c rgb_layout.c
 endif

@@ -112,17 +112,51 @@
 /* ---------------------------------------------------------------------------
  * RGB underglow
  * ------------------------------------------------------------------------ */
-#ifdef RGBLIGHT_ENABLE
-// Each half drives only its own 37 LEDs (keyhive split_count); see rgb_driver.c.
+#ifdef RGB_MATRIX_ENABLE
+// Keyhive Sofle v2: 37 LEDs per half (30 per-key + 7 underglow), layout in
+// rgb_layout.c. sofle/info.json's 72-LED Sofle RGB values win over
+// keyhive/keyboard.json in the generated config, so replace them here.
+#    undef RGB_MATRIX_LED_COUNT
+#    define RGB_MATRIX_LED_COUNT 74
+#    undef RGB_MATRIX_SPLIT
+#    define RGB_MATRIX_SPLIT { 37, 37 }
+#    undef RGB_MATRIX_MAXIMUM_BRIGHTNESS
+#    define RGB_MATRIX_MAXIMUM_BRIGHTNESS 100 // power cap, as keyhive's rgblight max_brightness
+// Each half drives only its own 37 LEDs; see rgb_driver.c.
 #    define WS2812_LED_COUNT 37
-#    define RGBLIGHT_DEFAULT_MODE (RGBLIGHT_MODE_RAINBOW_SWIRL + 2)
-#    define RGBLIGHT_EFFECT_ALTERNATING
-#    define RGBLIGHT_EFFECT_RGB_TEST
-#    define RGBLIGHT_EFFECT_RAINBOW_MOOD
-#    define RGBLIGHT_EFFECT_STATIC_GRADIENT
-#    define RGBLIGHT_EFFECT_RAINBOW_SWIRL
-#    define RGBLIGHT_EFFECT_BREATHING
-#    define RGBLIGHT_EFFECT_SNAKE
+#    define RGB_MATRIX_KEYPRESSES // reactive / splash effects
+#    define RGB_MATRIX_FRAMEBUFFER_EFFECTS
+#    define RGB_MATRIX_DEFAULT_MODE RGB_MATRIX_CYCLE_LEFT_RIGHT
+#    define RGB_MATRIX_DEFAULT_SPEED 96
+#    define RGB_MATRIX_LED_FLUSH_LIMIT 16
+#    define ENABLE_RGB_MATRIX_ALPHAS_MODS
+#    define ENABLE_RGB_MATRIX_GRADIENT_LEFT_RIGHT
+#    define ENABLE_RGB_MATRIX_BREATHING
+#    define ENABLE_RGB_MATRIX_CYCLE_ALL
+#    define ENABLE_RGB_MATRIX_CYCLE_LEFT_RIGHT
+#    define ENABLE_RGB_MATRIX_CYCLE_OUT_IN
+#    define ENABLE_RGB_MATRIX_RAINBOW_MOVING_CHEVRON
+#    define ENABLE_RGB_MATRIX_CYCLE_PINWHEEL
+#    define ENABLE_RGB_MATRIX_CYCLE_SPIRAL
+#    define ENABLE_RGB_MATRIX_RAINBOW_BEACON
+#    define ENABLE_RGB_MATRIX_RAINDROPS
+#    define ENABLE_RGB_MATRIX_JELLYBEAN_RAINDROPS
+#    define ENABLE_RGB_MATRIX_HUE_WAVE
+#    define ENABLE_RGB_MATRIX_PIXEL_RAIN
+#    define ENABLE_RGB_MATRIX_TYPING_HEATMAP
+#    define ENABLE_RGB_MATRIX_DIGITAL_RAIN
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_SIMPLE
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_WIDE
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_MULTIWIDE
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_CROSS
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_MULTICROSS
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_NEXUS
+#    define ENABLE_RGB_MATRIX_SOLID_REACTIVE_MULTINEXUS
+#    define ENABLE_RGB_MATRIX_SPLASH
+#    define ENABLE_RGB_MATRIX_MULTISPLASH
+#    define ENABLE_RGB_MATRIX_SOLID_SPLASH
+#    define ENABLE_RGB_MATRIX_SOLID_MULTISPLASH
 // Lights turn off after a chosen idle time (any key, encoder or trackpad):
 // never / 1 / 2 / 5 / 10 / 30 min, default 1 min. Chosen in config mode (LEDs
 // tab) and saved in EEPROM; see user_config_rgb_idle_ms() in trackpad_z.c.

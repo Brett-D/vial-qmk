@@ -5,7 +5,7 @@ Keymap for a Keyhive Sofle v2 with:
 * **Sea-Picro EXT V1.0** (RP2040) on both halves
 * **23 mm Cirque Pinnacle** trackpad (I2C) on the **left** half — the left half is the USB/master side
 * **OLED** on the **right** half only
-* Rotary encoders on both halves, WS2812 underglow
+* Rotary encoders on both halves, per-key RGB + underglow (WS2812, 37 LEDs per half)
 
 ## Features
 
@@ -16,7 +16,7 @@ Keymap for a Keyhive Sofle v2 with:
 | `CYCLE` (Raise + top-left) | Switches the default layer between QWERTY and Colemak-DH (saved) |
 | `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
 | Encoders | Left: volume, press = mute. Right: page up/down |
-| Underglow | Turns off after 1 minute (changeable in config mode: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input |
+| LEDs | Per-key RGB Matrix: rainbow, reactive and **splash** effects (light bursts out from each key you press). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode or Vial (VialRGB) |
 | Right OLED | Default layer, active layer, Caps/Num lock, active mods (S C A G). Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
 
 ### Trackpad
@@ -86,9 +86,21 @@ Change these in `config.h` and rebuild:
 
 The I2C bus runs at QMK's 100 kHz default, like the original firmware.
 
+### LED layout
+
+The Keyhive Sofle v2 has 37 LEDs per half: 30 under the keys (29 keys plus the
+encoder/key slot) and 7 underglow. `rgb_layout.c` maps them for RGB Matrix in
+physical chain order. It was derived from keyhive's rgblight `led_map` applied
+to the Sofle RGB chain order in `keyboards/sofle/info.json` (the right half's
+chain mirrors the left), not measured, so check it once: pick the effect
+**Reactive: pressed key lights** and press keys; each key should light itself.
+If a key lights a different LED, note which and fix its entry in
+`rgb_layout.c`'s `matrix_co` table. `config.h` sets the 74-LED count and the
+37/37 split (`sofle/info.json`'s 72-LED Sofle RGB values would otherwise win).
+
 ## Config mode
 
-Configure the keymap, knobs, underglow and trackpad press-to-click from
+Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad press-to-click from
 `config_page/sofle-config.html` — a single file you open from disk (keep a
 copy on any computer). Nothing to install, no internet. Two ways to use it:
 
@@ -143,7 +155,7 @@ dropped on exit. Tip: when holding both knobs, press the right one first —
 the left knob is Mute.
 
 Keymap changes are saved like Vial's (EEPROM; a new firmware build resets them
-to the defaults in `keymap.c`). v1 covers keymap, knobs, underglow and
+to the defaults in `keymap.c`). v1 covers keymap, knobs, LEDs and
 trackpad; use Vial for combos, tap dance and macros.
 
 After changing `config_page/gen_config.py` or `config_page/page.html`,

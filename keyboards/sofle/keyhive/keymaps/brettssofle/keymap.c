@@ -157,8 +157,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
-#ifdef RGBLIGHT_ENABLE
-// Turn the underglow off after the chosen idle time (config mode, LEDs tab)
+#ifdef RGB_MATRIX_ENABLE
+// Turn the LEDs off after the chosen idle time (config mode, LEDs tab)
 // without any key, encoder or trackpad activity, and restore the saved state on
 // the next input.
 static void rgb_idle_task(void) {
@@ -167,12 +167,12 @@ static void rgb_idle_task(void) {
     bool        idle     = timeout && last_input_activity_elapsed() > timeout;
 
     if (idle && !idle_off) {
-        if (rgblight_is_enabled()) {
-            rgblight_disable_noeeprom();
+        if (rgb_matrix_is_enabled()) {
+            rgb_matrix_disable_noeeprom();
             idle_off = true;
         }
     } else if (!idle && idle_off) {
-        rgblight_reload_from_eeprom();
+        rgb_matrix_reload_from_eeprom();
         idle_off = false;
     }
 }
@@ -189,7 +189,7 @@ void keyboard_post_init_user(void) {
 }
 
 void housekeeping_task_user(void) {
-#ifdef RGBLIGHT_ENABLE
+#ifdef RGB_MATRIX_ENABLE
     // RGB state is owned by the master and synced to the right half.
     if (is_keyboard_master()) {
         rgb_idle_task();

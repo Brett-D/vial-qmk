@@ -54,8 +54,8 @@ PICKER = [
                + [f"TT({i})" for i in range(1, 6)] + ["PDF(0)", "PDF(1)"]),
     ("Numpad", ["KC_NUM_LOCK", "KC_KP_SLASH", "KC_KP_ASTERISK", "KC_KP_MINUS", "KC_KP_PLUS",
                 "KC_KP_ENTER"] + [f"KC_KP_{i}" for i in range(1, 10)] + ["KC_KP_0", "KC_KP_DOT", "KC_KP_EQUAL"]),
-    ("Lighting", ["UG_TOGG", "UG_NEXT", "UG_PREV", "UG_HUEU", "UG_HUED", "UG_SATU", "UG_SATD",
-                  "UG_VALU", "UG_VALD", "UG_SPDU", "UG_SPDD"]),
+    ("Lighting", ["RM_TOGG", "RM_NEXT", "RM_PREV", "RM_HUEU", "RM_HUED", "RM_SATU", "RM_SATD",
+                  "RM_VALU", "RM_VALD", "RM_SPDU", "RM_SPDD"]),
     ("Special", ["CONFIG_MODE", "CYCLE", "DRAG_SCROLL", "CW_TOGG", "QK_BOOT"]),
 ]
 
@@ -80,9 +80,9 @@ LABELS = {
     "MS_WHLD": "Whl↓", "MS_WHLL": "Whl←", "MS_WHLR": "Whl→", "MS_ACL0": "Accel0", "MS_ACL1": "Accel1",
     "MS_ACL2": "Accel2", "KC_NUM_LOCK": "NumLk", "KC_KP_SLASH": "P/", "KC_KP_ASTERISK": "P*",
     "KC_KP_MINUS": "P-", "KC_KP_PLUS": "P+", "KC_KP_ENTER": "PEnt", "KC_KP_DOT": "P.", "KC_KP_EQUAL": "P=",
-    "UG_TOGG": "RGB on/off", "UG_NEXT": "RGB mode+", "UG_PREV": "RGB mode-", "UG_HUEU": "Hue+",
-    "UG_HUED": "Hue-", "UG_SATU": "Sat+", "UG_SATD": "Sat-", "UG_VALU": "Bright+", "UG_VALD": "Bright-",
-    "UG_SPDU": "Speed+", "UG_SPDD": "Speed-", "CW_TOGG": "CapsWord", "QK_BOOT": "Bootloader",
+    "RM_TOGG": "RGB on/off", "RM_NEXT": "RGB mode+", "RM_PREV": "RGB mode-", "RM_HUEU": "Hue+",
+    "RM_HUED": "Hue-", "RM_SATU": "Sat+", "RM_SATD": "Sat-", "RM_VALU": "Bright+", "RM_VALD": "Bright-",
+    "RM_SPDU": "Speed+", "RM_SPDD": "Speed-", "CW_TOGG": "CapsWord", "QK_BOOT": "Bootloader",
     "CONFIG_MODE": "Config mode", "CYCLE": "Cycle base", "DRAG_SCROLL": "Drag scroll",
 }
 for i in range(10):
@@ -90,9 +90,28 @@ for i in range(10):
 
 LAYER_NAMES = ["QWERTY", "Colemak", "Lower", "Raise", "Mouse", "Layer 5"]
 
-# Effect ids sent by the firmware (config_mode.c led_effect enum), in order.
-LED_EFFECTS = ["Static", "Breathing", "Rainbow mood", "Rainbow swirl", "Snake", "Knight",
-               "Christmas", "Gradient", "RGB test", "Alternating", "Twinkle"]
+# Friendlier names for some VialRGB effects (the rest are derived from the enum).
+EFFECT_NAMES = {
+    "OFF": "Off", "SOLID_COLOR": "Solid colour", "ALPHAS_MODS": "Letters / mods two-tone",
+    "CYCLE_LEFT_RIGHT": "Rainbow sweep (left-right)", "CYCLE_ALL": "Rainbow (all keys)",
+    "CYCLE_OUT_IN": "Rainbow (outside in)", "RAINBOW_MOVING_CHEVRON": "Rainbow chevron",
+    "TYPING_HEATMAP": "Typing heatmap", "DIGITAL_RAIN": "Digital rain",
+    "SOLID_REACTIVE_SIMPLE": "Reactive: pressed key lights",
+    "SOLID_REACTIVE": "Reactive: pressed key hue shift",
+    "SOLID_REACTIVE_WIDE": "Reactive: glow around key", "SOLID_REACTIVE_MULTIWIDE": "Reactive: glow around keys (multi)",
+    "SOLID_REACTIVE_CROSS": "Reactive: cross from key", "SOLID_REACTIVE_MULTICROSS": "Reactive: cross from keys (multi)",
+    "SOLID_REACTIVE_NEXUS": "Reactive: nexus lines", "SOLID_REACTIVE_MULTINEXUS": "Reactive: nexus lines (multi)",
+    "SPLASH": "Splash: rainbow burst from key", "MULTISPLASH": "Splash: rainbow bursts (multi)",
+    "SOLID_SPLASH": "Splash: colour burst from key", "SOLID_MULTISPLASH": "Splash: colour bursts (multi)",
+}
+
+
+def parse_vialrgb_effects():
+    """VialRGB effect id -> name, from quantum/vialrgb_effects.inc."""
+    text = (QMK_ROOT / "quantum" / "vialrgb_effects.inc").read_text(encoding="utf-8")
+    body = text[text.index("enum {"):text.index("};")]
+    names = re.findall(r"VIALRGB_EFFECT_([A-Z0-9_]+)", body)
+    return [EFFECT_NAMES.get(n, n.replace("_", " ").capitalize()) for n in names]
 
 LED_IDLE_LABELS = ["Never", "1 min", "2 min", "5 min", "10 min", "30 min"]
 
@@ -210,7 +229,8 @@ def main():
         "names": {str(k): v for k, v in sorted(names.items())},
         "layout": layout,
         "layerNames": LAYER_NAMES,
-        "ledEffects": LED_EFFECTS,
+        "ledEffects": parse_vialrgb_effects(),
+        "ledZones": ["Effect on keys + underglow", "Effect on keys, solid underglow", "Keys only (underglow off)"],
         "ledIdle": LED_IDLE_LABELS,
         "ranges": {k: kc[k] for k in ["QK_MODS", "QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO",
                                       "QK_MOMENTARY", "QK_DEF_LAYER", "QK_TOGGLE_LAYER", "QK_ONE_SHOT_LAYER",

@@ -53,5 +53,9 @@ uint8_t             trackpad_press_release_z(void);
 uint8_t  user_config_rgb_idle_idx(void);
 void     user_config_set_rgb_idle_idx(uint8_t idx);
 uint32_t user_config_rgb_idle_ms(void);
+// LED zones (0 effect everywhere, 1 keys + solid underglow, 2 keys only) and the
+// solid underglow colour, saved in EECONFIG_USER bits 20-31 (trackpad_z.c).
+void user_config_get_led_zone(uint8_t *zone, uint8_t *hue, uint8_t *sat);
+void user_config_set_led_zone(uint8_t zone, uint8_t hue, uint8_t sat);
 
 #include "config_mode.h"

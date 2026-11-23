@@ -25,7 +25,7 @@
 #    define TP_Z_RAW_HID_ID 0xF5
 #    define TP_Z_CMD_GET 0x00
 #    define TP_Z_CMD_SET 0x01
-#    define TP_CONFIG_VERSION 2 // 2: hysteresis replaced by an absolute release Z
+#    define TP_CONFIG_VERSION 3 // 2: hysteresis replaced by an absolute release Z; 3: LED zones in bits 20-31
 
 #    ifndef TP_Z_SYNC_INTERVAL_MS
 #        define TP_Z_SYNC_INTERVAL_MS 30
@@ -43,13 +43,16 @@
 // Public in the Cirque I2C driver.
 void RAP_ReadBytes(uint8_t address, uint8_t *data, uint8_t count);
 
-// EECONFIG_USER layout (shared with future config-page settings):
+// EECONFIG_USER layout (shared with the config page settings):
 //   bits 0-3   version
 //   bit  4     press-to-click enabled
 //   bits 5-10  press-to-click Z threshold (default 51)
-//   bits 11-13 RGB idle timeout index (reserved, 1 = 1 min)
+//   bits 11-13 RGB idle timeout index (1 = 1 min)
 //   bits 14-19 press-to-click release Z
-//   bits 20-31 reserved
+//   bits 20-21 LED zones (0 effect on keys + underglow, 1 keys + solid
+//              underglow, 2 keys only)
+//   bits 22-27 solid underglow hue / 4
+//   bits 28-31 solid underglow saturation / 17
 typedef union {
     uint32_t raw;
     struct {
@@ -58,7 +61,9 @@ typedef union {
         uint32_t press_threshold : 6;
         uint32_t rgb_idle_timeout_idx : 3;
         uint32_t press_release_z : 6;
-        uint32_t reserved : 12;
+        uint32_t led_zone : 2;
+        uint32_t ug_hue : 6;
+        uint32_t ug_sat : 4;
     };
 } tp_config_t;
 _Static_assert(sizeof(tp_config_t) == sizeof(uint32_t), "tp_config_t must fit EECONFIG_USER");
@@ -98,6 +103,16 @@ void trackpad_z_set_pressed(bool pressed) {
  * Press-to-click settings
  * ------------------------------------------------------------------------ */
 
+#    ifndef LED_ZONE_DEFAULT_UG_HUE
+#        define LED_ZONE_DEFAULT_UG_HUE 42 // x4 = 168, blue
+#    endif
+
+static void led_zone_set_defaults(void) {
+    tp_config.led_zone = 0;
+    tp_config.ug_hue   = LED_ZONE_DEFAULT_UG_HUE;
+    tp_config.ug_sat   = 15;
+}
+
 static void tp_config_set_defaults(void) {
     tp_config.raw              = 0;
     tp_config.version          = TP_CONFIG_VERSION;
@@ -105,6 +120,7 @@ static void tp_config_set_defaults(void) {
     tp_config.press_threshold  = TRACKPAD_PRESS_DEFAULT_THRESHOLD;
     tp_config.press_release_z  = TRACKPAD_PRESS_DEFAULT_RELEASE_Z;
     tp_config.rgb_idle_timeout_idx = 1;
+    led_zone_set_defaults();
 }
 
 static bool tp_config_valid(void) {
@@ -144,6 +160,22 @@ uint32_t user_config_rgb_idle_ms(void) {
     return minutes[user_config_rgb_idle_idx()] * 60000UL;
 }
 
+void user_config_get_led_zone(uint8_t *zone, uint8_t *hue, uint8_t *sat) {
+    *zone = tp_config.led_zone < 3 ? tp_config.led_zone : 0;
+    *hue  = tp_config.ug_hue * 4;
+    *sat  = tp_config.ug_sat * 17;
+}
+
+void user_config_set_led_zone(uint8_t zone, uint8_t hue, uint8_t sat) {
+    tp_config_t old    = tp_config;
+    tp_config.led_zone = zone < 3 ? zone : 0;
+    tp_config.ug_hue   = (hue + 2) / 4 > 63 ? 63 : (hue + 2) / 4;
+    tp_config.ug_sat   = (sat + 8) / 17;
+    if (tp_config.raw != old.raw) {
+        eeconfig_update_user(tp_config.raw);
+    }
+}
+
 /* ---------------------------------------------------------------------------
  * Split sync for the right OLED (debug only)
  * ------------------------------------------------------------------------ */
@@ -158,6 +190,14 @@ static void tp_z_slave_handler(uint8_t in_len, const void *in_data, uint8_t out_
 
 void trackpad_z_post_init(void) {
     tp_config.raw = eeconfig_read_user();
+    if (tp_config.version == 2) {
+        // v2 -> v3: bits 20-31 were reserved (zero); keep everything else.
+        tp_config.version = TP_CONFIG_VERSION;
+        led_zone_set_defaults();
+        if (tp_config_valid()) {
+            eeconfig_update_user(tp_config.raw);
+        }
+    }
     if (!tp_config_valid()) {
         eeconfig_init_user();
     }
