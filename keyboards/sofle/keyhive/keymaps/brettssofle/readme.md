@@ -23,25 +23,40 @@ Keymap for a Keyhive Sofle v2 with:
 | Gesture | Result |
 | --- | --- |
 | Move a finger | Move the cursor (with glide/momentum on release) |
-| Slide around the outer edge | Circular scroll |
-| Tap | Left click |
-| Double tap | Double click |
-| Tap, then touch and hold | Left button held while your finger is down: **drag windows**, select text. Lift and touch again within 0.3 s to keep dragging |
-| Touch and hold still (~0.5 s) | **Right click** |
+| Slide around the outer ring | Circular scroll: start on the **right** side of the ring for vertical scroll, on the **left** side for horizontal |
+| Tap | Left click (double tap = double click) |
 
 While (and shortly after) you touch the trackpad, the **Mouse layer** turns on
-automatically. On the right-hand home row:
+automatically:
 
-| H | J | K | L |
-| --- | --- | --- | --- |
-| Drag scroll (hold) | Left click | Right click | Middle click |
+| Key | Mouse layer |
+| --- | --- |
+| **T** | Left button — hold T and move your finger to **drag** windows / select text |
+| **R** | Right button |
+| H | Drag scroll (hold, then move your finger to scroll) |
+| J / K / L | Left / right / middle button |
 
-All other keys pass through, and typing any other key turns the Mouse layer off
-straight away. The Mouse-layer keys (and `Drag scroll`, under *User* keycodes) can be
-remapped in Vial.
+The layer stays on while a mouse key is held, turns off ~0.65 s after you lift
+your finger, and turns off immediately when you press any other key, so typing
+isn't affected. All of these keys (and `Drag scroll`, under *User* keycodes) can
+be remapped in Vial.
 
 Two-finger taps aren't possible: in the absolute mode needed for glide and
 circular scroll, the Pinnacle reports only one finger.
+
+#### Trackpad Z experiment (`TRACKPAD_Z_DEBUG`, on in this build)
+
+Z is the Cirque's signal strength / contact size (0–63), not true force. To
+see whether a light touch and a firm press are distinguishable:
+
+* **Right OLED** shows `Z` (live, plus a bar; `Z` is highlighted while touching),
+  `PEAK` (this touch), `LAST` (peak of the previous touch) and a `TOUCH` counter.
+* **Browser**: open `trackpad_z.html` straight from disk in Edge/Chrome (close
+  the Vial tab first), click *Connect*, then use *Record LIGHT* / *Record FIRM*
+  and touch the pad ~10 times each. It graphs Z live and says whether the two
+  groups overlap. It uses raw HID command `0xF5`.
+
+Comment out `TRACKPAD_Z_DEBUG` in `config.h` to go back to the normal OLED status.
 
 #### Tuning
 
@@ -50,18 +65,14 @@ Change these in `config.h` and rebuild:
 | Define | Default | Meaning |
 | --- | --- | --- |
 | `TRACKPAD_TAP_TERM` | 200 ms | Longest touch that counts as a tap |
-| `TRACKPAD_TAP_DRAG_TERM` | 200 ms | Time after a tap to start a drag / double tap (single clicks are sent after this) |
-| `TRACKPAD_LONG_PRESS_TERM` | 500 ms | Hold time for right click |
-| `TRACKPAD_DRAG_RELEASE_DELAY` | 300 ms | Grace period to re-touch and continue a drag (0 = off) |
-| `TRACKPAD_MOVE_THRESHOLD` | 6 | Movement that cancels a tap / long press |
+| `TRACKPAD_MOVE_THRESHOLD` | 6 | Movement (or scrolling) that cancels a tap |
 | `TRACKPAD_DRAG_SCROLL_DIVISOR` | 8 | Higher = slower drag scroll |
-| `AUTO_MOUSE_TIME` | 650 ms | How long the Mouse layer stays on after you stop touching the trackpad |
+| `TRACKPAD_LONG_PRESS_RIGHT_CLICK` | off | Touch and hold still = right click (can misfire during slow ring scrolls) |
+| `TRACKPAD_LONG_PRESS_TERM` | 500 ms | Hold time for the long-press right click |
+| `AUTO_MOUSE_TIME` | 650 ms | How long the Mouse layer stays on after you lift your finger |
 | `CIRQUE_PINNACLE_TIMEOUT` | 5 ms | Give up on a failed trackpad I2C transfer after this long |
 
-The I2C bus runs at QMK's 100 kHz default. 400 kHz made the trackpad
-unreliable on this board: the timeouts stalled the left half, so the cursor
-went choppy and the left LEDs stuttered.
-
+The I2C bus runs at QMK's 100 kHz default, like the original firmware.
 ## Building
 
 The Sea-Picro EXT uses the Elite-C pinout with VBUS detect on GPIO19, so build

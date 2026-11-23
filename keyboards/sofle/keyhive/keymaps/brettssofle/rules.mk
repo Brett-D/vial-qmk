@@ -36,7 +36,7 @@ else
     CONSOLE_ENABLE = no
 endif
 
-SRC += trackpad.c oled.c
+SRC += trackpad.c trackpad_z.c oled.c
 ifeq ($(strip $(RGBLIGHT_ENABLE)), yes)
     SRC += rgb_driver.c
 endif

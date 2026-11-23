@@ -58,6 +58,41 @@ static void render_mods(void) {
     oled_write_P(PSTR(" "), false);
 }
 
+#    if defined(TRACKPAD_Z_DEBUG) && defined(POINTING_DEVICE_ENABLE)
+static void render_value(uint8_t value, bool invert) {
+    oled_write(get_u8_str(value, ' '), invert);
+    oled_write_P(PSTR("  "), false);
+}
+
+// Z (0-63) as a 5-character bar.
+static void render_z_bar(uint8_t z) {
+    uint8_t filled = (z * 5 + 31) / 63;
+    for (uint8_t i = 0; i < 5; i++) {
+        oled_write_P(PSTR(" "), i < filled);
+    }
+}
+
+// Trackpad Z experiment: live Z, peak of this touch and peak of the last touch.
+static void print_status_z(void) {
+    const trackpad_z_t *z = trackpad_z_get();
+    render_default_layer();
+    render_layer();
+    oled_write_P(PSTR("\n"), false);
+    oled_write_P(PSTR("Z    "), z->touching);
+    render_value(z->z, false);
+    render_z_bar(z->z);
+    oled_write_P(PSTR("\n"), false);
+    oled_write_P(PSTR("PEAK "), false);
+    render_value(z->peak, false);
+    oled_write_P(PSTR("\n"), false);
+    oled_write_P(PSTR("LAST "), false);
+    render_value(z->last_peak, false);
+    oled_write_P(PSTR("\n"), false);
+    oled_write_P(PSTR("TOUCH"), false);
+    render_value(z->touches % 1000, false);
+    render_mods();
+}
+#    else
 static void print_status_narrow(void) {
     oled_write_P(PSTR("\n\n"), false);
     render_default_layer();
@@ -70,8 +105,9 @@ static void print_status_narrow(void) {
     oled_write_P(PSTR("\n"), false);
     render_mods();
 }
+#    endif
 
-void keyboard_post_init_user(void) {
+void oled_right_init(void) {
     // sofle.c only rotates the master's OLED (and ignores oled_init_user), so
     // re-initialise the right half's OLED in portrait for the narrow status.
     if (!is_keyboard_master()) {
@@ -92,7 +128,11 @@ bool oled_task_user(void) {
     }
     oled_on();
 
+#    if defined(TRACKPAD_Z_DEBUG) && defined(POINTING_DEVICE_ENABLE)
+    print_status_z();
+#    else
     print_status_narrow();
+#    endif
     return false;
 }
 

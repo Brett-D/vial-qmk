@@ -65,22 +65,34 @@
 #define CIRQUE_PINNACLE_DIAMETER_MM 23
 #define POINTING_DEVICE_GESTURES_CURSOR_GLIDE_ENABLE
 #define POINTING_DEVICE_GESTURES_SCROLL_ENABLE // circular scroll around the edge
-// Taps are handled by trackpad.c (tap, tap-and-drag, long-press right click),
-// so the driver's immediate-click tap stays off.
+// Taps are handled by trackpad.c, which ignores taps that moved or scrolled,
+// so the driver's tap (which clicks on any short touch) stays off.
 #undef CIRQUE_PINNACLE_TAP_ENABLE
 
-// Touching the pad turns on the _MOUSE layer (mouse buttons on the right hand).
+// Touching the pad turns on the _MOUSE layer: T = left button (hold to drag),
+// R = right button. It stays on while a mouse key is held and turns off
+// AUTO_MOUSE_TIME after the finger lifts, or at once when any other key is
+// pressed.
 #define POINTING_DEVICE_AUTO_MOUSE_ENABLE
 #define AUTO_MOUSE_DEFAULT_LAYER 4
 #define AUTO_MOUSE_TIME 650
 
 // Gesture timing (ms) / movement threshold (counts). See trackpad.c.
 #define TRACKPAD_TAP_TERM 200
-#define TRACKPAD_TAP_DRAG_TERM 200
-#define TRACKPAD_LONG_PRESS_TERM 500
-#define TRACKPAD_DRAG_RELEASE_DELAY 300
 #define TRACKPAD_MOVE_THRESHOLD 6
 #define TRACKPAD_DRAG_SCROLL_DIVISOR 8
+// Touch and hold still for TRACKPAD_LONG_PRESS_TERM = right click. Off by
+// default: a slow ring scroll looks like a still finger and would trigger it.
+// #define TRACKPAD_LONG_PRESS_RIGHT_CLICK
+#define TRACKPAD_LONG_PRESS_TERM 500
+
+// Experiment: show the trackpad's Z (signal strength, 0-63) live on the right
+// OLED and over raw HID (trackpad_z.html), to see whether a light touch and a
+// firm press are distinguishable. Comment out to remove.
+#define TRACKPAD_Z_DEBUG
+#ifdef TRACKPAD_Z_DEBUG
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z
+#endif
 
 /* ---------------------------------------------------------------------------
  * RGB underglow
