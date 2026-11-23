@@ -13,6 +13,7 @@
 #include "transactions.h"
 #include "version.h"
 #include "diag.h"
+#include "pet.h"
 
 #define VIEW_EE_OFFSET 78 // after the LED map (led_map.c: 76 bytes)
 #define VIEW_EE_MAGIC 0xA5
@@ -32,6 +33,7 @@ typedef struct {
     uint8_t crash;  // 1 = after a crash, 2 = also show the banner
     uint8_t crumb, exc;
     uint8_t pc[3], lr[3]; // low 24 bits (flash 0x10xxxxxx)
+    pet_view_t pet;       // the pet page (pet.c / pet_draw.c)
 } view_t;
 _Static_assert(sizeof(view_t) <= RPC_M2S_BUFFER_SIZE, "view_t too big for the split RPC");
 
@@ -52,8 +54,15 @@ void oled_pages_init(void) {
     }
 }
 
+uint8_t oled_page_current(void) {
+    return view.page;
+}
+
 void oled_page_next(void) {
-    view.page          = (view.page + 1) % OLED_PAGE_COUNT;
+    view.page = (view.page + 1) % OLED_PAGE_COUNT;
+    if (view.page == OLED_PAGE_PET && !pet_enabled()) {
+        view.page = (view.page + 1) % OLED_PAGE_COUNT; // no pet: skip its page
+    }
     uint8_t ee[2]      = {VIEW_EE_MAGIC, view.page};
     eeconfig_update_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee));
 }
@@ -66,7 +75,13 @@ void oled_pages_task(void) {
     if (!is_keyboard_master()) {
         return;
     }
+    if (view.page == OLED_PAGE_PET && !pet_enabled()) {
+        view.page = 0; // the pet was switched off on the config page
+    }
     view_t              now = {.page = view.page, .wiggle = wiggler_on()};
+    if (now.page == OLED_PAGE_PET) {
+        pet_view(&now.pet);
+    }
     const diag_crash_t *d   = diag_crash();
     static bool         banner_done;
     // The crash banner stays until a key is pressed or for a minute.
@@ -325,7 +340,7 @@ static void page_info(void) {
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
     oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR(" v12 "), false);
+    oled_write_P(PSTR(" v13 "), false);
     static const char boots[5][6] = {"power", "reset", "CRASH", "wdog ", "other"};
     oled_write_P(PSTR("Boot "), false);
     oled_write(boots[view.boot < 5 ? view.boot : 4], view.boot == BOOT_CRASH);
@@ -348,7 +363,8 @@ static void footer(uint8_t page) {
 bool oled_pages_render(void) {
     static uint8_t last  = 0xFF;
     uint8_t        shown = view.crash == 2 ? 0xFE : view.page; // 0xFE: the crash banner
-    if (shown != last) {
+    bool entered = shown != last;
+    if (entered) {
         oled_clear();
         last = shown;
     }
@@ -367,6 +383,9 @@ bool oled_pages_render(void) {
         case OLED_PAGE_INFO:
             page_info();
             break;
+        case OLED_PAGE_PET:
+            pet_draw(&view.pet, entered); // the whole screen is the pet: no footer
+            return true;
         default:
             return false;
     }

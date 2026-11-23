@@ -17,7 +17,7 @@ Keymap for a Keyhive Sofle v2 with:
 | `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
 | Encoders | Left: volume, press = mute. Right: page up/down, press = next OLED page (`OLED_PAGE`) |
 | LEDs | Per-key RGB Matrix with two layers: a **whole-keyboard** effect (static colour, rainbows, raindrops, …) and a **key-press** effect (reactive, splash, …) drawn on top in its own colour; presses light up and fade back into the whole-keyboard effect. Either can be off, so a single effect works too (`led_layers.c`, `rgb_matrix_user.inc`). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode; Vial (VialRGB) can pick single effects |
-| Right OLED | Four pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime). A **W** next to the page number means the mouse wiggler is on. Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
+| Right OLED | Five pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime, last start), **5 pet** (see *OLED pet*; skipped when the pet is off). A **W** next to the page number means the mouse wiggler is on. Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
 
 ### Mouse wiggler
 
@@ -307,6 +307,34 @@ everything; only a real layout change resets it, once. If one of those sizes
 changes, the build stops with "EEPROM layout changed (...)": bump the version
 and record the new values in `eeprom_layout.c`. The Vial keyboard UID is
 unchanged. (The first flash of a firmware with this, v11, still resets once.)
+
+### OLED pet
+
+Pip is a little pixel pet (original art, `config_page/gen_pet_art.py`) that
+lives on the right OLED's fifth page; that page shows only the pet, with tiny
+bars for food, fun, energy and clean at the bottom.
+
+- **Right knob on the pet page:** turn = choose Feed / Play / Sleep (Wake) /
+  Clean (a big icon shows the choice for 6 s); **tap** = do it (the first tap
+  only shows the menu); **hold 0.5–2 s** = next OLED page. (Longer holds are
+  left to the hold-both-knobs config combo.) Elsewhere the knob works as
+  before.
+- **Stats** drift while the keyboard is on: at *normally*, a full stat lasts
+  about a day (*slowly* ≈ 2 days, *quickly* ≈ 12 h). Typing is exercise:
+  every 40 key presses, fun +1 and energy −1. Sleep refills energy and it
+  wakes by itself when rested. It refuses food when full and play when tired
+  or asleep (shakes its head).
+- **Forgiving:** it gets hungry, sad, tired or dirty (poop appears), but never
+  dies unless **Can die** is on; then a whole day with no food and no fun turns
+  it into a ghost, and the knob menu offers a new egg.
+- **Config page → Pet tab** (WebHID or network): live view and stats, the same
+  care buttons, name, on/off, care speed, can die, new pet. Raw HID 0xF6
+  0x18 (get), 0x19 (care), 0x1A (settings); care and settings need the
+  confirmed session. Backups include the pet's settings and name.
+- **Saved** in the last 32 EEPROM bytes (taken off the end of Vial's macro
+  buffer, 1887 → 1855 bytes, so nothing else moves and settings survive):
+  every 10 minutes if something changed, and 15 s after care or a settings
+  change, so a burst of clicks is one write.
 
 ### Backup and restore
 

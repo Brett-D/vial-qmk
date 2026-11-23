@@ -36,6 +36,9 @@
 #include "bridge.h"
 #include "deliver.h"
 #include "diag.h"
+#ifdef PET_ENABLE
+#    include "pet.h"
+#endif
 #ifdef NETWORK_ENABLE
 #    include "net.h"
 #endif
@@ -102,6 +105,9 @@ enum cfg_hid_cmd {
     CMD_LOOK        = 0x15, // speed, hue, sat, val (preview; saved by VIA lighting save)
     CMD_WIGGLE      = 0x16, // mouse wiggler: on, interval index (not saved)
     CMD_DIAG        = 0x17, // crash record, stack use, why network mode ended (diag.c); arg 1 = clear
+    CMD_PET_GET     = 0x18, // the OLED pet (pet.c): stats, settings, name
+    CMD_PET_ACT     = 0x19, // care: 1 feed, 2 play, 3 sleep/wake, 4 clean, 5 new pet
+    CMD_PET_SET     = 0x1A, // flags (1 on, 2 can die), decay speed, name
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -802,6 +808,16 @@ static void cfg_raw_hid(uint8_t *data) {
         case CMD_DIAG:
             diag_raw_hid(data); // its own reply layout
             return;
+#ifdef PET_ENABLE
+        case CMD_PET_GET:
+        case CMD_PET_ACT:
+        case CMD_PET_SET:
+            if (hid.state == HS_ACTIVE) {
+                hid.time = timer_read32();
+            }
+            pet_raw_hid(data, hid_writes_allowed());
+            return;
+#endif
         case CMD_REQUEST:
             hid_request();
             break;
@@ -1221,6 +1237,11 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
             held_swallowed[row] |= (matrix_row_t)1 << col;
             return false;
         }
+#ifdef PET_ENABLE
+        if (pet_process(record, oled_page_current() == OLED_PAGE_PET)) {
+            return false; // the right knob chooses care on the pet page
+        }
+#endif
         return true;
     }
 

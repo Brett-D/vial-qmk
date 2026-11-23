@@ -78,9 +78,10 @@ void    wiggler_toggle(void);
 void    wiggler_task(void); // housekeeping, master
 
 // Right OLED pages (oled_pages.c).
-enum oled_pages { OLED_PAGE_STATUS, OLED_PAGE_TRACKPAD, OLED_PAGE_LEDS, OLED_PAGE_INFO, OLED_PAGE_COUNT };
+enum oled_pages { OLED_PAGE_STATUS, OLED_PAGE_TRACKPAD, OLED_PAGE_LEDS, OLED_PAGE_INFO, OLED_PAGE_PET, OLED_PAGE_COUNT };
 void oled_pages_init(void); // keyboard_post_init_user, both halves
 void oled_page_next(void);  // master
+uint8_t oled_page_current(void); // master: the right OLED's page
 void oled_pages_task(void); // housekeeping, master syncs the right half
 #ifdef OLED_ENABLE
 bool oled_pages_render(void); // right half: false = status page

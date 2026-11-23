@@ -18,6 +18,7 @@
 
 #include "brettssofle.h"
 #include "diag.h"
+#include "pet.h"
 #include "led_layers.h"
 
 // Default keymap. Everything here can be changed live in Vial.
@@ -172,11 +173,22 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case OLED_PAGE: {
             // On release, and not after a long hold (the hold-both-knobs
             // config combo takes 2 s), so entering config mode keeps the page.
+            // On the pet page: a tap cares for the pet (pet.c), a 0.5-2 s
+            // hold goes to the next page.
             static uint16_t pressed_at;
             if (record->event.pressed) {
                 pressed_at = timer_read();
-            } else if (timer_elapsed(pressed_at) < 1000) {
-                oled_page_next();
+            } else {
+                uint16_t held = timer_elapsed(pressed_at);
+                if (oled_page_current() == OLED_PAGE_PET && pet_enabled()) {
+                    if (held < 500) {
+                        pet_press();
+                    } else if (held < 2000) {
+                        oled_page_next();
+                    }
+                } else if (held < 1000) {
+                    oled_page_next();
+                }
             }
             return false;
         }
@@ -214,6 +226,7 @@ void keyboard_post_init_user(void) {
     trackpad_z_post_init();
 #endif
     oled_pages_init();
+    pet_init();
 #ifdef RGB_MATRIX_ENABLE
     led_layers_init();
 #endif
@@ -230,6 +243,7 @@ void housekeeping_task_user(void) {
 #ifdef POINTING_DEVICE_ENABLE
     trackpad_z_sync_task();
 #endif
+    pet_task();
     oled_pages_task();
     wiggler_task();
     config_mode_task();

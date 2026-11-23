@@ -250,6 +250,7 @@ def main():
         "ledLayeredId": LAYERED_ID,
         "ledDirectId": vialrgb_effect_enum().index("DIRECT"),
         "ledZones": ["Effect on keys + underglow", "Effect on keys, solid underglow", "Keys only (underglow off)"],
+        "petArt": json.loads((HERE / "pet_art.json").read_text(encoding="utf-8")),  # gen_pet_art.py
         "ledIdle": LED_IDLE_LABELS,
         "ranges": {k: kc[k] for k in ["QK_MODS", "QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO",
                                       "QK_MOMENTARY", "QK_DEF_LAYER", "QK_TOGGLE_LAYER", "QK_ONE_SHOT_LAYER",

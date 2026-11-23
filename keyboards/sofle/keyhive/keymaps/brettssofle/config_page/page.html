@@ -80,6 +80,13 @@
   .help dt { font-weight:600; margin-top:6px; } .help dd { margin:0; color:var(--dim); }
   details { margin-top:16px; } pre { white-space:pre-wrap; font-size:11px; color:var(--dim); max-height:240px; overflow:auto; }
   .hidden { display:none !important; }
+  .petTop { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  #petCanvas { width:120px; height:120px; flex:none; background:#0a0a1e; border-radius:8px; image-rendering:pixelated; }
+  .petInfo { flex:1; min-width:220px; }
+  #petStats .row { display:grid; grid-template-columns:70px 1fr 40px; gap:12px; padding:4px 0; }
+  #petStats .v { text-align:right; font-family:ui-monospace,monospace; }
+  .pbar { height:10px; background:#1b2333; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+  .pbar i { display:block; height:100%; background:var(--acc); }
   #restorePanel { margin:10px 16px; }
   #restoreList label { display:block; margin:6px 0; }
   #restoreList .chg { color:var(--dim, #9aa); font-size:12px; margin-left:24px; white-space:pre-wrap; }
@@ -230,6 +237,26 @@
         <div class="small">Recent touch peaks (green = would click at the threshold shown):</div>
         <div class="peaks" id="peaks"></div>
       </div>
+      <div id="petView" class="panel hidden">
+        <h2 id="petTitle">The OLED pet</h2>
+        <div class="petTop">
+          <canvas id="petCanvas" width="120" height="120"></canvas>
+          <div class="petInfo">
+            <div class="rows" id="petStats"></div>
+            <div class="small" id="petMood"></div>
+          </div>
+        </div>
+        <div class="btns" id="petCare"><button data-act="1">Feed</button><button data-act="2">Play</button><button data-act="3" id="petSleepBtn">Sleep</button><button data-act="4">Clean</button></div>
+        <div class="ctl" id="petCtl">
+          <h2 style="margin-top:14px">Settings</h2>
+          <div class="row"><span>Pet</span><label><input type="checkbox" id="petOn"> on (its own OLED page)</label><span></span></div>
+          <div class="row"><span>Name</span><input type="text" id="petName" maxlength="9" spellcheck="false"><span></span></div>
+          <div class="row"><span>Needs care</span><select id="petDecay"><option value="0">Slowly (stats last ~2 days)</option><option value="1">Normally (~1 day)</option><option value="2">Quickly (~12 hours)</option></select><span></span></div>
+          <div class="row"><span>Can die</span><label><input type="checkbox" id="petDie"> after a whole day with no food and no fun</label><span></span></div>
+          <div class="btns"><button id="petNew">New pet…</button></div>
+        </div>
+        <p class="small dim">On the keyboard: press the right knob until the pet fills the right screen. There, turn the right knob to choose Feed / Play / Sleep / Clean, tap it to do it, and hold it about a second for the next screen. Typing counts as play, so normal use keeps the pet happy; it only gets hungry or sad, never dies, unless <b>Can die</b> is on.</p>
+      </div>
     </div>
   </section>
 
@@ -280,7 +307,9 @@
 const DATA = /*__DATA__*/null;
 
 const F = { HELLO:0x01, READY:0x02, BYE:0x03, UI:0x04, ROW:0x10, ENC:0x11, LED:0x20, TP:0x21, TPZ:0x22 };
-const TABS = ["Layout", "LEDs", "Trackpad"];
+const TABS = ["Layout", "LEDs", "Trackpad", "Pet"];
+// The Pet tab needs WebHID / network mode and a firmware with the pet.
+const tabList = () => (S.mode === "hid" && S.pet ? TABS : TABS.slice(0, 3));
 // Layout tab selection: a key (row/col) or a knob action (slot 0-5; 0xFF/-1 = none).
 const knobSel = (ui) => ui.slot >= 0 && ui.slot < 6;
 const CHALLENGE = "ACDEFHJKLMNPRSTUWXY";
@@ -603,6 +632,7 @@ async function hidLoadAll() {
   buildLedSelects();
   await hidLoadLed();
   await hidLoadTp();
+  try { await petLoad(); } catch (e) { S.pet = null; }
   S.ui = { tab: 0, layer: 0, row: 0xff, col: 0xff, slot: -1, pick: -1, pending: null, ledField: -1, tpField: -1 };
 }
 
@@ -1052,7 +1082,7 @@ function navItems() {
     }).sort((a, b) => a.y - b.y || a.x - b.x).map((o) => o.el);
     return [...$("layers").querySelectorAll("[data-layer]"), ...keys, ...$("knobs").querySelectorAll("[data-slot]")];
   }
-  const root = S.ui.tab === 1 ? (CAL.on ? $("calView") : $("ledCtl")) : $("padView");
+  const root = S.ui.tab === 1 ? (CAL.on ? $("calView") : $("ledCtl")) : S.ui.tab === 3 ? $("petView") : $("padView");
   return [...root.querySelectorAll("input, select, button, summary")].filter(navVisible);
 }
 function navPaint(scroll = true) {
@@ -1116,7 +1146,7 @@ async function navPress() {
 async function navLong() {
   if (NAV.mode !== "move") { NAV.mode = "move"; NAV.editEl = null; return navPaint(); } // back out of the picker / slider
   NAV.idx = 0;
-  await setTab((S.ui.tab + 1) % TABS.length);
+  await setTab((S.ui.tab + 1) % tabList().length);
   navPaint();
 }
 async function navTick() {
@@ -1182,9 +1212,11 @@ async function setTab(tab) {
   if (S.mode !== "hid" || !S.ui || tab === S.ui.tab) return;
   if (S.ui.tab === 1) { await calStop(); await ledRevert(); }
   if (S.ui.tab === 2 && S.tp && S.tp.dirty) await hidLoadTp();
+  if (S.ui.tab === 3) stopPetPoll();
   S.ui.tab = tab;
   if (tab === 1) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
   if (tab === 2) startZPoll();
+  if (tab === 3) { try { await petLoad(); } catch (e) { log(e.message); } startPetPoll(); }
   render();
 }
 
@@ -1297,13 +1329,15 @@ function render() {
 
   const ui = S.ui;
   renderNote();
-  setHtml($("tabs"), TABS.map((t, i) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
+  setHtml($("tabs"), tabList().map((t, i) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
   $("keysView").classList.toggle("hidden", ui.tab !== 0);
   $("ledView").classList.toggle("hidden", ui.tab !== 1);
   $("padView").classList.toggle("hidden", ui.tab !== 2);
+  $("petView").classList.toggle("hidden", ui.tab !== 3);
   if (ui.tab === 0) { renderKeys(ui); renderPicker(ui); }
   if (ui.tab === 1) renderLeds(ui);
   if (ui.tab === 2) renderPad(ui);
+  if (ui.tab === 3) renderPet();
   if (NAV.on) navPaint(false);
 }
 
@@ -1521,6 +1555,7 @@ function renderHelp() {
              ["Layers", "Click a layer name above the keyboard."], ["Hold/tap keys", "Use the box under the keycode list."],
              ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them. Effects light the wrong keys? Click Calibrate LED positions and press the key on top of each lit LED."],
              ["Trackpad", "Touch the pad to see Z live. Click Save to keep settings."],
+        ["Pet", "Feed, play, put to bed and clean the pet on the right OLED; name it and choose how fast it needs care."],
              ["Right knob", "While this page has focus: turn to move the highlight, press to select or change, hold to switch tab."]];
     foot = "The keyboard keeps typing normally while connected. Disconnect (or close the page) to end the session.";
   } else if (S.mode === "bridge" && S.state === "ready" && S.ui) {
@@ -1554,6 +1589,99 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const logLines = [];
 function log(s) { logLines.unshift(new Date().toLocaleTimeString() + "  " + s); logLines.length = Math.min(logLines.length, 200); $("log").textContent = logLines.join("\n"); }
 
+// ================================================================ the OLED pet (pet.c)
+// 0xF6 0x18 get, 0x19 care (1 feed, 2 play, 3 sleep/wake, 4 clean, 5 new),
+// 0x1A settings (flags 1 on / 2 can die, decay speed, name).
+const PET = { poll: null, busy: false };
+const PET_MOODS = ["happy", "fine", "hungry", "sad", "tired", "dirty", "asleep", "a ghost", "switched off"];
+function petParse(d) {
+  if (d[0] !== 0xf6 || d[2] !== 0x9e) return null;
+  let name = "";
+  for (let i = 14; i < 24 && d[i]; i++) name += String.fromCharCode(d[i]);
+  return { on: !!(d[3] & 1), canDie: !!(d[3] & 2), asleep: !!(d[3] & 4), dead: !!(d[3] & 8), food: d[4], joy: d[5], energy: d[6], clean: d[7],
+           decay: d[8], age: (d[9] | (d[10] << 8) | (d[11] << 16) | (d[12] << 24)) >>> 0, mood: d[13], name, result: d[26] };
+}
+async function petLoad() { const p = petParse(await cmd([0xf6, 0x18])); S.pet = p; return p; }
+function startPetPoll() {
+  if (PET.poll) return;
+  PET.poll = setInterval(async () => {
+    if (S.mode !== "hid" || !S.ui || S.ui.tab !== 3) return stopPetPoll();
+    if (PET.busy) return;
+    PET.busy = true;
+    try { await petLoad(); scheduleRender(); } catch (e) { /* skip */ }
+    PET.busy = false;
+  }, 1000);
+}
+function stopPetPoll() { clearInterval(PET.poll); PET.poll = null; }
+async function petAct(a) {
+  try {
+    const p = petParse(await cmd([0xf6, 0x19, a]));
+    if (!p) throw new Error("this firmware has no pet");
+    S.pet = p;
+    const done = ["", "Fed", "Played", p.asleep ? "Good night" : "Woke up", "Cleaned", "A new egg hatched"][a];
+    toast(p.result === 1 ? done : p.result === 2 ? `${p.name || "The pet"} doesn't want to right now` : "Refused — confirm the connection on the keyboard again", p.result !== 1);
+  } catch (e) { toast("Failed: " + e.message, true); }
+  render();
+}
+async function petSettings(over) {
+  const s = Object.assign({ on: $("petOn").checked, canDie: $("petDie").checked, decay: +$("petDecay").value, name: $("petName").value }, over || {});
+  const name = (s.name || "").replace(/[^\x20-\x7e]/g, "").slice(0, 9) || "Pip";
+  const b = [0xf6, 0x1a, (s.on ? 1 : 0) | (s.canDie ? 2 : 0), s.decay];
+  for (let i = 0; i < 10; i++) b.push(i < name.length ? name.charCodeAt(i) : 0);
+  const p = petParse(await cmd(b));
+  if (!p || p.result !== 1) throw new Error("refused");
+  S.pet = p;
+  return p;
+}
+async function petSettingsInput() {
+  try { await petSettings(); toast("Pet settings saved"); } catch (e) { toast("Not saved: " + e.message, true); }
+  render();
+}
+function petSprite(p, t) {
+  if (p.dead) return "dead";
+  if (p.asleep) return "sleep";
+  if (p.food < 20 || p.joy < 20) return "sad";
+  if (p.energy < 20) return "tired";
+  if ((t / 250 | 0) % 16 === 5) return "blink";
+  return (p.food + p.joy + p.energy + p.clean) / 4 >= 70 && (t / 250 | 0) % 16 >= 12 ? "happy" : "idle";
+}
+function drawPet(p) {
+  const cv = $("petCanvas"), g = cv.getContext("2d"), t = Date.now(), A = DATA.petArt, S4 = 4;
+  g.fillStyle = "#0a0a1e"; g.fillRect(0, 0, cv.width, cv.height);
+  if (!p.on) return;
+  g.fillStyle = "#8cdcff";
+  const dot = (x, y) => g.fillRect(x * S4, y * S4, S4 - 1, S4 - 1);
+  const bob = p.dead ? ((t / 500 | 0) % 2) * 2 - 1 : (t / 500 | 0) % 2;
+  A.sprites[petSprite(p, t)].forEach((row, y) => { for (let x = 0; x < 24; x++) if (row[x] === "#") dot(x + 3, y + 4 + bob); });
+  const icon = (name, ox, oy) => A.icons[name].forEach((row, y) => { for (let x = 0; x < 8; x++) if (row[x] === "#") dot(x + ox, y + oy); });
+  if (p.asleep) icon("z", 21, 0);
+  if (!p.dead && p.clean < 40) icon("poop", 21, 21);
+}
+function renderPet() {
+  const p = S.pet;
+  if (!p) return;
+  $("petTitle").textContent = `${p.name || "Pip"}, the OLED pet`;
+  const bar = (label, v) => `<div class="row"><span>${label}</span><div class="pbar"><i style="width:${v}%"></i></div><span class="v">${v}</span></div>`;
+  setHtml($("petStats"), bar("Food", p.food) + bar("Fun", p.joy) + bar("Energy", p.energy) + bar("Clean", p.clean));
+  const d = Math.floor(p.age / 1440), h = Math.floor((p.age % 1440) / 60);
+  $("petMood").innerHTML = p.on ? `${escapeHtml(p.name || "Pip")} is <b>${PET_MOODS[p.mood] || "?"}</b> · age ${d ? d + " d " : ""}${h} h (counted while the keyboard is on)` : "The pet is switched off (its OLED page is skipped).";
+  $("petSleepBtn").textContent = p.asleep ? "Wake up" : "Sleep";
+  $("petCare").querySelectorAll("button").forEach((b) => (b.disabled = !p.on || p.dead));
+  if (document.activeElement !== $("petOn")) $("petOn").checked = p.on;
+  if (document.activeElement !== $("petDie")) $("petDie").checked = p.canDie;
+  if (document.activeElement !== $("petDecay")) $("petDecay").value = p.decay;
+  if (document.activeElement !== $("petName")) $("petName").value = p.name;
+  $("petNew").textContent = p.dead ? "Hatch a new egg" : "New pet…";
+  drawPet(p);
+}
+$("petCare").addEventListener("click", (e) => { const b = e.target.closest("[data-act]"); if (b) petAct(+b.dataset.act); });
+["petOn", "petDie", "petDecay", "petName"].forEach((id) => $(id).addEventListener("change", petSettingsInput));
+$("petNew").addEventListener("click", () => {
+  if (S.pet && !S.pet.dead && !confirm(`Start over with a new egg? ${S.pet.name || "Your pet"}'s stats and age start again (the name and settings stay).`)) return;
+  petAct(5);
+});
+setInterval(() => { if (S.mode === "hid" && S.ui && S.ui.tab === 3 && S.pet) drawPet(S.pet); }, 250);
+
 // ================================================================ backup / restore
 // Everything this page can change, as one JSON file: keymap (all layers),
 // knobs, lighting (effects, colours, zones, idle), the measured LED map,
@@ -1580,6 +1708,7 @@ async function makeBackup() {
     ledMap: S.mapMeasured ? await calReadMap() : null, // null = the built-in map
     trackpad: { enable: S.tp.enable, threshold: S.tp.threshold, release: S.tp.release },
     wiggler: { on: S.wiggle.on, every: S.wiggle.every },
+    pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name } : undefined, // settings, not its stats
   };
 }
 async function backupDownload() {
@@ -1643,6 +1772,11 @@ function backupDiff(b) {
   const wg = b.wiggler && (b.wiggler.on !== S.wiggle.on || b.wiggler.every !== S.wiggle.every);
   out.push({ id: "wiggler", title: "Mouse wiggler (until unplugged)", n: wg ? 1 : 0, data: b.wiggler,
     lines: wg ? [`${S.wiggle.on ? "on" : "off"} → ${b.wiggler.on ? "on" : "off"}, every ${($("wgEvery").options[b.wiggler.every] || {}).text || b.wiggler.every}`] : [] });
+  if (b.pet && S.pet) {
+    const f = ["on", "canDie", "decay", "name"].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
+    const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name" }, val = (k, v) => (k === "decay" ? ["slowly", "normally", "quickly"][v] : typeof v === "boolean" ? (v ? "on" : "off") : v);
+    out.push({ id: "pet", title: "Pet settings", n: f.length, data: b.pet, lines: f.map((k) => `${lbl[k]}: ${val(k, S.pet[k])} → ${val(k, b.pet[k])}`) });
+  }
   return out;
 }
 
@@ -1730,6 +1864,10 @@ async function restoreApply() {
       const t = b.trackpad;
       await ok([0xf5, 0x01, t.enable ? 1 : 0, t.threshold, t.release]);
     }
+    if (want.has("pet")) {
+      prog("Pet…");
+      await petSettings(b.pet);
+    }
     if (want.has("wiggler")) {
       prog("Mouse wiggler…");
       readStatus(await ok([0xf6, 0x16, b.wiggler.on ? 1 : 0, b.wiggler.every]));
@@ -1739,6 +1877,7 @@ async function restoreApply() {
     const ui = S.ui;
     await hidLoadAll();
     S.ui = { ...S.ui, tab: ui.tab, layer: ui.layer };
+    if (S.ui.tab === 3) startPetPoll();
     const after = backupDiff(b);
     for (const d of after) if (want.has(d.id) && d.n && d.id !== "ledMap") problems.push(`${d.title}: ${d.n} not applied` + (d.lines[0] ? ` (${d.lines.find((x) => x.includes("→")) || d.lines[0]})` : ""));
     if (want.has("ledMap") && b.ledMap) {
