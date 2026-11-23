@@ -19,8 +19,10 @@ enum pet_mood { MOOD_HAPPY, MOOD_OK, MOOD_HUNGRY, MOOD_SAD, MOOD_TIRED, MOOD_DIR
 typedef struct {
     uint8_t flags; // PV_*
     uint8_t food, joy, energy, clean;
-    uint8_t sel;  // menu choice (index into the OLED menu)
-    uint8_t anim; // (seq << 3) | enum pet_anim: a change starts the animation
+    uint8_t sel;     // the selected care action (enum pet_action)
+    uint8_t anim;    // (seq << 3) | enum pet_anim: a change starts the animation
+    uint8_t mood;    // enum pet_mood
+    char    name[5]; // the first 5 letters (one OLED line), not terminated
 } pet_view_t;
 enum { PV_ON = 1, PV_ASLEEP = 2, PV_DEAD = 4, PV_MENU = 8 };
 

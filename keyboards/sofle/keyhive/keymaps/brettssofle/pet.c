@@ -299,6 +299,8 @@ void pet_view(pet_view_t *v) {
     memcpy(&v->food, p.stat, 4);
     v->sel  = menu_action(sel);
     v->anim = anim;
+    v->mood = mood();
+    memcpy(v->name, p.name, sizeof(v->name));
 }
 
 /* ---- config page: 0xF6 0x18 get, 0x19 care, 0x1A settings ---- */

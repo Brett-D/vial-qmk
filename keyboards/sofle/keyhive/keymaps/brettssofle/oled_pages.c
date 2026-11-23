@@ -26,14 +26,18 @@ enum { TPF_TOUCHING = 1, TPF_PRESSED = 2, TPF_CLICK_ON = 4 };
 
 typedef struct {
     uint8_t page;
-    uint8_t tp_z, tp_peak, tp_last, tp_flags, tp_thr, tp_rel;
-    uint8_t led_on, led_mode, led_val, led_zone, led_base, led_react;
+    union { // only the shown page's values are sent
+        struct {
+            uint8_t tp_z, tp_peak, tp_last, tp_flags, tp_thr, tp_rel;
+            uint8_t led_on, led_mode, led_val, led_zone, led_base, led_react;
+        };
+        pet_view_t pet; // the pet page (pet.c / pet_draw.c)
+    };
     uint8_t wiggle; // mouse wiggler on (shown on every page)
     uint8_t boot;   // how the keyboard last started (BOOT_*)
     uint8_t crash;  // 1 = after a crash, 2 = also show the banner
     uint8_t crumb, exc;
     uint8_t pc[3], lr[3]; // low 24 bits (flash 0x10xxxxxx)
-    pet_view_t pet;       // the pet page (pet.c / pet_draw.c)
 } view_t;
 _Static_assert(sizeof(view_t) <= RPC_M2S_BUFFER_SIZE, "view_t too big for the split RPC");
 

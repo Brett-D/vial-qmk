@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 enum { PET_SPR_IDLE, PET_SPR_BLINK, PET_SPR_HAPPY, PET_SPR_SAD, PET_SPR_TIRED, PET_SPR_SLEEP, PET_SPR_EAT, PET_SPR_DEAD, PET_SPR_EGG, PET_SPR_COUNT };
-enum { PET_ICON_HEART, PET_ICON_Z, PET_ICON_APPLE, PET_ICON_BALL, PET_ICON_MOON, PET_ICON_SPARKLE, PET_ICON_POOP, PET_ICON_NO, PET_ICON_EGG, PET_ICON_COUNT };
+enum { PET_ICON_HEART, PET_ICON_Z, PET_ICON_APPLE, PET_ICON_BALL, PET_ICON_MOON, PET_ICON_SPARKLE, PET_ICON_POOP, PET_ICON_NO, PET_ICON_EGG, PET_ICON_SMILE, PET_ICON_TEAR, PET_ICON_BOLT, PET_ICON_COUNT };
 
 // 24x24 sprites: one row per uint32_t, bit 23 = leftmost pixel.
 static const uint32_t pet_sprites[PET_SPR_COUNT][24] = {
@@ -257,6 +257,9 @@ static const uint8_t pet_icons[PET_ICON_COUNT][8] = {
     {0x10, 0x30, 0x78, 0x48, 0xFC, 0xB6, 0xFF, 0x00}, // poop
     {0x82, 0x44, 0x28, 0x10, 0x28, 0x44, 0x82, 0x00}, // no
     {0x38, 0x44, 0xA2, 0x82, 0x92, 0x82, 0x7C, 0x00}, // egg
+    {0x38, 0x44, 0xAA, 0x82, 0xAA, 0x92, 0x44, 0x38}, // smile
+    {0x10, 0x10, 0x38, 0x38, 0x7C, 0x6C, 0x38, 0x00}, // tear
+    {0x0C, 0x18, 0x30, 0x7E, 0x0C, 0x18, 0x30, 0x60}, // bolt
 };
 
 // 5x5 stat icons (food, joy, energy, clean): bit 4 = leftmost pixel.
