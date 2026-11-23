@@ -22,6 +22,10 @@ main { padding:14px 16px; max-width:1100px; }
 #list { display:flex; flex-wrap:wrap; gap:4px; max-height:240px; overflow:auto; margin-top:8px; }
 #list button { padding:3px 8px; font-size:12px; }
 .row { display:grid; grid-template-columns:150px 1fr 60px; gap:10px; align-items:center; margin:6px 0; }
+.sw { width:22px; height:22px; padding:0; border-radius:50%; margin:1px; border:2px solid #3a4250; vertical-align:middle; }
+.sw.on { border-color:#fff; } input[type=color] { width:44px; height:28px; padding:0 2px; vertical-align:middle; }
+.brow { padding:3px 8px; border-radius:6px; display:flex; justify-content:space-between; max-width:420px; } .brow.on { outline:2px solid #ffb547; }
+.big { font-size:64px; font-weight:700; }
 </style>
 <header>
   <h1>Sofle config <span class="dim">light</span></h1>
@@ -46,6 +50,8 @@ main { padding:14px 16px; max-width:1100px; }
     <div class="row"><span>Effect</span><select id="lFx"></select><span></span></div>
     <div class="row"><span>Hue</span><input type="range" id="lH" max="255"><span id="lHv"></span></div>
     <div class="row"><span>Saturation</span><input type="range" id="lS" max="255"><span id="lSv"></span></div>
+    <div class="row"><span>Colour</span><span class="cpick" data-h="lH" data-s="lS"></span><span></span></div>
+    <p class="dim">Pick a colour or a swatch; brightness is the slider below. The keys show colours a little differently from the screen.</p>
     <div class="row"><span>Brightness</span><input type="range" id="lV"><span id="lVv"></span></div>
     <div class="row"><span>Speed</span><input type="range" id="lP" max="255"><span id="lPv"></span></div>
     <button id="lSave" class="primary">Save</button> <span class="dim">Changes show on the keyboard right away; Save keeps them.</span>
@@ -55,6 +61,10 @@ main { padding:14px 16px; max-width:1100px; }
     <div class="row"><span>Press threshold (Z)</span><input type="range" id="tThr" min="1" max="63"><span id="tThrV"></span></div>
     <div class="row"><span>Release Z</span><input type="range" id="tRel" max="62"><span id="tRelV"></span></div>
     <button id="tSave" class="primary">Save</button>
+  </section>
+  <section id="vb" class="panel hidden">
+    <div id="selfSave" class="hidden"><button id="bSelf" class="primary">Save for mouse mode next time</button> <span class="dim">Saves this page as sofle-light.html: opened from disk in Chrome or Edge it uses the mouse.</span></div>
+    <div id="bTop"></div><div id="bTabs"></div><div id="bBody"></div><p id="bHelp" class="dim"></p>
   </section>
   <section id="v3" class="panel hidden">
     <p><button id="bSave">Download backup</button> <button id="bLoad">Restore from file…</button> <input type="file" id="bFile" accept=".json" class="hidden"></p>
@@ -168,6 +178,7 @@ function render() {
     $("lOn").checked = !!l.on; $("lFx").value = l.fx;
     [["lH", l.h], ["lS", l.s], ["lV", l.v], ["lP", l.speed]].forEach(([id, v]) => { $(id).value = v; $(id + "v").textContent = v; });
     $("lV").max = S.max;
+    colourSync();
     $("tOn").checked = !!S.tp.on; $("tThr").value = S.tp.thr; $("tRel").value = S.tp.rel; $("tThrV").textContent = S.tp.thr; $("tRelV").textContent = S.tp.rel;
   }
 }
@@ -211,6 +222,126 @@ $("lSave").onclick = async () => { try { await ok([0x09]); await ok([0xf6, 0x14,
   render();
 }));
 $("tSave").onclick = async () => { try { const d = await ok([0xf5, 0x01, S.tp.on, S.tp.thr, S.tp.rel]); S.tp = { on: d[7], thr: d[8], rel: d[9] }; say("Trackpad saved"); } catch (x) { say(esc(x.message), true); } render(); };
+
+// ---- Colours: picker + presets, kept in step with the hue / saturation sliders (QMK HSV, 0-255)
+const PRESETS = [["Red", 0, 255], ["Orange", 16, 255], ["Yellow", 36, 255], ["Green", 85, 255], ["Cyan", 128, 255], ["Blue", 170, 255],
+                 ["Purple", 192, 255], ["Pink", 224, 180], ["Warm white", 28, 120], ["White", 0, 0]]; // = led_presets in config_mode.c
+function hsvRgb(h, s, v) {
+  const H = h * 6 / 255, i = Math.floor(H), f = H - i, S_ = s / 255, p = v * (1 - S_), q = v * (1 - S_ * f), t = v * (1 - S_ * (1 - f));
+  return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6].map(Math.round);
+}
+const hex = (h, s) => "#" + hsvRgb(h, s, 255).map((x) => x.toString(16).padStart(2, "0")).join("");
+function hexHs(x) {
+  const n = parseInt(x.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  const H = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [Math.round(H * 255 / 6) % 255, mx ? Math.round(d / mx * 255) : 0];
+}
+function colourPickers() {
+  document.querySelectorAll(".cpick").forEach((el) => {
+    const H = $(el.dataset.h), Sl = $(el.dataset.s);
+    el.innerHTML = `<input type="color"> ` + PRESETS.map(([n, h, s]) => `<button class="sw" title="${n}" data-h="${h}" data-s="${s}" style="background:${hex(h, s)}"></button>`).join("");
+    const set = (h, s) => { H.value = h; Sl.value = s; for (const t of ["input", "change"]) H.dispatchEvent(new Event(t, { bubbles: true })); };
+    el.querySelector("input").addEventListener("input", (e) => set(...hexHs(e.target.value)));
+    el.addEventListener("click", (e) => { const b = e.target.closest("button.sw"); if (b) set(+b.dataset.h, +b.dataset.s); });
+  });
+}
+function colourSync() {
+  document.querySelectorAll(".cpick").forEach((el) => {
+    const h = +$(el.dataset.h).value, s = +$(el.dataset.s).value, i = el.querySelector("input");
+    if (document.activeElement !== i) i.value = hex(h, s);
+    el.querySelectorAll("button.sw").forEach((b) => b.classList.toggle("on", +b.dataset.h === h && +b.dataset.s === s));
+  });
+}
+colourPickers();
+
+// ---- Keyboard-only mode: no WebHID (Firefox, or this page in the tab the keyboard typed it into).
+// The keyboard drives everything and types its state as frames (config_mode.c): ',' + base32
+// (type, seq, payload, CRC-8) + '.'. Frames only count after a HELLO, so stray keys can't start it.
+const B = window.SOFLE_KB = { on: !navigator.hid, st: "idle", nonce: 0, ui: null, km: null, enc: [], led: null, tp: null, z: null, rx: null, bad: 0 };
+const CHAL = "ACDEFHJKLMNPRSTUWXY", FX = new Map([...DATA.ledBase, ...DATA.ledOther]);
+const crc8 = (a) => { let c = 0; for (const x of a) { c ^= x; for (let i = 0; i < 8; i++) c = c & 128 ? (c << 1 ^ 7) & 255 : c << 1 & 255; } return c; };
+const u16 = (p, i) => p[i] | p[i + 1] << 8;
+function bFrame(sym) {
+  const o = [];
+  let a = 0, n = 0;
+  for (const x of sym) { a = a << 5 | x; n += 5; if (n >= 8) { n -= 8; o.push(a >> n & 255); a &= (1 << n) - 1; } }
+  if (o.length < 3 || crc8(o.slice(0, -1)) !== o[o.length - 1]) { if (B.st !== "idle") B.bad++; return; }
+  const t = o[0], p = o.slice(2, -1);
+  if (t === 1) { B.st = "challenge"; B.nonce = u16(p, 1); B.bad = 0; }
+  else if (B.st === "idle") return;
+  else if (t === 2) { B.st = "ready"; B.km = [...Array(p[1])].map(() => [...Array(DATA.rows)].map(() => Array(DATA.cols).fill(null))); B.enc = []; }
+  else if (t === 3) B.st = "closed";
+  else if (t === 4) B.ui = { tab: p[0], layer: p[1], row: p[2], col: p[3], pick: u16(p, 4) << 16 >> 16, pending: u16(p, 6), slot: p[8], lf: p[9], tf: p[10], flags: p[11] };
+  else if (t === 0x10 && B.km) for (let c = 0; c < DATA.cols; c++) B.km[p[0]][p[1]][c] = u16(p, 2 + c * 2);
+  else if (t === 0x11) B.enc[p[0]] = [[u16(p, 1), u16(p, 3)], [u16(p, 5), u16(p, 7)]];
+  else if (t === 0x20) B.led = p;
+  else if (t === 0x21) B.tp = p;
+  else if (t === 0x22) B.z = p;
+  bRender();
+}
+if (B.on) document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const c = e.code;
+  if (c === "Comma") B.rx = [];
+  else if (c === "Period") { if (B.rx) bFrame(B.rx); B.rx = null; }
+  else if (/^(Key[A-Z]|Digit[2-7])$/.test(c)) { if (B.rx) { B.rx.push(c < "K" ? 24 + +c[5] : c.charCodeAt(3) - 65); if (B.rx.length > 120) B.rx = null; } }
+  else return;
+  e.preventDefault();
+}, true);
+const brows = (rows, on) => rows.map(([k, v], i) => `<div class="brow ${i === on ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+const bsw = (h, s) => `${Math.round(h * 360 / 256)}&deg; <span class="sw" style="display:inline-block;background:${hex(h, s)}"></span>`;
+function bRender() {
+  const u = B.ui, st = B.st, ready = st === "ready" && u;
+  $("state").textContent = { idle: "Keyboard-only mode", challenge: "Press the letter", ready: "Keyboard-only mode", closed: "Keyboard-only mode off" }[st];
+  $("bTop").innerHTML = st === "challenge" ? `<p>Press this letter on the keyboard:</p><div class="big">${CHAL[B.nonce % CHAL.length]}</div>` : ready ? "" :
+    (st === "closed" ? "<p><b>Keyboard-only mode is off.</b> Saved changes stay on the keyboard.</p>" : "") +
+    "<p><b>Keyboard-only mode</b> (this browser can't use USB devices from here):</p><ol><li>Keep this tab focused.</li><li>Press <b>Raise + top-right</b> (CONFIG): the keyboard's screen shows <b>CONF?</b></li><li>Press the <b>right knob</b>, then the letter that appears here.</li></ol>";
+  $("bTabs").innerHTML = ready ? ["Layout", "LEDs", "Trackpad"].map((t, i) => `<button class="${i === u.tab ? "on" : ""}" tabindex="-1">${t}</button>`).join(" ") + (B.bad ? ` <span class="dim">${B.bad} damaged frames: hold the left knob 1 s to resend everything</span>` : "") : "";
+  let body = "", help = "";
+  if (ready && u.tab === 0 && B.km) {
+    const km = B.km[u.layer], U = 46, enc = B.enc[u.layer];
+    body = `<p><b>Layer ${u.layer} ${esc(DATA.layerNames[u.layer] || "")}</b></p><div style="position:relative;height:${6 * U}px">` + DATA.layout.map((k) => {
+      const v = km[k.r][k.c];
+      return `<div class="k ${u.row === k.r && u.col === k.c ? "sel" : ""} ${v === 1 ? "trns" : ""}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${v == null ? "..." : esc(kcName(v))}</div>`;
+    }).join("") + `</div><div class="knobs">` + ["Left knob", "Right knob"].map((t, n) => `<div><b>${t}</b>` + ["Turn left", "Turn right", "Press"].map((s, i) => {
+      const v = i < 2 ? enc && enc[n][i] : km[KNOB[n][0]][KNOB[n][1]];
+      return `<div class="slot ${u.slot === n * 3 + i ? "sel" : ""}"><span>${s}</span>${v == null ? "..." : esc(kcName(v))}</div>`;
+    }).join("") + "</div>").join("") + "</div>";
+    if (u.row !== 255 || u.slot !== 255) {
+      const lo = Math.max(0, u.pick - 4), list = DATA.picker.slice(lo, lo + 9);
+      body += `<p>New keycode: <b>${esc(kcName(u.pending))}</b> (right knob press = apply)</p><div id="list">` +
+        list.map(([v, l], i) => `<button class="${lo + i === u.pick ? "on" : ""}" tabindex="-1">${esc(l || "(none)")}</button>`).join("") + "</div>";
+    }
+    help = "Any key: select it. Left knob: layer; hold it + turn: a knob action. Right knob: keycode (hold + turn: category); press: apply.";
+  } else if (ready && u.tab === 1 && B.led) {
+    const l = B.led;
+    body = brows([["Lights", l[0] ? "on" : "off"], ["Effect", esc(FX.get(l[2]) || "#" + l[2])], ["Hue", bsw(l[4], l[5])], ["Saturation", l[5]],
+                  ["Brightness", Math.round(l[6] * 100 / (l[9] || 255)) + "%"], ["Speed", l[7]], ["LED zones", esc(DATA.ledZones[l[11]] || l[11])],
+                  ["Underglow hue", bsw(l[12], l[13])], ["Underglow saturation", l[13]], ["Turn off after", esc(DATA.ledIdle[l[8]] || l[8])]], u.lf) +
+      (u.flags & 1 ? "<p>Not saved yet: press the right knob to save.</p>" : "");
+    help = "Left knob: choose a setting. Right knob: change it (the lights show it live); hold it + turn on a hue or saturation: colour presets; press: save.";
+  } else if (ready && u.tab === 2 && B.tp) {
+    const t = B.tp, z = B.z;
+    body = brows([["Press-to-click", t[0] ? "on" : "off"], ["Press threshold (Z)", t[1]], ["Release Z", t[2]]], u.tf) +
+      (z ? `<p>Z now: <b>${z[3] ? z[0] : 0}</b>, last peak ${z[2]}${z[4] ? " (clicking)" : ""}</p>` : "") + (u.flags & 2 ? "<p>Not saved yet: press the right knob to save.</p>" : "");
+    help = "Left knob: choose a setting. Right knob: change it; press: save. Touch the pad to see Z.";
+  }
+  $("bBody").innerHTML = body;
+  $("bHelp").textContent = ready ? help + " Left knob press: next tab. Exit: Raise + top-right." : "";
+}
+if (B.on) {
+  say("");
+  $("connect").classList.add("hidden");
+  $("vb").classList.remove("hidden");
+  if (window.SOFLE && SOFLE.page) $("selfSave").classList.remove("hidden"); // typed in by the keyboard: it can save itself
+  $("bSelf").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([SOFLE.page], { type: "text/html" }));
+    a.download = "sofle-light.html"; a.click();
+  };
+  bRender();
+}
 
 // ---- Backup / restore (the full page's file format)
 $("bSave").onclick = () => {

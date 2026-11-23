@@ -39,9 +39,13 @@
 //    pass, the right knob sends *repair* blocks (index bit 15 set): repair
 //    block r is the XOR of the page blocks s for which deliver_hash(r, s) is odd
 //    (the same hash in bootstrap.html), so any repair block can fill any hole
-//    and the page solves for the missing blocks (GF(2) elimination). Each
-//    repair round is a quarter of the page (+4 blocks) and slower: 3, then 4
-//    ms per report. The page ends a pass on '...' or after 3 s without keys. There is no way back from a page to the keyboard (a page
+//    and the page solves for the missing blocks (GF(2) elimination). Repair
+//    rounds grow (16, 32, 64 ... blocks, at most half the page + 8), so after
+//    a few lost blocks the keyboard stops soon after the page says Done; they
+//    are slower: 3, then 4 ms per report. The page ends a pass on '...' or
+//    after 3 s without keys. After a pass the keyboard waits 30 s for the
+//    knob (the OLED counts down) and then finishes by itself; it never starts
+//    a repair round on its own. There is no way back from a page to the keyboard (a page
 //    can't set the lock LEDs), so the page says when to press the knob.
 //    Then it offers "Save as sofle-light.html" / "sofle-config.html". Esc
 //    stops at any time.
@@ -70,7 +74,7 @@
 #define DL_GO_DELAY_MS 150       // after the triggering key is released
 #define DL_NAV_TIMEOUT_MS 120000  // waiting for the first Enter
 #define DL_WAIT_TIMEOUT_MS 180000 // waiting for the second / third Enter
-#define DL_DONE_TIMEOUT_MS 300000 // after a pass: the right knob = repair blocks
+#define DL_DONE_TIMEOUT_MS 30000  // after a pass: the right knob = repair blocks, else finished
 
 #define DL_KNOB_ROW 9 // right knob push (retry)
 #define DL_KNOB_COL 5
@@ -119,6 +123,11 @@ uint8_t deliver_percent(void) {
 
 uint8_t deliver_pass(void) {
     return dl.pass;
+}
+
+uint8_t deliver_seconds_left(void) {
+    uint32_t waited = timer_elapsed32(dl.time);
+    return dl.state != DL_DONE || waited >= DL_DONE_TIMEOUT_MS ? 0 : (DL_DONE_TIMEOUT_MS - waited + 999) / 1000;
 }
 
 static bool endpoint_idle(void) {
@@ -261,7 +270,9 @@ static void start_pass(void) {
     }
     set_state(DL_STREAM);
     dl.pass     = pass;
-    dl.blocks   = pass == 1 ? page_blocks() : page_blocks() / 4 + 4;
+    uint16_t most = page_blocks() / 2 + 8;
+    uint16_t size = pass > 1 && pass < 9 ? 16u << (pass - 2) : most;
+    dl.blocks     = pass == 1 ? page_blocks() : size < most ? size : most;
     dl.interval = pass == 1 ? 2 : pass == 2 ? 3 : 4;
 }
 

@@ -24,4 +24,5 @@ uint8_t net_last_exit(uint32_t *ms_ago); // NET_EXIT_* and how long ago
 bool    net_mode_active(void);
 uint8_t net_state(void);
 bool    net_failed(void); // no address handed out within NET_FALLBACK_MS
+uint16_t net_mode_seconds(void); // since network mode started
 void    net_task(void);   // main loop (time-sliced)

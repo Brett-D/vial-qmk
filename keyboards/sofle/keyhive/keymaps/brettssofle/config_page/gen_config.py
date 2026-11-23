@@ -269,6 +269,9 @@ def main():
         "pickerHash": phash, "rows": data["rows"], "cols": data["cols"], "usb": data["usb"],
         "picker": data["picker"], "cats": cats, "catStarts": cat_starts, "layout": layout, "layerNames": LAYER_NAMES,
         "ledLayeredId": data["ledLayeredId"], "ledKeyFx": data["ledReact"] + data["ledSolo"],
+        "ledZones": data["ledZones"], "ledIdle": data["ledIdle"],
+        # Names of the other effects, for keyboard-only mode (its Effect field can be any of them).
+        "ledOther": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) in skip and int(i)],
         "ledBase": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) not in skip],
         "ranges": {k: data["ranges"][k] for k in ["QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO", "QK_MOMENTARY",
                                                   "QK_TOGGLE_LAYER", "QK_ONE_SHOT_LAYER", "QK_LAYER_TAP_TOGGLE"]},

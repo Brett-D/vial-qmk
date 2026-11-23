@@ -73,7 +73,9 @@
   .ctl .row select { max-width:100%; min-width:0; }
   .ctl .row .v { text-align:right; font-family:ui-monospace,monospace; }
   .btns { display:flex; gap:8px; margin-top:10px; align-items:center; }
-  .swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
+  .sw { width:22px; height:22px; padding:0; border-radius:50%; margin:1px; border:2px solid var(--line); vertical-align:middle; }
+.sw.on { border-color:#fff; } .cpick input[type=color] { width:44px; height:28px; padding:0 2px; vertical-align:middle; margin-right:4px; }
+.swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
   .badge { font-size:11px; padding:1px 8px; border-radius:99px; background:#4a3a17; color:#ffd58f; display:none; }
   .badge.show { display:inline-block; }
   canvas { width:100%; background:#11141a; border-radius:8px; display:block; }
@@ -187,15 +189,19 @@
           <div class="row"><span>Lights</span><label><input type="checkbox" id="ledOn"> on</label><span></span></div>
           <div class="row"><span>Whole keyboard</span><select id="ledBase"></select><span></span></div>
           <div class="row"><span>When you press keys</span><select id="ledReact"></select><span></span></div>
-          <div class="row rxRow"><span>Key-press colour</span><input type="range" id="rxHue" min="0" max="255"><span class="v"><span id="rxHueV"></span><span class="swatch" id="rxSwatch"></span></span></div>
+          <div class="row rxRow"><span>Key-press colour</span><span class="cpick" data-h="rxHue" data-s="rxSat"></span><span></span></div>
+          <div class="row rxRow"><span>Key-press hue</span><input type="range" id="rxHue" min="0" max="255"><span class="v"><span id="rxHueV"></span><span class="swatch" id="rxSwatch"></span></span></div>
           <div class="row rxRow"><span>Key-press saturation</span><input type="range" id="rxSat" min="0" max="255"><span class="v" id="rxSatV"></span></div>
           <div class="small dim" id="ledLayerNote" style="margin:-2px 0 6px"></div>
+          <div class="row"><span>Colour</span><span class="cpick" data-h="ledHue" data-s="ledSat"></span><span></span></div>
+          <div class="small dim" style="margin:-2px 0 6px">Pick a colour or a swatch (brightness is its own slider); hue and saturation below are the fine controls. The keys show colours a little differently from the screen.</div>
           <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
           <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
           <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
           <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="255"><span class="v" id="ledSpeedV"></span></div>
           <div class="row"><span>LED zones</span><select id="ledZone"></select><span></span></div>
-          <div class="row ugRow"><span>Underglow colour</span><input type="range" id="ugHue" min="0" max="255"><span class="v"><span id="ugHueV"></span><span class="swatch" id="ugSwatch"></span></span></div>
+          <div class="row ugRow"><span>Underglow colour</span><span class="cpick" data-h="ugHue" data-s="ugSat"></span><span></span></div>
+          <div class="row ugRow"><span>Underglow hue</span><input type="range" id="ugHue" min="0" max="255"><span class="v"><span id="ugHueV"></span><span class="swatch" id="ugSwatch"></span></span></div>
           <div class="row ugRow"><span>Underglow saturation</span><input type="range" id="ugSat" min="0" max="255"><span class="v" id="ugSatV"></span></div>
           <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
           <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
@@ -1092,7 +1098,7 @@ function navItems() {
     return [...$("layers").querySelectorAll("[data-layer]"), ...keys, ...$("knobs").querySelectorAll("[data-slot]")];
   }
   const root = S.ui.tab === 1 ? (CAL.on ? $("calView") : $("ledCtl")) : S.ui.tab === 3 ? $("petView") : $("padView");
-  return [...root.querySelectorAll("input, select, button, summary")].filter(navVisible);
+  return [...root.querySelectorAll("input:not([type=color]), select, button, summary")].filter(navVisible); // the knob uses the swatches
 }
 function navPaint(scroll = true) {
   document.querySelectorAll(".navf, .navedit").forEach((el) => el.classList.remove("navf", "navedit"));
@@ -1287,6 +1293,37 @@ function kcName(v) {
   return "0x" + v.toString(16).padStart(4, "0");
 }
 function keyText(v) { return v === 0 ? "" : kcName(v); }
+// Colour picker + presets for a hue / saturation slider pair (QMK HSV 0-255); brightness stays its own slider.
+const PRESETS = [["Red", 0, 255], ["Orange", 16, 255], ["Yellow", 36, 255], ["Green", 85, 255], ["Cyan", 128, 255], ["Blue", 170, 255],
+                 ["Purple", 192, 255], ["Pink", 224, 180], ["Warm white", 28, 120], ["White", 0, 0]]; // = led_presets in config_mode.c
+function hsvHex(h, s) {
+  const H = h * 6 / 255, i = Math.floor(H), f = H - i, q = 255 * (1 - s / 255 * f), t = 255 * (1 - s / 255 * (1 - f)), p = 255 * (1 - s / 255);
+  return "#" + [[255, t, p], [q, 255, p], [p, 255, t], [p, q, 255], [t, p, 255], [255, p, q]][i % 6].map((x) => Math.round(x).toString(16).padStart(2, "0")).join("");
+}
+function hexHs(x) {
+  const n = parseInt(x.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  const H = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [Math.round(H * 255 / 6) % 255, mx ? Math.round(d / mx * 255) : 0];
+}
+// The sliders' own input handlers send it (live preview, Save, Undo as before).
+function colourPickers() {
+  document.querySelectorAll(".cpick").forEach((el) => {
+    const H = $(el.dataset.h), Sl = $(el.dataset.s);
+    el.innerHTML = `<input type="color" title="Pick a colour"> ` + PRESETS.map(([n, h, s]) => `<button class="sw" title="${n}" data-h="${h}" data-s="${s}" style="background:${hsvHex(h, s)}"></button>`).join("");
+    const set = (h, s) => { H.value = h; Sl.value = s; H.dispatchEvent(new Event("input", { bubbles: true })); };
+    el.querySelector("input").addEventListener("input", (e) => set(...hexHs(e.target.value)));
+    el.addEventListener("click", (e) => { const b = e.target.closest("button.sw"); if (b) set(+b.dataset.h, +b.dataset.s); });
+  });
+}
+function colourSync() {
+  document.querySelectorAll(".cpick").forEach((el) => {
+    const h = +$(el.dataset.h).value, s = +$(el.dataset.s).value, i = el.querySelector("input");
+    if (i && document.activeElement !== i) i.value = hsvHex(h, s);
+    el.querySelectorAll("button.sw").forEach((b) => b.classList.toggle("on", +b.dataset.h === h && +b.dataset.s === s));
+  });
+}
+
 function hsvToCss(h, s, v) {
   h = (h / 256) * 360; s /= 255; v /= 255;
   const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
@@ -1498,6 +1535,7 @@ function renderLeds(ui) {
     $("ugHueV").textContent = Math.round(l.ugHue / 256 * 360) + "°";
     $("ugSwatch").style.background = hsvToCss(l.ugHue, l.ugSat, 255);
     $("ugSatV").textContent = Math.round(l.ugSat / 255 * 100) + "%";
+    colourSync();
     return;
   }
   const effect = DATA.ledEffects[l.effect] || "Effect " + l.effect;
@@ -1574,7 +1612,8 @@ function renderHelp() {
           ["Hold left knob + tap a key", "Copy that key's keycode to the knob action"],
           ["Right knob turn", "Choose keycode (turn fast to skip)"],
           ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selection"]],
-      1: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
+      1: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"],
+          ["Hold right knob + turn", "On a hue or saturation: colour presets (red, orange, yellow, green, cyan, blue, purple, pink, warm white, white)"], ["Right knob press", "Save"]],
       2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
     };
     items = per[S.ui.tab].concat([["Left knob press", "Next tab (hold ~1 s: resend everything)"], ["Hold right knob ~0.6 s", "Next tab"]]);
@@ -1971,6 +2010,7 @@ if (NET) {
   $("hidHow").innerHTML = "Confirm on the keyboard: its screen shows <b>CONF?</b> — press the <b>right knob</b> (or <kbd>Enter</kbd>). If you missed it, click <b>Connect</b>.";
   $("hidVial").textContent = "Works in any browser. Back to the plain keyboard: Config key (or hold both knobs 2 s).";
 }
+colourPickers();
 render();
 if (NET) connect(); // the keyboard's own page: ask for the session right away
 setInterval(() => { if (S.mode === "bridge" && S.state === "ready") scheduleRender(); }, 1000);

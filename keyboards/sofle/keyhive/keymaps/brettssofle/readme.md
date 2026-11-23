@@ -144,8 +144,12 @@ keyboard reconnects as a composite USB device (keyboard, mouse, raw HID and
 a CDC-NCM network adapter, product ID `0x1288`); typing and the trackpad keep
 working. The computer gets **192.168.7.2** by DHCP — no gateway and no DNS,
 so its internet connection is untouched — and the keyboard is
-**192.168.7.1**. The OLED shows **NET**: `USB conn.` → `Link up DHCP` →
-`Open 192.168.7.1`. When network mode ends, the OLED says why for a few
+**192.168.7.1**. The OLED shows **NET** and the address **192.168.7.1**
+from the start, with the state under it: `USB conn.` → `Link up DHCP` →
+`Ready`, and the seconds so far while it waits. Windows can take up to
+~30 s, longer the first time on a new USB port (it sets up the adapter);
+the address works as soon as it says `Ready`. After 20 s without an
+address the OLED also offers `P` = type the page instead. When network mode ends, the OLED says why for a few
 seconds (`NET off`: by key / idle 10min / P). Open **http://192.168.7.1** (or http://sofle.local where
 .local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
 serves the config page itself, gzipped from flash. The page asks for a
@@ -189,11 +193,12 @@ from the HTML at every build) and can type either into any browser:
 | | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
 |---|---|---|
 | has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, layered effects, pet, wiggler, knob control, keyboard-only mode, help, …) |
-| gzipped | 8.6 KB | 45.3 KB |
-| typing (one clean pass) | ~21 s address + loader, then ~66 s | ~21 s, then ~345 s |
+| gzipped | 12.1 KB | 46.4 KB |
+| typing (one clean pass) | ~22 s address + loader, then ~92 s | ~22 s, then ~353 s |
+| when done | opens in the same tab in keyboard-only mode; **Save for mouse mode next time** | Save as / Use it here |
 
-The full page is also served by network mode, and a saved light page can be
-used to get it the same way (it has the same backup format).
+The full page is also served by network mode (quicker, and the mouse works
+there in any browser). The light page has the same backup format.
 
 1. Open a new browser tab (the address bar is selected).
 2. Press **Raise + top-right** (`CONFIG`); the OLED asks **CONF?**. Press
@@ -206,14 +211,17 @@ used to get it the same way (it has the same backup format).
    everything): press it. The keyboard types the page; the screen shows
    blocks good/bad, repair blocks, keys received and keys/s, the OLED
    `Send nn%` and the pass number. Don't type meanwhile.
-6. If the page then says blocks are missing, press the **right knob**: the
-   keyboard sends repair blocks (slower) and the page fills the gaps as soon
-   as it has enough — when it says **Done**, press **Esc** to stop the rest.
-   Press the knob again if it still says blocks are missing.
-7. Click **Save as sofle-light.html** (or sofle-config.html) and open the
-   saved file: in Chrome/Edge it has mouse mode (WebHID can't work from a
-   `data:` address). The full page also offers **Use it here**
-   (keyboard-only mode).
+6. If the page then says blocks are missing, press the **right knob**
+   within 30 s (the OLED shows `Sent. Knob=fix Esc=done` and counts down;
+   after that the keyboard finishes by itself and never sends repairs on
+   its own). Repair rounds are short (16, 32, 64 … blocks), and the page
+   fills the gaps as soon as it has enough. When it says **Done. Press Esc
+   on the keyboard (or wait)**, press Esc; the rest of a round is ignored.
+7. The light page then opens in that tab by itself, in **keyboard-only
+   mode** (a `data:` address can't use WebHID): CONFIG, right knob, then the
+   letter it shows. **Save for mouse mode next time** saves it as
+   sofle-light.html; opened from disk in Chrome/Edge it uses the mouse.
+   The full page offers **Save as sofle-config.html** and **Use it here**.
 
 Why three steps: address bars get slower with every character typed, and
 with the 3 KB v16 address Edge fell far behind the keyboard (whose 60 s
@@ -240,7 +248,7 @@ pseudo-random sets of page blocks (`deliver_hash()` in `deliver.c` = `H` in
 type at 6, then 8 ms per key. A page can't signal back to the keyboard (it
 can't set the lock LEDs, and a `data:` page has no WebHID), hence the knob
 press. In tests with 0.1–1 % of keys dropped, doubled or swapped the light
-page arrives byte for byte in ~68–140 s of typing (the v15 single-CRC stream never
+page arrives byte for byte in ~96–199 s of typing (the v15 single-CRC stream never
 survived those rates).
 
 **Esc** stops at any time. The address part is typed for a **US keyboard
@@ -278,6 +286,16 @@ silently rewrite it. Reading still works. **The Vial app is affected too:
 unlock it first** (Vial → Security → Unlock, then hold the four corner keys),
 otherwise its changes are refused. `trackpad_z.html` can read live Z, but
 needs Vial unlocked to save — use the Trackpad tab here instead.
+
+### Colours
+
+The LED tab has a colour picker and swatches (red, orange, yellow, green,
+cyan, blue, purple, pink, warm white, white) for the main colour, the
+key-press colour and the solid-underglow colour, in both pages. They set
+hue and saturation (the sliders stay as fine controls); brightness is its
+own slider, under the firmware's maximum. The keys show colours a little
+differently from the screen. In keyboard-only mode, hold the right knob and
+turn it on a hue or saturation setting to step through the same presets.
 
 ### Keyboard-only mode (any browser, incl. Firefox — no WebHID, no udev)
 

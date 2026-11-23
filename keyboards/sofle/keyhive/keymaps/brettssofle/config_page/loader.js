@@ -14,7 +14,11 @@
 // XOR of the page blocks s with H(r, s) odd (= deliver_hash()), so missing
 // blocks are solved from any repair blocks (GF(2) elimination) as soon as
 // there are enough. The page always says what to press next; window.SOFLE
-// is the state (also read by the tests).
+// is the state (also read by the tests). When it's done, keys still coming
+// (the rest of a repair round) are swallowed; the light page then opens in
+// this tab by itself once they have stopped for 2 s (keyboard-only mode: a
+// data: page has no WebHID), and can save itself (window.SOFLE.page). The
+// full page offers Save / Use it here.
 (() => {
   const SYM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   // g: 0 waiting for the stream, 1 receiving, 2 pass ended with blocks missing, 3 done.
@@ -87,7 +91,7 @@
     for (let s = 0; s < st.N; s++) if (st.K[s]) n++;
     const rate = Math.round(st.keys / Math.max(1, (Date.now() - st.t0) / 1000));
     const stats = `<p>Pass ${st.P}: ${n} of ${st.N || "?"} blocks good, ${st.bad} bad, ${st.Q.length} repair blocks. ${st.keys} keys, ${rate} keys/s.`;
-    if (st.g === 2) T(`<p><b>${st.N - n} of ${st.N} blocks missing.</b> Press the <b>right knob</b> on the keyboard to send repair blocks.` + stats);
+    if (st.g === 2) T(`<p><b>${st.N - n} of ${st.N} blocks missing.</b> Press the <b>right knob</b> on the keyboard to send repair blocks (within 30 s: its screen counts down).` + stats);
     else T("<p>Receiving the page... Don't type." + stats);
   };
   const finish = async () => {
@@ -99,10 +103,16 @@
       const text = await new Response(z).text();
       st.page = text;
       const f = st.J ? "sofle-config.html" : "sofle-light.html";
-      T(`<p><b>Done</b> (pass ${st.P}). Press <b>Esc</b> on the keyboard if it is still typing.<p><a download="${f}"><button>Save as ${f}</button></a><p>Then open the saved file in Chrome or Edge: the mouse works there.` +
-        (st.J ? `<p><button id="u9">Use it here (keyboard-only mode)</button>` : ""));
+      const big = `<p style="font-size:40px;margin:20px 0"><b>Done.</b> Press <b>Esc</b> on the keyboard (or wait).</p>`;
+      const open = () => { document.open(); document.write(text); document.close(); };
+      if (!st.J) {
+        T(big + "<p>The page opens here as soon as the keyboard stops typing.");
+        const t = setInterval(() => { if (Date.now() - st.last > 2000) { clearInterval(t); open(); } }, 250);
+        return;
+      }
+      T(big + `<p><a download="${f}"><button>Save as ${f}</button></a><p>Then open the saved file in Chrome or Edge: the mouse works there.<p><button id="u9">Use it here (keyboard-only mode)</button>`);
       document.querySelector("a").href = URL.createObjectURL(new Blob([text], { type: "text/html" }));
-      if (st.J) document.getElementById("u9").onclick = () => { document.open(); document.write(text); document.close(); };
+      document.getElementById("u9").onclick = open;
     } catch (x) {
       st.K = []; st.Q = []; st.g = 2;
       T(`<p>The page didn't unpack (${x}). Press the <b>right knob</b> to send more blocks.`);
@@ -117,8 +127,9 @@
     st.P++;
   };
   window.onkeydown = (e) => {
-    if (e.ctrlKey || e.altKey || e.metaKey || st.g === 3) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
     e.preventDefault();
+    if (st.g === 3) { st.last = Date.now(); return; }
     const c = e.code;
     if (/Enter/.test(c)) {
       if (st.g === 0) T("<p>The keyboard isn't sending (it may have given up waiting). Press <b>Esc</b> on the keyboard, open a new tab and start again: CONFIG, then P.");

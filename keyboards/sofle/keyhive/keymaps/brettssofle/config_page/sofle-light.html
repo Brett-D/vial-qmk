@@ -22,6 +22,10 @@ main { padding:14px 16px; max-width:1100px; }
 #list { display:flex; flex-wrap:wrap; gap:4px; max-height:240px; overflow:auto; margin-top:8px; }
 #list button { padding:3px 8px; font-size:12px; }
 .row { display:grid; grid-template-columns:150px 1fr 60px; gap:10px; align-items:center; margin:6px 0; }
+.sw { width:22px; height:22px; padding:0; border-radius:50%; margin:1px; border:2px solid #3a4250; vertical-align:middle; }
+.sw.on { border-color:#fff; } input[type=color] { width:44px; height:28px; padding:0 2px; vertical-align:middle; }
+.brow { padding:3px 8px; border-radius:6px; display:flex; justify-content:space-between; max-width:420px; } .brow.on { outline:2px solid #ffb547; }
+.big { font-size:64px; font-weight:700; }
 </style>
 <header>
   <h1>Sofle config <span class="dim">light</span></h1>
@@ -46,6 +50,8 @@ main { padding:14px 16px; max-width:1100px; }
     <div class="row"><span>Effect</span><select id="lFx"></select><span></span></div>
     <div class="row"><span>Hue</span><input type="range" id="lH" max="255"><span id="lHv"></span></div>
     <div class="row"><span>Saturation</span><input type="range" id="lS" max="255"><span id="lSv"></span></div>
+    <div class="row"><span>Colour</span><span class="cpick" data-h="lH" data-s="lS"></span><span></span></div>
+    <p class="dim">Pick a colour or a swatch; brightness is the slider below. The keys show colours a little differently from the screen.</p>
     <div class="row"><span>Brightness</span><input type="range" id="lV"><span id="lVv"></span></div>
     <div class="row"><span>Speed</span><input type="range" id="lP" max="255"><span id="lPv"></span></div>
     <button id="lSave" class="primary">Save</button> <span class="dim">Changes show on the keyboard right away; Save keeps them.</span>
@@ -56,6 +62,10 @@ main { padding:14px 16px; max-width:1100px; }
     <div class="row"><span>Release Z</span><input type="range" id="tRel" max="62"><span id="tRelV"></span></div>
     <button id="tSave" class="primary">Save</button>
   </section>
+  <section id="vb" class="panel hidden">
+    <div id="selfSave" class="hidden"><button id="bSelf" class="primary">Save for mouse mode next time</button> <span class="dim">Saves this page as sofle-light.html: opened from disk in Chrome or Edge it uses the mouse.</span></div>
+    <div id="bTop"></div><div id="bTabs"></div><div id="bBody"></div><p id="bHelp" class="dim"></p>
+  </section>
   <section id="v3" class="panel hidden">
     <p><button id="bSave">Download backup</button> <button id="bLoad">Restore from file…</button> <input type="file" id="bFile" accept=".json" class="hidden"></p>
     <p class="dim">Keymap, knobs, lighting and trackpad. Backups are the same files as the full page's (the full page also restores the LED map and the pet).</p>
@@ -63,7 +73,7 @@ main { padding:14px 16px; max-width:1100px; }
   </section>
 </main>
 <script>
-const DATA = {"pickerHash":11281,"rows":10,"cols":7,"usb":{"vid":64562,"pid":4743},"picker":[[0,""],[1,"▽"],[4,"A"],[5,"B"],[6,"C"],[7,"D"],[8,"E"],[9,"F"],[10,"G"],[11,"H"],[12,"I"],[13,"J"],[14,"K"],[15,"L"],[16,"M"],[17,"N"],[18,"O"],[19,"P"],[20,"Q"],[21,"R"],[22,"S"],[23,"T"],[24,"U"],[25,"V"],[26,"W"],[27,"X"],[28,"Y"],[29,"Z"],[30,"1"],[31,"2"],[32,"3"],[33,"4"],[34,"5"],[35,"6"],[36,"7"],[37,"8"],[38,"9"],[39,"0"],[40,"Enter"],[41,"Esc"],[42,"Bksp"],[43,"Tab"],[44,"Space"],[45,"-"],[46,"="],[47,"["],[48,"]"],[49,"\\"],[51,";"],[52,"'"],[53,"`"],[54,","],[55,"."],[56,"/"],[57,"Caps"],[565,"~"],[542,"!"],[543,"@"],[544,"#"],[545,"$"],[546,"%"],[547,"^"],[548,"&"],[549,"*"],[550,"("],[551,")"],[557,"_"],[558,"+"],[559,"{"],[560,"}"],[561,"|"],[563,":"],[564,"\""],[566,"<"],[567,">"],[568,"?"],[80,"←"],[81,"↓"],[82,"↑"],[79,"→"],[74,"Home"],[77,"End"],[75,"PgUp"],[78,"PgDn"],[73,"Ins"],[76,"Del"],[70,"PrtSc"],[71,"ScrLk"],[72,"Pause"],[101,"Menu"],[224,"LCtrl"],[225,"LShift"],[226,"LAlt"],[227,"LGui"],[228,"RCtrl"],[229,"RShift"],[230,"RAlt"],[231,"RGui"],[58,"F1"],[59,"F2"],[60,"F3"],[61,"F4"],[62,"F5"],[63,"F6"],[64,"F7"],[65,"F8"],[66,"F9"],[67,"F10"],[68,"F11"],[69,"F12"],[104,"F13"],[105,"F14"],[106,"F15"],[107,"F16"],[108,"F17"],[109,"F18"],[110,"F19"],[111,"F20"],[112,"F21"],[113,"F22"],[114,"F23"],[115,"F24"],[168,"Mute"],[169,"Vol+"],[170,"Vol-"],[174,"Play"],[171,"Next"],[172,"Prev"],[173,"Stop"],[189,"Bri+"],[190,"Bri-"],[178,"Calc"],[179,"MyPC"],[180,"Search"],[182,"Back"],[183,"Fwd"],[185,"Refresh"],[209,"Click L"],[210,"Click R"],[211,"Click M"],[212,"Btn4"],[213,"Btn5"],[205,"Ms↑"],[206,"Ms↓"],[207,"Ms←"],[208,"Ms→"],[217,"Whl↑"],[218,"Whl↓"],[219,"Whl←"],[220,"Whl→"],[221,"Accel0"],[222,"Accel1"],[223,"Accel2"],[21025,"MO(1)"],[21026,"MO(2)"],[21027,"MO(3)"],[21028,"MO(4)"],[21029,"MO(5)"],[21089,"TG(1)"],[21090,"TG(2)"],[21091,"TG(3)"],[21092,"TG(4)"],[21093,"TG(5)"],[20992,"TO(0)"],[20993,"TO(1)"],[20994,"TO(2)"],[20995,"TO(3)"],[20996,"TO(4)"],[20997,"TO(5)"],[21121,"OSL(1)"],[21122,"OSL(2)"],[21123,"OSL(3)"],[21124,"OSL(4)"],[21125,"OSL(5)"],[21185,"TT(1)"],[21186,"TT(2)"],[21187,"TT(3)"],[21188,"TT(4)"],[21189,"TT(5)"],[21216,"PDF(0)"],[21217,"PDF(1)"],[83,"NumLk"],[84,"P/"],[85,"P*"],[86,"P-"],[87,"P+"],[88,"PEnt"],[89,"P1"],[90,"P2"],[91,"P3"],[92,"P4"],[93,"P5"],[94,"P6"],[95,"P7"],[96,"P8"],[97,"P9"],[98,"P0"],[99,"P."],[103,"P="],[30786,"RGB on/off"],[30787,"RGB mode+"],[30788,"RGB mode-"],[30789,"Hue+"],[30790,"Hue-"],[30791,"Sat+"],[30792,"Sat-"],[30793,"Bright+"],[30794,"Bright-"],[30795,"Speed+"],[30796,"Speed-"],[32258,"Config mode"],[32259,"OLED page"],[32260,"Mouse wiggle"],[32256,"Cycle base"],[32257,"Drag scroll"],[31859,"CapsWord"],[31744,"Bootloader"]],"cats":["Basic","Symbols","Navigation","Modifiers","Function","Media","Mouse","Layers","Numpad","Lighting","Special"],"catStarts":[0,55,76,90,98,122,137,153,181,199,210],"layout":[{"r":0,"c":0,"x":0,"y":0.5,"h":1},{"r":0,"c":1,"x":1,"y":0.375,"h":1},{"r":0,"c":2,"x":2,"y":0.125,"h":1},{"r":0,"c":3,"x":3,"y":0,"h":1},{"r":0,"c":4,"x":4,"y":0.125,"h":1},{"r":0,"c":5,"x":5,"y":0.25,"h":1},{"r":5,"c":5,"x":10.5,"y":0.25,"h":1},{"r":5,"c":4,"x":11.5,"y":0.125,"h":1},{"r":5,"c":3,"x":12.5,"y":0,"h":1},{"r":5,"c":2,"x":13.5,"y":0.125,"h":1},{"r":5,"c":1,"x":14.5,"y":0.375,"h":1},{"r":5,"c":0,"x":15.5,"y":0.5,"h":1},{"r":1,"c":0,"x":0,"y":1.5,"h":1},{"r":1,"c":1,"x":1,"y":1.375,"h":1},{"r":1,"c":2,"x":2,"y":1.125,"h":1},{"r":1,"c":3,"x":3,"y":1,"h":1},{"r":1,"c":4,"x":4,"y":1.125,"h":1},{"r":1,"c":5,"x":5,"y":1.25,"h":1},{"r":6,"c":5,"x":10.5,"y":1.25,"h":1},{"r":6,"c":4,"x":11.5,"y":1.125,"h":1},{"r":6,"c":3,"x":12.5,"y":1,"h":1},{"r":6,"c":2,"x":13.5,"y":1.125,"h":1},{"r":6,"c":1,"x":14.5,"y":1.375,"h":1},{"r":6,"c":0,"x":15.5,"y":1.5,"h":1},{"r":2,"c":0,"x":0,"y":2.5,"h":1},{"r":2,"c":1,"x":1,"y":2.375,"h":1},{"r":2,"c":2,"x":2,"y":2.125,"h":1},{"r":2,"c":3,"x":3,"y":2,"h":1},{"r":2,"c":4,"x":4,"y":2.125,"h":1},{"r":2,"c":5,"x":5,"y":2.25,"h":1},{"r":7,"c":5,"x":10.5,"y":2.25,"h":1},{"r":7,"c":4,"x":11.5,"y":2.125,"h":1},{"r":7,"c":3,"x":12.5,"y":2,"h":1},{"r":7,"c":2,"x":13.5,"y":2.125,"h":1},{"r":7,"c":1,"x":14.5,"y":2.375,"h":1},{"r":7,"c":0,"x":15.5,"y":2.5,"h":1},{"r":3,"c":0,"x":0,"y":3.5,"h":1},{"r":3,"c":1,"x":1,"y":3.375,"h":1},{"r":3,"c":2,"x":2,"y":3.125,"h":1},{"r":3,"c":3,"x":3,"y":3,"h":1},{"r":3,"c":4,"x":4,"y":3.125,"h":1},{"r":3,"c":5,"x":5,"y":3.25,"h":1},{"r":4,"c":0,"x":6,"y":2.75,"h":1},{"r":9,"c":5,"x":9.5,"y":2.75,"h":1},{"r":8,"c":5,"x":10.5,"y":3.25,"h":1},{"r":8,"c":4,"x":11.5,"y":3.125,"h":1},{"r":8,"c":3,"x":12.5,"y":3,"h":1},{"r":8,"c":2,"x":13.5,"y":3.125,"h":1},{"r":8,"c":1,"x":14.5,"y":3.375,"h":1},{"r":8,"c":0,"x":15.5,"y":3.5,"h":1},{"r":4,"c":1,"x":1.5,"y":4.375,"h":1},{"r":4,"c":2,"x":2.5,"y":4.125,"h":1},{"r":4,"c":3,"x":3.5,"y":4.15,"h":1},{"r":4,"c":4,"x":4.5,"y":4.25,"h":1},{"r":4,"c":5,"x":6,"y":4.25,"h":1.5},{"r":9,"c":4,"x":9.5,"y":4.25,"h":1.5},{"r":9,"c":3,"x":11,"y":4.25,"h":1},{"r":9,"c":2,"x":12,"y":4.15,"h":1},{"r":9,"c":1,"x":13,"y":4.125,"h":1},{"r":9,"c":0,"x":14,"y":4.375,"h":1}],"layerNames":["QWERTY","Colemak","Lower","Raise","Mouse","Adjust"],"ledLayeredId":254,"ledKeyFx":[31,33,34,35,36,37,38,39,40,41,42,32,29],"ledBase":[[2,"Solid colour"],[3,"Letters / mods two-tone"],[4,"Gradient up down"],[5,"Gradient left right"],[6,"Breathing"],[7,"Band sat"],[8,"Band val"],[9,"Band pinwheel sat"],[10,"Band pinwheel val"],[11,"Band spiral sat"],[12,"Band spiral val"],[13,"Rainbow (all keys)"],[14,"Rainbow sweep (left-right)"],[15,"Cycle up down"],[16,"Rainbow chevron"],[17,"Rainbow (outside in)"],[18,"Cycle out in dual"],[19,"Cycle pinwheel"],[20,"Cycle spiral"],[21,"Dual beacon"],[22,"Rainbow beacon"],[23,"Rainbow pinwheels"],[24,"Raindrops"],[25,"Jellybean raindrops"],[26,"Hue breathing"],[27,"Hue pendulum"],[28,"Hue wave"],[30,"Digital rain"],[43,"Pixel rain"],[44,"Pixel fractal"]],"ranges":{"QK_MOD_TAP":8192,"QK_LAYER_TAP":16384,"QK_LAYER_MOD":20480,"QK_TO":20992,"QK_MOMENTARY":21024,"QK_TOGGLE_LAYER":21088,"QK_ONE_SHOT_LAYER":21120,"QK_LAYER_TAP_TOGGLE":21184}};
+const DATA = {"pickerHash":11281,"rows":10,"cols":7,"usb":{"vid":64562,"pid":4743},"picker":[[0,""],[1,"▽"],[4,"A"],[5,"B"],[6,"C"],[7,"D"],[8,"E"],[9,"F"],[10,"G"],[11,"H"],[12,"I"],[13,"J"],[14,"K"],[15,"L"],[16,"M"],[17,"N"],[18,"O"],[19,"P"],[20,"Q"],[21,"R"],[22,"S"],[23,"T"],[24,"U"],[25,"V"],[26,"W"],[27,"X"],[28,"Y"],[29,"Z"],[30,"1"],[31,"2"],[32,"3"],[33,"4"],[34,"5"],[35,"6"],[36,"7"],[37,"8"],[38,"9"],[39,"0"],[40,"Enter"],[41,"Esc"],[42,"Bksp"],[43,"Tab"],[44,"Space"],[45,"-"],[46,"="],[47,"["],[48,"]"],[49,"\\"],[51,";"],[52,"'"],[53,"`"],[54,","],[55,"."],[56,"/"],[57,"Caps"],[565,"~"],[542,"!"],[543,"@"],[544,"#"],[545,"$"],[546,"%"],[547,"^"],[548,"&"],[549,"*"],[550,"("],[551,")"],[557,"_"],[558,"+"],[559,"{"],[560,"}"],[561,"|"],[563,":"],[564,"\""],[566,"<"],[567,">"],[568,"?"],[80,"←"],[81,"↓"],[82,"↑"],[79,"→"],[74,"Home"],[77,"End"],[75,"PgUp"],[78,"PgDn"],[73,"Ins"],[76,"Del"],[70,"PrtSc"],[71,"ScrLk"],[72,"Pause"],[101,"Menu"],[224,"LCtrl"],[225,"LShift"],[226,"LAlt"],[227,"LGui"],[228,"RCtrl"],[229,"RShift"],[230,"RAlt"],[231,"RGui"],[58,"F1"],[59,"F2"],[60,"F3"],[61,"F4"],[62,"F5"],[63,"F6"],[64,"F7"],[65,"F8"],[66,"F9"],[67,"F10"],[68,"F11"],[69,"F12"],[104,"F13"],[105,"F14"],[106,"F15"],[107,"F16"],[108,"F17"],[109,"F18"],[110,"F19"],[111,"F20"],[112,"F21"],[113,"F22"],[114,"F23"],[115,"F24"],[168,"Mute"],[169,"Vol+"],[170,"Vol-"],[174,"Play"],[171,"Next"],[172,"Prev"],[173,"Stop"],[189,"Bri+"],[190,"Bri-"],[178,"Calc"],[179,"MyPC"],[180,"Search"],[182,"Back"],[183,"Fwd"],[185,"Refresh"],[209,"Click L"],[210,"Click R"],[211,"Click M"],[212,"Btn4"],[213,"Btn5"],[205,"Ms↑"],[206,"Ms↓"],[207,"Ms←"],[208,"Ms→"],[217,"Whl↑"],[218,"Whl↓"],[219,"Whl←"],[220,"Whl→"],[221,"Accel0"],[222,"Accel1"],[223,"Accel2"],[21025,"MO(1)"],[21026,"MO(2)"],[21027,"MO(3)"],[21028,"MO(4)"],[21029,"MO(5)"],[21089,"TG(1)"],[21090,"TG(2)"],[21091,"TG(3)"],[21092,"TG(4)"],[21093,"TG(5)"],[20992,"TO(0)"],[20993,"TO(1)"],[20994,"TO(2)"],[20995,"TO(3)"],[20996,"TO(4)"],[20997,"TO(5)"],[21121,"OSL(1)"],[21122,"OSL(2)"],[21123,"OSL(3)"],[21124,"OSL(4)"],[21125,"OSL(5)"],[21185,"TT(1)"],[21186,"TT(2)"],[21187,"TT(3)"],[21188,"TT(4)"],[21189,"TT(5)"],[21216,"PDF(0)"],[21217,"PDF(1)"],[83,"NumLk"],[84,"P/"],[85,"P*"],[86,"P-"],[87,"P+"],[88,"PEnt"],[89,"P1"],[90,"P2"],[91,"P3"],[92,"P4"],[93,"P5"],[94,"P6"],[95,"P7"],[96,"P8"],[97,"P9"],[98,"P0"],[99,"P."],[103,"P="],[30786,"RGB on/off"],[30787,"RGB mode+"],[30788,"RGB mode-"],[30789,"Hue+"],[30790,"Hue-"],[30791,"Sat+"],[30792,"Sat-"],[30793,"Bright+"],[30794,"Bright-"],[30795,"Speed+"],[30796,"Speed-"],[32258,"Config mode"],[32259,"OLED page"],[32260,"Mouse wiggle"],[32256,"Cycle base"],[32257,"Drag scroll"],[31859,"CapsWord"],[31744,"Bootloader"]],"cats":["Basic","Symbols","Navigation","Modifiers","Function","Media","Mouse","Layers","Numpad","Lighting","Special"],"catStarts":[0,55,76,90,98,122,137,153,181,199,210],"layout":[{"r":0,"c":0,"x":0,"y":0.5,"h":1},{"r":0,"c":1,"x":1,"y":0.375,"h":1},{"r":0,"c":2,"x":2,"y":0.125,"h":1},{"r":0,"c":3,"x":3,"y":0,"h":1},{"r":0,"c":4,"x":4,"y":0.125,"h":1},{"r":0,"c":5,"x":5,"y":0.25,"h":1},{"r":5,"c":5,"x":10.5,"y":0.25,"h":1},{"r":5,"c":4,"x":11.5,"y":0.125,"h":1},{"r":5,"c":3,"x":12.5,"y":0,"h":1},{"r":5,"c":2,"x":13.5,"y":0.125,"h":1},{"r":5,"c":1,"x":14.5,"y":0.375,"h":1},{"r":5,"c":0,"x":15.5,"y":0.5,"h":1},{"r":1,"c":0,"x":0,"y":1.5,"h":1},{"r":1,"c":1,"x":1,"y":1.375,"h":1},{"r":1,"c":2,"x":2,"y":1.125,"h":1},{"r":1,"c":3,"x":3,"y":1,"h":1},{"r":1,"c":4,"x":4,"y":1.125,"h":1},{"r":1,"c":5,"x":5,"y":1.25,"h":1},{"r":6,"c":5,"x":10.5,"y":1.25,"h":1},{"r":6,"c":4,"x":11.5,"y":1.125,"h":1},{"r":6,"c":3,"x":12.5,"y":1,"h":1},{"r":6,"c":2,"x":13.5,"y":1.125,"h":1},{"r":6,"c":1,"x":14.5,"y":1.375,"h":1},{"r":6,"c":0,"x":15.5,"y":1.5,"h":1},{"r":2,"c":0,"x":0,"y":2.5,"h":1},{"r":2,"c":1,"x":1,"y":2.375,"h":1},{"r":2,"c":2,"x":2,"y":2.125,"h":1},{"r":2,"c":3,"x":3,"y":2,"h":1},{"r":2,"c":4,"x":4,"y":2.125,"h":1},{"r":2,"c":5,"x":5,"y":2.25,"h":1},{"r":7,"c":5,"x":10.5,"y":2.25,"h":1},{"r":7,"c":4,"x":11.5,"y":2.125,"h":1},{"r":7,"c":3,"x":12.5,"y":2,"h":1},{"r":7,"c":2,"x":13.5,"y":2.125,"h":1},{"r":7,"c":1,"x":14.5,"y":2.375,"h":1},{"r":7,"c":0,"x":15.5,"y":2.5,"h":1},{"r":3,"c":0,"x":0,"y":3.5,"h":1},{"r":3,"c":1,"x":1,"y":3.375,"h":1},{"r":3,"c":2,"x":2,"y":3.125,"h":1},{"r":3,"c":3,"x":3,"y":3,"h":1},{"r":3,"c":4,"x":4,"y":3.125,"h":1},{"r":3,"c":5,"x":5,"y":3.25,"h":1},{"r":4,"c":0,"x":6,"y":2.75,"h":1},{"r":9,"c":5,"x":9.5,"y":2.75,"h":1},{"r":8,"c":5,"x":10.5,"y":3.25,"h":1},{"r":8,"c":4,"x":11.5,"y":3.125,"h":1},{"r":8,"c":3,"x":12.5,"y":3,"h":1},{"r":8,"c":2,"x":13.5,"y":3.125,"h":1},{"r":8,"c":1,"x":14.5,"y":3.375,"h":1},{"r":8,"c":0,"x":15.5,"y":3.5,"h":1},{"r":4,"c":1,"x":1.5,"y":4.375,"h":1},{"r":4,"c":2,"x":2.5,"y":4.125,"h":1},{"r":4,"c":3,"x":3.5,"y":4.15,"h":1},{"r":4,"c":4,"x":4.5,"y":4.25,"h":1},{"r":4,"c":5,"x":6,"y":4.25,"h":1.5},{"r":9,"c":4,"x":9.5,"y":4.25,"h":1.5},{"r":9,"c":3,"x":11,"y":4.25,"h":1},{"r":9,"c":2,"x":12,"y":4.15,"h":1},{"r":9,"c":1,"x":13,"y":4.125,"h":1},{"r":9,"c":0,"x":14,"y":4.375,"h":1}],"layerNames":["QWERTY","Colemak","Lower","Raise","Mouse","Adjust"],"ledLayeredId":254,"ledKeyFx":[31,33,34,35,36,37,38,39,40,41,42,32,29],"ledZones":["Effect on keys + underglow","Effect on keys, solid underglow","Keys only (underglow off)"],"ledIdle":["Never","1 min","2 min","5 min","10 min","30 min"],"ledOther":[[1,"Direct"],[29,"Typing heatmap"],[31,"Reactive: pressed key lights"],[32,"Reactive: pressed key hue shift"],[33,"Reactive: glow around key"],[34,"Reactive: glow around keys (multi)"],[35,"Reactive: cross from key"],[36,"Reactive: cross from keys (multi)"],[37,"Reactive: nexus lines"],[38,"Reactive: nexus lines (multi)"],[39,"Splash: rainbow burst from key"],[40,"Splash: rainbow bursts (multi)"],[41,"Splash: colour burst from key"],[42,"Splash: colour bursts (multi)"],[254,"Whole keyboard + key presses"]],"ledBase":[[2,"Solid colour"],[3,"Letters / mods two-tone"],[4,"Gradient up down"],[5,"Gradient left right"],[6,"Breathing"],[7,"Band sat"],[8,"Band val"],[9,"Band pinwheel sat"],[10,"Band pinwheel val"],[11,"Band spiral sat"],[12,"Band spiral val"],[13,"Rainbow (all keys)"],[14,"Rainbow sweep (left-right)"],[15,"Cycle up down"],[16,"Rainbow chevron"],[17,"Rainbow (outside in)"],[18,"Cycle out in dual"],[19,"Cycle pinwheel"],[20,"Cycle spiral"],[21,"Dual beacon"],[22,"Rainbow beacon"],[23,"Rainbow pinwheels"],[24,"Raindrops"],[25,"Jellybean raindrops"],[26,"Hue breathing"],[27,"Hue pendulum"],[28,"Hue wave"],[30,"Digital rain"],[43,"Pixel rain"],[44,"Pixel fractal"]],"ranges":{"QK_MOD_TAP":8192,"QK_LAYER_TAP":16384,"QK_LAYER_MOD":20480,"QK_TO":20992,"QK_MOMENTARY":21024,"QK_TOGGLE_LAYER":21088,"QK_ONE_SHOT_LAYER":21120,"QK_LAYER_TAP_TOGGLE":21184}};
 const $ = (id) => document.getElementById(id);
 const S = { dev: null, keymap: [], enc: [], ui: { tab: 0, layer: 0, sel: null }, queue: Promise.resolve() };
 const KNOB = [[4, 0], [9, 5]];
@@ -168,6 +178,7 @@ function render() {
     $("lOn").checked = !!l.on; $("lFx").value = l.fx;
     [["lH", l.h], ["lS", l.s], ["lV", l.v], ["lP", l.speed]].forEach(([id, v]) => { $(id).value = v; $(id + "v").textContent = v; });
     $("lV").max = S.max;
+    colourSync();
     $("tOn").checked = !!S.tp.on; $("tThr").value = S.tp.thr; $("tRel").value = S.tp.rel; $("tThrV").textContent = S.tp.thr; $("tRelV").textContent = S.tp.rel;
   }
 }
@@ -211,6 +222,126 @@ $("lSave").onclick = async () => { try { await ok([0x09]); await ok([0xf6, 0x14,
   render();
 }));
 $("tSave").onclick = async () => { try { const d = await ok([0xf5, 0x01, S.tp.on, S.tp.thr, S.tp.rel]); S.tp = { on: d[7], thr: d[8], rel: d[9] }; say("Trackpad saved"); } catch (x) { say(esc(x.message), true); } render(); };
+
+// ---- Colours: picker + presets, kept in step with the hue / saturation sliders (QMK HSV, 0-255)
+const PRESETS = [["Red", 0, 255], ["Orange", 16, 255], ["Yellow", 36, 255], ["Green", 85, 255], ["Cyan", 128, 255], ["Blue", 170, 255],
+                 ["Purple", 192, 255], ["Pink", 224, 180], ["Warm white", 28, 120], ["White", 0, 0]]; // = led_presets in config_mode.c
+function hsvRgb(h, s, v) {
+  const H = h * 6 / 255, i = Math.floor(H), f = H - i, S_ = s / 255, p = v * (1 - S_), q = v * (1 - S_ * f), t = v * (1 - S_ * (1 - f));
+  return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6].map(Math.round);
+}
+const hex = (h, s) => "#" + hsvRgb(h, s, 255).map((x) => x.toString(16).padStart(2, "0")).join("");
+function hexHs(x) {
+  const n = parseInt(x.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  const H = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [Math.round(H * 255 / 6) % 255, mx ? Math.round(d / mx * 255) : 0];
+}
+function colourPickers() {
+  document.querySelectorAll(".cpick").forEach((el) => {
+    const H = $(el.dataset.h), Sl = $(el.dataset.s);
+    el.innerHTML = `<input type="color"> ` + PRESETS.map(([n, h, s]) => `<button class="sw" title="${n}" data-h="${h}" data-s="${s}" style="background:${hex(h, s)}"></button>`).join("");
+    const set = (h, s) => { H.value = h; Sl.value = s; for (const t of ["input", "change"]) H.dispatchEvent(new Event(t, { bubbles: true })); };
+    el.querySelector("input").addEventListener("input", (e) => set(...hexHs(e.target.value)));
+    el.addEventListener("click", (e) => { const b = e.target.closest("button.sw"); if (b) set(+b.dataset.h, +b.dataset.s); });
+  });
+}
+function colourSync() {
+  document.querySelectorAll(".cpick").forEach((el) => {
+    const h = +$(el.dataset.h).value, s = +$(el.dataset.s).value, i = el.querySelector("input");
+    if (document.activeElement !== i) i.value = hex(h, s);
+    el.querySelectorAll("button.sw").forEach((b) => b.classList.toggle("on", +b.dataset.h === h && +b.dataset.s === s));
+  });
+}
+colourPickers();
+
+// ---- Keyboard-only mode: no WebHID (Firefox, or this page in the tab the keyboard typed it into).
+// The keyboard drives everything and types its state as frames (config_mode.c): ',' + base32
+// (type, seq, payload, CRC-8) + '.'. Frames only count after a HELLO, so stray keys can't start it.
+const B = window.SOFLE_KB = { on: !navigator.hid, st: "idle", nonce: 0, ui: null, km: null, enc: [], led: null, tp: null, z: null, rx: null, bad: 0 };
+const CHAL = "ACDEFHJKLMNPRSTUWXY", FX = new Map([...DATA.ledBase, ...DATA.ledOther]);
+const crc8 = (a) => { let c = 0; for (const x of a) { c ^= x; for (let i = 0; i < 8; i++) c = c & 128 ? (c << 1 ^ 7) & 255 : c << 1 & 255; } return c; };
+const u16 = (p, i) => p[i] | p[i + 1] << 8;
+function bFrame(sym) {
+  const o = [];
+  let a = 0, n = 0;
+  for (const x of sym) { a = a << 5 | x; n += 5; if (n >= 8) { n -= 8; o.push(a >> n & 255); a &= (1 << n) - 1; } }
+  if (o.length < 3 || crc8(o.slice(0, -1)) !== o[o.length - 1]) { if (B.st !== "idle") B.bad++; return; }
+  const t = o[0], p = o.slice(2, -1);
+  if (t === 1) { B.st = "challenge"; B.nonce = u16(p, 1); B.bad = 0; }
+  else if (B.st === "idle") return;
+  else if (t === 2) { B.st = "ready"; B.km = [...Array(p[1])].map(() => [...Array(DATA.rows)].map(() => Array(DATA.cols).fill(null))); B.enc = []; }
+  else if (t === 3) B.st = "closed";
+  else if (t === 4) B.ui = { tab: p[0], layer: p[1], row: p[2], col: p[3], pick: u16(p, 4) << 16 >> 16, pending: u16(p, 6), slot: p[8], lf: p[9], tf: p[10], flags: p[11] };
+  else if (t === 0x10 && B.km) for (let c = 0; c < DATA.cols; c++) B.km[p[0]][p[1]][c] = u16(p, 2 + c * 2);
+  else if (t === 0x11) B.enc[p[0]] = [[u16(p, 1), u16(p, 3)], [u16(p, 5), u16(p, 7)]];
+  else if (t === 0x20) B.led = p;
+  else if (t === 0x21) B.tp = p;
+  else if (t === 0x22) B.z = p;
+  bRender();
+}
+if (B.on) document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const c = e.code;
+  if (c === "Comma") B.rx = [];
+  else if (c === "Period") { if (B.rx) bFrame(B.rx); B.rx = null; }
+  else if (/^(Key[A-Z]|Digit[2-7])$/.test(c)) { if (B.rx) { B.rx.push(c < "K" ? 24 + +c[5] : c.charCodeAt(3) - 65); if (B.rx.length > 120) B.rx = null; } }
+  else return;
+  e.preventDefault();
+}, true);
+const brows = (rows, on) => rows.map(([k, v], i) => `<div class="brow ${i === on ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+const bsw = (h, s) => `${Math.round(h * 360 / 256)}&deg; <span class="sw" style="display:inline-block;background:${hex(h, s)}"></span>`;
+function bRender() {
+  const u = B.ui, st = B.st, ready = st === "ready" && u;
+  $("state").textContent = { idle: "Keyboard-only mode", challenge: "Press the letter", ready: "Keyboard-only mode", closed: "Keyboard-only mode off" }[st];
+  $("bTop").innerHTML = st === "challenge" ? `<p>Press this letter on the keyboard:</p><div class="big">${CHAL[B.nonce % CHAL.length]}</div>` : ready ? "" :
+    (st === "closed" ? "<p><b>Keyboard-only mode is off.</b> Saved changes stay on the keyboard.</p>" : "") +
+    "<p><b>Keyboard-only mode</b> (this browser can't use USB devices from here):</p><ol><li>Keep this tab focused.</li><li>Press <b>Raise + top-right</b> (CONFIG): the keyboard's screen shows <b>CONF?</b></li><li>Press the <b>right knob</b>, then the letter that appears here.</li></ol>";
+  $("bTabs").innerHTML = ready ? ["Layout", "LEDs", "Trackpad"].map((t, i) => `<button class="${i === u.tab ? "on" : ""}" tabindex="-1">${t}</button>`).join(" ") + (B.bad ? ` <span class="dim">${B.bad} damaged frames: hold the left knob 1 s to resend everything</span>` : "") : "";
+  let body = "", help = "";
+  if (ready && u.tab === 0 && B.km) {
+    const km = B.km[u.layer], U = 46, enc = B.enc[u.layer];
+    body = `<p><b>Layer ${u.layer} ${esc(DATA.layerNames[u.layer] || "")}</b></p><div style="position:relative;height:${6 * U}px">` + DATA.layout.map((k) => {
+      const v = km[k.r][k.c];
+      return `<div class="k ${u.row === k.r && u.col === k.c ? "sel" : ""} ${v === 1 ? "trns" : ""}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${v == null ? "..." : esc(kcName(v))}</div>`;
+    }).join("") + `</div><div class="knobs">` + ["Left knob", "Right knob"].map((t, n) => `<div><b>${t}</b>` + ["Turn left", "Turn right", "Press"].map((s, i) => {
+      const v = i < 2 ? enc && enc[n][i] : km[KNOB[n][0]][KNOB[n][1]];
+      return `<div class="slot ${u.slot === n * 3 + i ? "sel" : ""}"><span>${s}</span>${v == null ? "..." : esc(kcName(v))}</div>`;
+    }).join("") + "</div>").join("") + "</div>";
+    if (u.row !== 255 || u.slot !== 255) {
+      const lo = Math.max(0, u.pick - 4), list = DATA.picker.slice(lo, lo + 9);
+      body += `<p>New keycode: <b>${esc(kcName(u.pending))}</b> (right knob press = apply)</p><div id="list">` +
+        list.map(([v, l], i) => `<button class="${lo + i === u.pick ? "on" : ""}" tabindex="-1">${esc(l || "(none)")}</button>`).join("") + "</div>";
+    }
+    help = "Any key: select it. Left knob: layer; hold it + turn: a knob action. Right knob: keycode (hold + turn: category); press: apply.";
+  } else if (ready && u.tab === 1 && B.led) {
+    const l = B.led;
+    body = brows([["Lights", l[0] ? "on" : "off"], ["Effect", esc(FX.get(l[2]) || "#" + l[2])], ["Hue", bsw(l[4], l[5])], ["Saturation", l[5]],
+                  ["Brightness", Math.round(l[6] * 100 / (l[9] || 255)) + "%"], ["Speed", l[7]], ["LED zones", esc(DATA.ledZones[l[11]] || l[11])],
+                  ["Underglow hue", bsw(l[12], l[13])], ["Underglow saturation", l[13]], ["Turn off after", esc(DATA.ledIdle[l[8]] || l[8])]], u.lf) +
+      (u.flags & 1 ? "<p>Not saved yet: press the right knob to save.</p>" : "");
+    help = "Left knob: choose a setting. Right knob: change it (the lights show it live); hold it + turn on a hue or saturation: colour presets; press: save.";
+  } else if (ready && u.tab === 2 && B.tp) {
+    const t = B.tp, z = B.z;
+    body = brows([["Press-to-click", t[0] ? "on" : "off"], ["Press threshold (Z)", t[1]], ["Release Z", t[2]]], u.tf) +
+      (z ? `<p>Z now: <b>${z[3] ? z[0] : 0}</b>, last peak ${z[2]}${z[4] ? " (clicking)" : ""}</p>` : "") + (u.flags & 2 ? "<p>Not saved yet: press the right knob to save.</p>" : "");
+    help = "Left knob: choose a setting. Right knob: change it; press: save. Touch the pad to see Z.";
+  }
+  $("bBody").innerHTML = body;
+  $("bHelp").textContent = ready ? help + " Left knob press: next tab. Exit: Raise + top-right." : "";
+}
+if (B.on) {
+  say("");
+  $("connect").classList.add("hidden");
+  $("vb").classList.remove("hidden");
+  if (window.SOFLE && SOFLE.page) $("selfSave").classList.remove("hidden"); // typed in by the keyboard: it can save itself
+  $("bSelf").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([SOFLE.page], { type: "text/html" }));
+    a.download = "sofle-light.html"; a.click();
+  };
+  bRender();
+}
 
 // ---- Backup / restore (the full page's file format)
 $("bSave").onclick = () => {

@@ -233,6 +233,7 @@ typedef struct {
     uint8_t dl, dl_pct, dl_pass;                   // typed page delivery (deliver.c)
     uint8_t net;                                   // network mode: state | 0x80 = no address yet (fallbacks)
     uint8_t net_bye;                               // network mode just ended: why (NET_EXIT_*)
+    uint8_t net_secs;                              // seconds since network mode started (max 255)
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -453,6 +454,33 @@ static void led_save(void) {
 static uint8_t clamp_add(uint8_t value, int16_t delta, uint8_t min, uint8_t max) {
     int16_t v = (int16_t)value + delta;
     return v < min ? min : v > max ? max : (uint8_t)v;
+}
+
+// Colour presets (QMK hue, saturation); the pages have the same list (PRESETS).
+static const uint8_t led_presets[][2] PROGMEM = {{0, 255}, {16, 255}, {36, 255}, {85, 255}, {128, 255}, {170, 255}, {192, 255}, {224, 180}, {28, 120}, {0, 0}};
+#define LED_PRESETS (sizeof(led_presets) / sizeof(led_presets[0]))
+
+// Hold the right knob + turn on Hue / Saturation (or the underglow's): next / previous preset.
+static bool led_preset(int8_t dir) {
+    bool     ug = cfg.led_field == LF_UG_HUE || cfg.led_field == LF_UG_SAT;
+    if (!ug && cfg.led_field != LF_HUE && cfg.led_field != LF_SAT) {
+        return false;
+    }
+    uint8_t *h = ug ? &cfg.led.ug_hue : &cfg.led.hue, *s = ug ? &cfg.led.ug_sat : &cfg.led.sat;
+    uint8_t  i = 0;
+    for (uint8_t j = 0; j < LED_PRESETS; j++) {
+        if (pgm_read_byte(&led_presets[j][0]) == *h && pgm_read_byte(&led_presets[j][1]) == *s) {
+            i = (j + LED_PRESETS + dir) % LED_PRESETS;
+            break;
+        }
+        i = dir > 0 ? 0 : LED_PRESETS - 1; // not on a preset: start at either end
+    }
+    *h = pgm_read_byte(&led_presets[i][0]);
+    *s = pgm_read_byte(&led_presets[i][1]);
+    cfg.led.dirty = true;
+    cfg.tx_led    = true;
+    led_preview();
+    return true;
 }
 
 static void led_change(int8_t dir) {
@@ -1157,6 +1185,11 @@ static void knob_turn(uint8_t knob, bool clockwise) {
         if (cfg.tab == TAB_LAYOUT) {
             pick_category(dir);
         }
+#ifdef RGB_MATRIX_ENABLE
+        if (cfg.tab == TAB_LEDS) {
+            led_preset(dir);
+        }
+#endif
     } else {
         change_value(dir);
     }
@@ -1419,11 +1452,15 @@ static void oled_sync_task(void) {
     now.dl     = deliver_state();
     now.dl_pct = deliver_percent();
     now.dl_pass = deliver_pass();
+    if (now.dl == DL_DONE) {
+        now.dl_pct = deliver_seconds_left(); // the OLED counts down instead
+    }
 #ifdef NETWORK_ENABLE
     now.net = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) : 0;
     uint32_t ago;
     uint8_t  why = net_last_exit(&ago);
     now.net_bye  = !now.net && why && ago < CONFIG_NET_BYE_MS ? why : 0;
+    now.net_secs = now.net && (now.net & 0x0F) != NET_READY ? (net_mode_seconds() > 255 ? 255 : net_mode_seconds()) : 0;
 #endif
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl || now.net || now.net_bye;
     // Resent now and then even when idle: the right half may have restarted.
@@ -1446,9 +1483,11 @@ bool config_mode_oled_task(void) {
         last_screen = screen;
     }
     if (net) {
-        // USB network config mode (net/).
+        // USB network config mode (net/). The address is fixed, so it is on
+        // screen from the start (v17 only showed it once the computer had a
+        // lease, and Brett had nothing to open while Windows was still busy).
         oled_write_P(PSTR("NET  "), true);
-        oled_write_P(PSTR("     "), false);
+        oled_write_P(PSTR("     192. 168. 7.1       "), false); // rows 1-4
         if (oled_state.net & 0x80) {
             oled_write_P(PSTR("No IPyet  P=   type page "), false); // the fallback: type the page
         } else {
@@ -1460,13 +1499,14 @@ bool config_mode_oled_task(void) {
                     oled_write_P(PSTR("Link up   DHCP "), false);
                     break;
                 default: // NET_READY
-                    if (oled_state.hid == HS_ACTIVE) {
-                        oled_write_P(PSTR("Page conn."), false); // confirmed: the page can save
-                    } else {
-                        oled_write_P(PSTR("Open 192. 168. 7.1  "), false);
-                    }
+                    oled_write_P(oled_state.hid == HS_ACTIVE ? PSTR("Page conn.") : PSTR("Ready"), false); // confirmed: the page can save
                     break;
             }
+        }
+        if ((oled_state.net & 0x0F) != NET_READY) {
+            oled_set_cursor(0, 11);
+            oled_write(get_u8_str(oled_state.net_secs, ' ') + 1, false); // waiting time: Windows can take ~30 s
+            oled_write_P(PSTR("s"), false);
         }
         oled_set_cursor(0, 13);
         oled_write_P(PSTR("CONFG=exit "), false);
@@ -1505,7 +1545,10 @@ bool config_mode_oled_task(void) {
                 oled_write_P(oled_state.dl_pass > 1 ? PSTR("Fix  ") : PSTR("Send "), false); // repair round / the page
                 break;
             default:
-                oled_write_P(PSTR("Sent check page      Knob=fix  "), false); // the page says Done or "missing"
+                // The page says Done or "missing"; the keyboard can't tell which, so it waits for the knob, then stops.
+                oled_write_P(PSTR("Sent.     Knob=fix  Esc= done "), false);
+                oled_write(get_u8_str(oled_state.dl_pct, ' ') + 1, false);
+                oled_write_P(PSTR("s"), false);
                 break;
         }
         if (oled_state.dl == DL_TYPE || oled_state.dl == DL_LOADER || oled_state.dl == DL_STREAM) {

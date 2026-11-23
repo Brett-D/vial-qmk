@@ -428,6 +428,11 @@ uint8_t net_state(void) {
     return state;
 }
 
+uint16_t net_mode_seconds(void) {
+    uint32_t s = net_on ? timer_elapsed32(enter_time) / 1000 : 0;
+    return s > 9999 ? 9999 : s;
+}
+
 bool net_failed(void) {
     return net_on && state != NET_READY && timer_elapsed32(enter_time) > NET_FALLBACK_MS;
 }

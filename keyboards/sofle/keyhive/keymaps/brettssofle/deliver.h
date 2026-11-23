@@ -29,6 +29,7 @@ bool    deliver_process(keyrecord_t *record);
 uint8_t deliver_state(void);
 uint8_t deliver_percent(void); // of the current typing step
 uint8_t deliver_pass(void);    // 1 = the page, 2+ = repair rounds
+uint8_t deliver_seconds_left(void); // DL_DONE: until it finishes by itself
 // Shared with the host tests / bootstrap.html.
 uint32_t deliver_hash(uint32_t r, uint32_t s);
 uint32_t deliver_crc32(const uint8_t *b, uint8_t n);
