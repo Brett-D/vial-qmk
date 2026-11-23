@@ -32,6 +32,7 @@
 //                        that key's default-layer keycode. With a knob action
 //                        selected, hold the left knob and tap a key to copy.
 
+#include <stddef.h>
 #include "brettssofle.h"
 #include "bridge.h"
 #include "deliver.h"
@@ -234,7 +235,16 @@ typedef struct {
     uint8_t net;                                   // network mode: state | 0x80 = no address yet (fallbacks)
     uint8_t net_bye;                               // network mode just ended: why (NET_EXIT_*)
     uint8_t net_secs;                              // seconds since network mode started (max 255)
+    uint8_t fw;                                    // the left half's BRETT_FW_VERSION (v19+)
+    // New fields go at the end: the right half takes any length >= 18 as a
+    // prefix (v19+), and the left half also sends the older layouts.
 } cfg_oled_t;
+#define CFG_SYNC_V16_LEN 18 // v16-v17: up to net_bye
+#define CFG_SYNC_V18_LEN 19 // v18: + net_secs
+#define CFG_SYNC_V13_LEN 17 // v13-v15: no dl_pass
+static const uint8_t cfg_sync_ack[2] = {0xA7, 0x5E}; // reply of a v19+ right half
+_Static_assert(sizeof(cfg_oled_t) == 20 && offsetof(cfg_oled_t, net_bye) == CFG_SYNC_V16_LEN - 1 && offsetof(cfg_oled_t, net_secs) == CFG_SYNC_V18_LEN - 1,
+               "cfg_oled_t: append new fields at the end only (older right halves read a prefix)");
 static cfg_oled_t oled_state;
 
 /* ---------------------------------------------------------------------------
@@ -570,6 +580,9 @@ static void block_keys(void) {
 
 // Keyboard-only mode: ask "CONF?" on the OLED first.
 static void bridge_ask(void) {
+    if (deliver_state() != DL_OFF) {
+        deliver_stop(); // e.g. the 30 s repair countdown: CONF? takes over
+    }
     block_keys();
     cfg.state    = ST_ASK;
     cfg.ask_time = timer_read32();
@@ -1433,9 +1446,36 @@ uint8_t bridge_next_frame(uint8_t *buf) {
  * Right-half OLED
  * ------------------------------------------------------------------------ */
 
+static uint8_t  left_fw;        // right half: the left half's version (0 = none seen yet)
+static uint32_t old_left_since; // right half: first sync without a reply request (an older left half, or a v19 one before its first full sync)
+static uint32_t fw_mismatch_at; // right half: when the halves were found to differ
+
+uint8_t config_mode_left_fw(void) {
+    return left_fw;
+}
+
+// Right half. v18 and older only took exactly their own size, so flashing one
+// half with a version whose cfg_oled_t had grown left the right OLED blank in
+// config mode (v18 on the left, v17 on the right). Now any length >= 18 is
+// read as a prefix, the rest zero; the reply tells the left half so.
 static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_len, void *out_data) {
-    if (in_len == sizeof(oled_state)) {
-        memcpy(&oled_state, in_data, sizeof(oled_state));
+    if (out_len >= sizeof(cfg_sync_ack)) {
+        memcpy(out_data, cfg_sync_ack, sizeof(cfg_sync_ack));
+    }
+    if (in_len >= CFG_SYNC_V16_LEN) {
+        uint8_t n = in_len < sizeof(oled_state) ? in_len : sizeof(oled_state);
+        memset(&oled_state, 0, sizeof(oled_state));
+        memcpy(&oled_state, in_data, n);
+        // Only a v19+ left half asks for the reply, with its full payload.
+        if (out_len >= sizeof(cfg_sync_ack) && in_len > offsetof(cfg_oled_t, fw)) {
+            left_fw = oled_state.fw;
+        } else if (!old_left_since) {
+            old_left_since = timer_stamp32();
+        }
+        bool differ = left_fw ? left_fw != BRETT_FW_VERSION : old_left_since && timer_elapsed32(old_left_since) > 2000;
+        if (differ && !fw_mismatch_at) {
+            fw_mismatch_at = timer_stamp32();
+        }
 #ifdef RGB_MATRIX_ENABLE
         led_layers_set_remote(oled_state.lay_base, oled_state.lay_react, oled_state.lay_hue, oled_state.lay_sat);
 #endif
@@ -1465,7 +1505,24 @@ static void oled_sync_task(void) {
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl || now.net || now.net_bye;
     // Resent now and then even when idle: the right half may have restarted.
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || timer_elapsed(last_time) > (active ? CONFIG_MODE_OLED_SYNC_MS : 5000);
-    if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
+    now.fw = BRETT_FW_VERSION;
+    if (!due) {
+        return;
+    }
+    static bool right_v19; // the right half takes any size (it answered with cfg_sync_ack)
+    if (!right_v19) {
+        // An older right half takes only its own size: send each older layout too.
+        uint8_t v13[CFG_SYNC_V13_LEN];
+        memcpy(v13, &now, 15); // up to dl_pct
+        v13[15] = now.net;
+        v13[16] = now.net_bye;
+        transaction_rpc_send(RPC_ID_USER_CFG, sizeof(v13), v13);
+        transaction_rpc_send(RPC_ID_USER_CFG, CFG_SYNC_V16_LEN, &now);
+        transaction_rpc_send(RPC_ID_USER_CFG, CFG_SYNC_V18_LEN, &now);
+    }
+    uint8_t reply[sizeof(cfg_sync_ack)] = {0};
+    if (transaction_rpc_exec(RPC_ID_USER_CFG, sizeof(now), &now, sizeof(reply), reply)) {
+        right_v19 = memcmp(reply, cfg_sync_ack, sizeof(reply)) == 0;
         last_sent = now;
         last_time = timer_read();
     }
@@ -1477,7 +1534,9 @@ bool config_mode_oled_task(void) {
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
     bool           net    = oled_state.net && oled_state.hid != HS_ASK; // CONF? for the page wins
-    uint8_t        screen = !net && oled_state.net_bye && !oled_state.dl && !asking ? 0xB0 | oled_state.net_bye : net ? 0xC0 | (oled_state.hid == HS_ACTIVE ? 0x10 : 0) | (oled_state.net & 0x80 ? 0x08 : 0) | (oled_state.net & 0x07) : oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    bool           dl     = oled_state.dl && !asking && oled_state.state == ST_OFF; // CONF? / config mode win over the delivery screen
+    bool           halves = !active && !net && !dl && fw_mismatch_at && timer_elapsed32(fw_mismatch_at) < 10000;
+    uint8_t        screen = halves ? 0xA0 : !net && oled_state.net_bye && !oled_state.dl && !asking ? 0xB0 | oled_state.net_bye : net ? 0xC0 | (oled_state.hid == HS_ACTIVE ? 0x10 : 0) | (oled_state.net & 0x80 ? 0x08 : 0) | (oled_state.net & 0x07) : dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
     if (screen != last_screen) {
         oled_clear();
         last_screen = screen;
@@ -1520,7 +1579,23 @@ bool config_mode_oled_task(void) {
         oled_write_P(why[oled_state.net_bye & 3], false);
         return true;
     }
-    if (oled_state.dl) {
+    if (halves) {
+        // The halves run different firmware: the right half may not show everything.
+        oled_write_P(PSTR("HALVS"), true);
+        oled_write_P(PSTR("     diff fw   R v"), false); // rows 1-4 (5 characters a line)
+        oled_write(get_u8_str(BRETT_FW_VERSION, ' ') + 1, false);
+        oled_set_cursor(0, 5);
+        if (left_fw) {
+            oled_write_P(PSTR("L v"), false);
+            oled_write(get_u8_str(left_fw, ' ') + 1, false);
+        } else {
+            oled_write_P(PSTR("L old"), false); // v18 or older: no version in its sync
+        }
+        oled_set_cursor(0, 7);
+        oled_write_P(PSTR("Flashboth sides"), false);
+        return true;
+    }
+    if (dl) {
         // Typed page delivery (deliver.c).
         oled_write_P(PSTR("PAGE "), true);
         oled_write_P(PSTR("     "), false);

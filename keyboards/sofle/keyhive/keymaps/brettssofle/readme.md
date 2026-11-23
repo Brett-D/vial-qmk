@@ -360,6 +360,14 @@ To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE
 
 The **same UF2 goes on both halves** (`MASTER_LEFT` decides which half is which).
 
+Flash **both** halves every time: the left half sends the right OLED what to
+show, and the two must agree on its layout. The right OLED's INFO page shows
+both versions (`R v19` / `L v19`); if they differ, the right OLED says
+`HALVS diff fw` for 10 s after start. Since v19 either half also works with
+an older other half (v13 or later): the right half reads any newer layout as
+a prefix, and the left half also sends the older layouts. (v18 on the left
+with v17 on the right left the right OLED blank in config mode.)
+
 1. Unplug the TRRS cable and plug USB into one half.
 2. Hold the Sea-Picro reset button for **more than 1 second** (a short tap only resets).
    A drive called `RPI-RP2` appears.

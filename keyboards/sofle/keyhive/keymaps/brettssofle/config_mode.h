@@ -17,3 +17,7 @@ bool config_mode_active(void);
 // Right half: draws the config screen and returns true while config mode is on.
 bool config_mode_oled_task(void);
 #endif
+// The firmware version (the INFO page; both halves compare theirs). Bump with every release.
+#define BRETT_FW_VERSION 19
+// Right half: the left half's version as last synced (0 = not known: v18 or older).
+uint8_t config_mode_left_fw(void);

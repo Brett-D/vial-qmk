@@ -336,8 +336,16 @@ static void page_info(void) {
     oled_write(s, false);
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
-    oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR(" v18 "), false);
+    // Both halves' firmware versions: they must match (flash both halves).
+    uint8_t left = config_mode_left_fw();
+    oled_write_P(PSTR("     R v"), false);
+    oled_write(get_u8_str(BRETT_FW_VERSION, ' ') + 1, false);
+    if (left) {
+        oled_write_P(PSTR("L v"), left != BRETT_FW_VERSION);
+        oled_write(get_u8_str(left, ' ') + 1, left != BRETT_FW_VERSION);
+    } else {
+        oled_write_P(PSTR("L old"), true); // v18 or older on the left: flash it
+    }
     static const char boots[5][6] = {"power", "reset", "CRASH", "wdog ", "other"};
     oled_write_P(PSTR("Boot "), false);
     oled_write(boots[view.boot < 5 ? view.boot : 4], view.boot == BOOT_CRASH);
