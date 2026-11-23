@@ -134,7 +134,26 @@ Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad
 `config_page/sofle-config.html` — a single file you open from disk (keep a
 copy on any computer). Nothing to install, no internet. Two ways to use it:
 
-### With the mouse (Chrome / Edge — WebHID)
+### Get the page from the keyboard (no file needed)
+
+The keyboard carries a copy of the page (`config_page_blob.h`, built from
+`sofle-config.html` at every build) and can type it into any browser:
+
+1. Open a new browser tab (the address bar is selected).
+2. Press **Raise + top-right** (`CONFIG`); the OLED asks **CONF?**. Press **P**.
+3. The keyboard types a short `data:` address (~10 s). Press **Enter**.
+4. The page asks for **Enter** again: press it. The keyboard types the page
+   (~50 s, progress on the screen and the OLED). Don't type meanwhile.
+5. Click **Save as sofle-config.html**, then open the saved file. In
+   Chrome/Edge it has mouse mode; anywhere, keyboard-only mode works (or use
+   **Use it here** straight away).
+
+If the transfer is damaged the page says so: press the **right knob** to send
+it again. **Esc** stops at any time. The address part is typed for a **US
+keyboard layout** on the computer (the page part works with any layout).
+Only printable characters are typed — never Enter or shortcuts; the two
+Enters are yours.
+
 
 1. Open the page and click **Connect**, then pick **Sofle** in the browser's list.
 2. The right OLED shows **CONF?** — press the **right knob** (or Enter) to

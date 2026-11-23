@@ -34,6 +34,7 @@
 
 #include "brettssofle.h"
 #include "bridge.h"
+#include "deliver.h"
 #include "config_picker.h"
 #include "led_cal.h"
 #include "led_layers.h"
@@ -215,6 +216,7 @@ typedef struct {
     uint8_t cal;                  // LED calibration / test state (led_cal.h)
     uint8_t nav;                  // right knob drives the page
     uint8_t lay_base, lay_react, lay_hue, lay_sat; // layered lighting (led_layers.c)
+    uint8_t dl, dl_pct;                            // typed page delivery (deliver.c)
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -616,6 +618,11 @@ static void ask_key(uint8_t row, uint8_t col) {
     uint16_t base = basic_of(default_layer_keycode(row, col));
     bool     yes  = (row == KNOB_R_ROW && col == KNOB_R_COL) || base == KC_ENTER || base == KC_SPACE;
     bool     no   = (row == KNOB_L_ROW && col == KNOB_L_COL) || base == KC_ESCAPE;
+    if (hid.state != HS_ASK && base == KC_P) {
+        cfg.state = ST_OFF;
+        deliver_start(); // type the config page into the browser (deliver.c)
+        return;
+    }
     if (!yes && !no) {
         return;
     }
@@ -1119,6 +1126,9 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
         return false; // LED calibration / test: the page reads the key instead
     }
 #endif
+    if (deliver_process(record)) {
+        return false; // typing the config page into the browser
+    }
     keyevent_t *ev     = &record->event;
     bool        is_key = ev->type == KEY_EVENT && ev->key.row < MATRIX_ROWS;
     uint8_t     row = ev->key.row, col = ev->key.col;
@@ -1336,7 +1346,9 @@ static void oled_sync_task(void) {
 #ifdef RGB_MATRIX_ENABLE
     led_layers_get(&now.lay_base, &now.lay_react, &now.lay_hue, &now.lay_sat);
 #endif
-    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal;
+    now.dl     = deliver_state();
+    now.dl_pct = deliver_percent();
+    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl;
     // Resent now and then even when idle: the right half may have restarted.
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || timer_elapsed(last_time) > (active ? CONFIG_MODE_OLED_SYNC_MS : 5000);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
@@ -1350,10 +1362,39 @@ bool config_mode_oled_task(void) {
     static uint8_t last_screen;
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
-    uint8_t        screen = active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    uint8_t        screen = oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
     if (screen != last_screen) {
         oled_clear();
         last_screen = screen;
+    }
+    if (oled_state.dl) {
+        // Typed page delivery (deliver.c).
+        oled_write_P(PSTR("PAGE "), true);
+        oled_write_P(PSTR("     "), false);
+        switch (oled_state.dl) {
+            case DL_TYPE:
+                oled_write_P(PSTR("Typngaddr "), false);
+                break;
+            case DL_WAIT_NAV:
+                oled_write_P(PSTR("PressEnter"), false);
+                break;
+            case DL_WAIT_GO:
+                oled_write_P(PSTR("PressEnteragain"), false);
+                break;
+            case DL_STREAM:
+                oled_write_P(PSTR("Send "), false);
+                break;
+            default:
+                oled_write_P(PSTR("Sent      Knob=again"), false);
+                break;
+        }
+        if (oled_state.dl == DL_TYPE || oled_state.dl == DL_STREAM) {
+            oled_write(get_u8_str(oled_state.dl_pct, ' '), false);
+            oled_write_P(PSTR("%"), false);
+        }
+        oled_set_cursor(0, 13);
+        oled_write_P(PSTR("Esc= stop "), false);
+        return true;
     }
     if (!active) {
         return false;
@@ -1364,6 +1405,9 @@ bool config_mode_oled_task(void) {
         oled_write_P(PSTR("CONF?"), true);
         oled_write_P(oled_state.hid == HS_ASK ? PSTR("Web  ") : PSTR("     "), false);
         oled_write_P(PSTR("Knob=yes  Esc= no   "), false);
+        if (oled_state.hid != HS_ASK) {
+            oled_write_P(PSTR("P=   type page "), false); // deliver.c
+        }
         return true;
     }
     oled_write_P(PSTR("CONFG"), true);
@@ -1436,6 +1480,7 @@ void config_mode_task(void) {
         return;
     }
     knob_combo_task();
+    deliver_task();
     oled_sync_task();
 
     if (nav.on && (hid.state != HS_ACTIVE || cfg.state != ST_OFF || timer_elapsed32(nav.time) >= CONFIG_NAV_IDLE_MS)) {

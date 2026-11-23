@@ -260,6 +260,8 @@ def main():
     page = template.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     (HERE / "sofle-config.html").write_text(page, encoding="utf-8", newline="\n")
     print(f"picker: {len(picker)} keycodes, {len(cats)} categories, hash 0x{phash:04X}; page {len(page.encode())} bytes")
+    import gen_page_blob  # the copy the keyboard types (config_page_blob.h)
+    gen_page_blob.main()
 
 
 if __name__ == "__main__":

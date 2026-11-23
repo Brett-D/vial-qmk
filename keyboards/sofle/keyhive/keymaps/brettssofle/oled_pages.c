@@ -276,7 +276,7 @@ static void page_info(void) {
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
     oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR("  v6 "), false);
+    oled_write_P(PSTR("  v7 "), false);
 }
 
 // Last line: page number, "W" while the mouse wiggler is on.

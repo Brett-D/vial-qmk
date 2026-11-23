@@ -1,0 +1,47 @@
+<!--
+Bootstrap page the keyboard types into the browser's address bar as a
+data: URL (config_page/gen_page_blob.py compacts it to one line and checks
+that it only uses safe characters: no spaces, '#', '%' or newlines; "_" in
+messages becomes a space). After Brett presses Enter it loads, asks for a
+second Enter (Enter also resets a stopped transfer), then reads the gzipped config page that the keyboard types as
+base32 keystrokes (',' start, A-Z/2-7 symbols, '.' end). It reads
+KeyboardEvent.code, so the host keyboard layout doesn't matter. The gzip
+CRC rejects a damaged transfer; the right knob makes the keyboard send it again. The result is offered as a download
+(sofle-config.html: opened from disk it gets WebHID, a data: page doesn't).
+Stream: 4-byte big-endian length, then the gzip bytes.
+-->
+<title>Sofle</title>
+<body>
+<script>
+S="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+d=document;
+d.body.style.cssText="font:20px\x20sans-serif;margin:40px";
+T=t=>d.body.innerHTML=("<h2>Sofle_config</h2>"+t).replace(/_/g,"\x20");
+g=0;v=[];N=0;
+T("<p>Press_<b>Enter</b>_to_load_it_from_the_keyboard_(about_a_minute)._Don't_type_until_it's_done.");
+X=()=>(o=[],a=0,l=0,v.map(s=>{a=(a<<5|s)&4095;l+=5;if(l>7){l-=8;o.push(a>>l&255)}}),o);
+onkeydown=e=>{
+c=e.code;
+if(e.ctrlKey||e.altKey||e.metaKey||g>3)return;
+e.preventDefault();
+if(/Enter/.test(c)){if(g<4){g=1;T("<p>Waiting_for_the_keyboard...")}return}
+if(c=="Comma"){v=[];N=0;g=2;return}
+if(g!=2)return;
+if(c=="Period"){g=3;D();return}
+k=S.indexOf(c.slice(-1));
+if(k<0||!/^(Key|Digit)/.test(c))return;
+v.push(k);
+if(v.length==7){o=X();N=((o[0]<<24|o[1]<<16|o[2]<<8|o[3])+4)*1.6}
+if(N&&!(v.length&511))T("<p>Receiving..._"+Math.floor(v.length*99/N)+"\x25");
+};
+D=async()=>{try{
+o=X();L=o[0]<<24|o[1]<<16|o[2]<<8|o[3];
+if(o.length<L+4)throw"incomplete";
+z=Reflect.construct(Blob,[[Uint8Array.from(o.slice(4,4+L))]]).stream().pipeThrough(Reflect.construct(DecompressionStream,["gzip"]));
+H=await(Reflect.construct(Response,[z])).text();
+g=4;
+T("<p><a_id=s_download=sofle-config.html><button>Save_as_sofle-config.html</button></a><p>Then_open_the_saved_file._In_Chrome_or_Edge_the_mouse_works_there.<p><button_id=u>Use_it_here_(keyboard-only_mode)</button>");
+s.href=URL.createObjectURL(Reflect.construct(Blob,[[H],{type:"text/html"}]));
+u.onclick=()=>{d.open();d.write(H);d.close()};
+}catch(x){g=1;T("<p>Transfer_failed_("+x+")._Press_the_<b>right_knob</b>_to_send_it_again.")}};
+</script>
