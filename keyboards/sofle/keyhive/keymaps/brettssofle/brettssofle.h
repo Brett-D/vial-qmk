@@ -20,6 +20,7 @@ enum custom_keycodes {
     DRAG_SCROLL,     // hold: trackpad movement scrolls instead of moving the cursor
     CONFIG_MODE,     // toggle config mode (sofle-config.html)
     OLED_PAGE,       // next right-OLED page (status / trackpad / LEDs / info)
+    WIGGLE,          // mouse wiggler on/off (wiggler.c)
 };
 
 // Number of default layers CYCLE rotates through.
@@ -59,6 +60,14 @@ uint32_t user_config_rgb_idle_ms(void);
 // solid underglow colour, saved in EECONFIG_USER bits 20-31 (trackpad_z.c).
 void user_config_get_led_zone(uint8_t *zone, uint8_t *hue, uint8_t *sat);
 void user_config_set_led_zone(uint8_t zone, uint8_t hue, uint8_t sat);
+
+// Mouse wiggler (wiggler.c): intervals 30 s / 1 / 2 / 4 min without input.
+#define WIGGLE_INTERVALS 4
+bool    wiggler_on(void);
+uint8_t wiggler_interval(void);
+void    wiggler_set(bool enable, uint8_t interval);
+void    wiggler_toggle(void);
+void    wiggler_task(void); // housekeeping, master
 
 // Right OLED pages (oled_pages.c).
 enum oled_pages { OLED_PAGE_STATUS, OLED_PAGE_TRACKPAD, OLED_PAGE_LEDS, OLED_PAGE_INFO, OLED_PAGE_COUNT };

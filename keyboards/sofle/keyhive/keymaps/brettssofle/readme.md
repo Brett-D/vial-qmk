@@ -16,8 +16,19 @@ Keymap for a Keyhive Sofle v2 with:
 | `CYCLE` (Raise + top-left) | Switches the default layer between QWERTY and Colemak-DH (saved) |
 | `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
 | Encoders | Left: volume, press = mute. Right: page up/down, press = next OLED page (`OLED_PAGE`) |
-| LEDs | Per-key RGB Matrix: rainbow, reactive and **splash** effects (light bursts out from each key you press). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode or Vial (VialRGB) |
-| Right OLED | Four pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime). Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
+| LEDs | Per-key RGB Matrix with two layers: a **whole-keyboard** effect (static colour, rainbows, raindrops, …) and a **key-press** effect (reactive, splash, …) drawn on top in its own colour; presses light up and fade back into the whole-keyboard effect. Either can be off, so a single effect works too (`led_layers.c`, `rgb_matrix_user.inc`). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode; Vial (VialRGB) can pick single effects |
+| Right OLED | Four pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime). A **W** next to the page number means the mouse wiggler is on. Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
+
+### Mouse wiggler
+
+Keeps the computer awake: after 30 s / 1 / 2 / 4 min without any key, knob
+or trackpad use, the pointer moves 1 pixel and straight back (net zero), and
+again every interval while you're away. The nudge doesn't count as input, so
+the LED and OLED idle timeouts still apply. Turn it on in the config page
+(**Trackpad** tab → Mouse wiggler) or with the `WIGGLE` key (Vial: User /
+custom keycodes; not on any layer by default). It is never saved: it's off
+after every power-up. (It also stops the screen from locking on its own, so
+don't use it where a policy requires auto-lock.)
 
 ### Trackpad
 

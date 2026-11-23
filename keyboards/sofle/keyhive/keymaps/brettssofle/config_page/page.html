@@ -69,7 +69,8 @@
   .big { font-size:22px; font-weight:700; } .arrow { color:var(--dim); margin:0 6px; }
   .rows .row { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-radius:6px; }
   .rows .row.on { outline:2px solid var(--acc); background:#1c2a3d; }
-  .ctl .row { display:grid; grid-template-columns: 170px 1fr 70px; gap:12px; align-items:center; padding:7px 4px; }
+  .ctl .row { display:grid; grid-template-columns: 170px minmax(0,1fr) 70px; gap:12px; align-items:center; padding:7px 4px; }
+  .ctl .row select { max-width:100%; min-width:0; }
   .ctl .row .v { text-align:right; font-family:ui-monospace,monospace; }
   .btns { display:flex; gap:8px; margin-top:10px; align-items:center; }
   .swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
@@ -160,7 +161,11 @@
         <div class="rows" id="ledRows"></div>
         <div class="ctl hidden" id="ledCtl">
           <div class="row"><span>Lights</span><label><input type="checkbox" id="ledOn"> on</label><span></span></div>
-          <div class="row"><span>Effect</span><select id="ledMode"></select><span></span></div>
+          <div class="row"><span>Whole keyboard</span><select id="ledBase"></select><span></span></div>
+          <div class="row"><span>When you press keys</span><select id="ledReact"></select><span></span></div>
+          <div class="row rxRow"><span>Key-press colour</span><input type="range" id="rxHue" min="0" max="255"><span class="v"><span id="rxHueV"></span><span class="swatch" id="rxSwatch"></span></span></div>
+          <div class="row rxRow"><span>Key-press saturation</span><input type="range" id="rxSat" min="0" max="255"><span class="v" id="rxSatV"></span></div>
+          <div class="small dim" id="ledLayerNote" style="margin:-2px 0 6px"></div>
           <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
           <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
           <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
@@ -198,6 +203,12 @@
           <div class="row"><span>Threshold (press)</span><input type="range" id="tpThr" min="1" max="63"><span class="v" id="tpThrV"></span></div>
           <div class="row"><span>Release Z</span><input type="range" id="tpRel" min="0" max="62"><span class="v" id="tpRelV"></span></div>
           <div class="btns"><button id="tpSave" class="primary">Save</button><button id="tpRevert">Undo changes</button></div>
+        </div>
+        <div class="ctl hidden" id="wgCtl">
+          <h2 style="margin-top:14px">Mouse wiggler</h2>
+          <div class="row"><span>Mouse wiggler</span><label><input type="checkbox" id="wgOn"> on</label><span></span></div>
+          <div class="row"><span>Nudge after no input for</span><select id="wgEvery"><option value="0">30 seconds</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="3">4 minutes</option></select><span></span></div>
+          <p class="small dim">Keeps the computer awake: after this long without any key, knob or trackpad use, the pointer moves 1 pixel and straight back (again every interval while you're away). Applies right away and switches off whenever the keyboard is unplugged. The <b>Mouse wiggle</b> key (Special) toggles it too.</p>
         </div>
         <h2 style="margin-top:14px">Live Z</h2>
         <canvas id="zbar" width="600" height="70"></canvas>
@@ -476,6 +487,7 @@ function readStatus(st) {
   S.ledInfo = { idle: st[5], max: st[6], modes: st[7], enabled: st[8] };
   S.mapMeasured = !!(st[16] & 1);
   S.rightMap = st[21];
+  S.wiggle = { on: !!(st[30] & 1), every: (st[30] >> 1) & 3 };
   calCapture(st);
 }
 
@@ -530,8 +542,11 @@ async function hidLoadLed() {
   const st = await cmd([0xf6, 0x00, 1]); readStatus(st);
   const m = await cmd([0x08, 0x41]); // VialRGB mode: id, speed, h, s, v
   const id = m[2] | (m[3] << 8);
-  S.led = { enable: S.ledInfo.enabled, mode: id || st[11], hue: m[5], sat: m[6], val: m[7], speed: m[4], idle: S.ledInfo.idle, max: S.ledInfo.max,
-            zone: st[12], ugHue: st[13], ugSat: st[14], dirty: 0 };
+  const cur = st[11]; // current effect (VialRGB id; ledLayeredId = whole keyboard + key presses)
+  const layered = cur === DATA.ledLayeredId, keyFx = DATA.ledReact.includes(cur) || DATA.ledSolo.includes(cur);
+  S.led = { enable: S.ledInfo.enabled, mode: id || cur, hue: m[5], sat: m[6], val: m[7], speed: m[4], idle: S.ledInfo.idle, max: S.ledInfo.max,
+            zone: st[12], ugHue: st[13], ugSat: st[14],
+            base: layered ? st[26] : keyFx ? 0 : cur, react: layered ? st[27] : keyFx ? cur : 0, rxHue: st[28], rxSat: st[29], dirty: 0 };
   S.ledSent = { ...S.led };
 }
 async function hidLoadTp() {
@@ -602,11 +617,16 @@ async function flushLed() {
     for (;;) {
       // Snapshot first: sliders keep changing S.led while a command is in flight.
       const l = { ...S.led }, s = S.ledSent;
-      const look = ["mode", "hue", "sat", "val", "speed"].some((k) => l[k] !== s[k]);
-      if (l.enable && (look || s.enable !== 1)) {
-        // VialRGB set mode: effect id, speed, h, s, v in one command (also turns the lights on).
-        await send([0x07, 0x41, l.mode & 0xff, l.mode >> 8, l.speed, l.hue, l.sat, l.val]);
-        Object.assign(s, { mode: l.mode, hue: l.hue, sat: l.sat, val: l.val, speed: l.speed, enable: 1 });
+      if (l.enable && s.enable !== 1) { await send([0xf6, 0x05, 1]); s.enable = 1; continue; }
+      if (["base", "react", "rxHue", "rxSat"].some((k) => l[k] !== s[k])) {
+        // Effects: whole keyboard + key presses (VialRGB ids, 0 = none), key-press colour.
+        await send([0xf6, 0x14, l.base, l.react, l.rxHue, l.rxSat, 0]);
+        Object.assign(s, { base: l.base, react: l.react, rxHue: l.rxHue, rxSat: l.rxSat });
+        continue;
+      }
+      if (["hue", "sat", "val", "speed"].some((k) => l[k] !== s[k])) {
+        await send([0xf6, 0x15, l.speed, l.hue, l.sat, l.val]);
+        Object.assign(s, { hue: l.hue, sat: l.sat, val: l.val, speed: l.speed });
         continue;
       }
       if (!l.enable && s.enable !== 0) { await send([0xf6, 0x05, 0]); s.enable = 0; continue; }
@@ -623,7 +643,11 @@ async function flushLed() {
 function ledInput() {
   const l = S.led;
   l.enable = $("ledOn").checked ? 1 : 0;
-  l.mode = +$("ledMode").value; l.hue = +$("ledHue").value; l.sat = +$("ledSat").value;
+  l.base = +$("ledBase").value; l.react = +$("ledReact").value;
+  if (DATA.ledSolo.includes(l.react)) l.base = 0; // paints every key: can't go over a whole-keyboard effect
+  if (!l.base && !l.react) l.enable = 0;          // nothing chosen = lights off
+  l.rxHue = +$("rxHue").value; l.rxSat = +$("rxSat").value;
+  l.hue = +$("ledHue").value; l.sat = +$("ledSat").value;
   l.val = +$("ledVal").value; l.speed = +$("ledSpeed").value; l.idle = +$("ledIdle").value;
   l.zone = +$("ledZone").value; l.ugHue = +$("ugHue").value; l.ugSat = +$("ugSat").value;
   l.dirty = 1;
@@ -637,8 +661,9 @@ async function ledSave() {
     if (d[0] === 0xff) throw new Error("refused");
     await cmd([0xf6, 0x01, S.led.idle]);
     await cmd([0xf6, 0x07]);
+    await cmd([0xf6, 0x14, S.led.base, S.led.react, S.led.rxHue, S.led.rxSat, 1]);
     await hidLoadLed();
-    toast("Underglow saved");
+    toast("Lighting saved");
   } catch (e) { toast("Not saved: " + e.message, true); }
   render();
 }
@@ -648,13 +673,29 @@ async function ledRevert() {
   render();
 }
 function buildLedSelects() {
-  const sel = $("ledMode"); sel.innerHTML = "";
-  for (const id of S.effects) if (id) sel.add(new Option(DATA.ledEffects[id] || "Effect " + id, id));
+  const name = (id) => DATA.ledEffects[id] || "Effect " + id;
+  const isKey = (id) => DATA.ledReact.includes(id) || DATA.ledSolo.includes(id);
+  const base = $("ledBase"), react = $("ledReact");
+  base.innerHTML = ""; react.innerHTML = "";
+  base.add(new Option("Off (dark)", 0));
+  react.add(new Option("None", 0));
+  for (const id of S.effects) {
+    if (!id || id === DATA.ledLayeredId || id === DATA.ledDirectId) continue; // Direct: Vial's computer-controlled mode
+    if (isKey(id)) react.add(new Option(name(id) + (DATA.ledSolo.includes(id) ? " (whole keyboard)" : ""), id));
+    else base.add(new Option(name(id), id));
+  }
   $("ledZone").innerHTML = DATA.ledZones.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledIdle").innerHTML = DATA.ledIdle.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledVal").max = S.ledInfo.max;
 }
-["ledOn", "ledMode", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat"].forEach((id) => $(id).addEventListener("input", ledInput));
+["ledOn", "ledBase", "ledReact", "rxHue", "rxSat", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat"].forEach((id) => $(id).addEventListener("input", ledInput));
+// Mouse wiggler (Trackpad tab): applies at once, not saved.
+async function wgInput() {
+  try { readStatus(await cmd([0xf6, 0x16, $("wgOn").checked ? 1 : 0, +$("wgEvery").value])); toast($("wgOn").checked ? "Mouse wiggler on" : "Mouse wiggler off"); }
+  catch (e) { toast("Failed: " + e.message, true); }
+  render();
+}
+["wgOn", "wgEvery"].forEach((id) => $(id).addEventListener("input", wgInput));
 $("ledSave").addEventListener("click", ledSave);
 $("ledRevert").addEventListener("click", ledRevert);
 
@@ -1318,7 +1359,17 @@ function renderLeds(ui) {
   if (!l) { $("ledRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
   if (hid) {
     $("ledOn").checked = !!l.enable;
-    setIfIdle("ledMode", l.mode); setIfIdle("ledHue", l.hue); setIfIdle("ledSat", l.sat); setIfIdle("ledVal", l.val);
+    setIfIdle("ledBase", l.base); setIfIdle("ledReact", l.react); setIfIdle("rxHue", l.rxHue); setIfIdle("rxSat", l.rxSat);
+    const both = !!(l.base && l.react);
+    document.querySelectorAll(".rxRow").forEach((r) => r.classList.toggle("hidden", !both));
+    $("ledBase").disabled = DATA.ledSolo.includes(l.react);
+    $("rxHueV").textContent = Math.round(l.rxHue / 256 * 360) + "°";
+    $("rxSwatch").style.background = hsvToCss(l.rxHue, l.rxSat, 255);
+    $("rxSatV").textContent = Math.round(l.rxSat / 255 * 100) + "%";
+    $("ledLayerNote").textContent = both ? "Key presses light up in the key-press colour and fade back into the whole-keyboard effect. Hue / saturation below colour the whole keyboard."
+      : DATA.ledSolo.includes(l.react) ? "This one lights the whole keyboard by itself, so it can't be combined."
+      : !l.base && !l.react ? "Nothing chosen: the lights are off." : "";
+    setIfIdle("ledHue", l.hue); setIfIdle("ledSat", l.sat); setIfIdle("ledVal", l.val);
     setIfIdle("ledSpeed", l.speed); setIfIdle("ledIdle", l.idle);
     $("ledHueV").textContent = Math.round(l.hue / 256 * 360) + "°";
     $("ledSwatch").style.background = hsvToCss(l.hue, l.sat, 255);
@@ -1355,9 +1406,11 @@ function renderPad(ui) {
   $("tpUnsaved").classList.toggle("show", !!(t && t.dirty));
   $("tpRows").classList.toggle("hidden", hid);
   $("tpCtl").classList.toggle("hidden", !hid);
+  $("wgCtl").classList.toggle("hidden", !hid);
   if (!t) { $("tpRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
   if (hid) {
     $("tpOn").checked = !!t.enable;
+    if (S.wiggle) { $("wgOn").checked = S.wiggle.on; setIfIdle("wgEvery", S.wiggle.every); }
     setIfIdle("tpThr", t.threshold); setIfIdle("tpRel", t.release);
     $("tpThrV").textContent = t.threshold; $("tpRelV").textContent = t.release;
   } else {

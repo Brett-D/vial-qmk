@@ -56,7 +56,7 @@ PICKER = [
                 "KC_KP_ENTER"] + [f"KC_KP_{i}" for i in range(1, 10)] + ["KC_KP_0", "KC_KP_DOT", "KC_KP_EQUAL"]),
     ("Lighting", ["RM_TOGG", "RM_NEXT", "RM_PREV", "RM_HUEU", "RM_HUED", "RM_SATU", "RM_SATD",
                   "RM_VALU", "RM_VALD", "RM_SPDU", "RM_SPDD"]),
-    ("Special", ["CONFIG_MODE", "OLED_PAGE", "CYCLE", "DRAG_SCROLL", "CW_TOGG", "QK_BOOT"]),
+    ("Special", ["CONFIG_MODE", "OLED_PAGE", "WIGGLE", "CYCLE", "DRAG_SCROLL", "CW_TOGG", "QK_BOOT"]),
 ]
 
 # Short labels for the page (anything missing falls back to the QMK name).
@@ -83,7 +83,7 @@ LABELS = {
     "RM_TOGG": "RGB on/off", "RM_NEXT": "RGB mode+", "RM_PREV": "RGB mode-", "RM_HUEU": "Hue+",
     "RM_HUED": "Hue-", "RM_SATU": "Sat+", "RM_SATD": "Sat-", "RM_VALU": "Bright+", "RM_VALD": "Bright-",
     "RM_SPDU": "Speed+", "RM_SPDD": "Speed-", "CW_TOGG": "CapsWord", "QK_BOOT": "Bootloader",
-    "CONFIG_MODE": "Config mode", "OLED_PAGE": "OLED page", "CYCLE": "Cycle base", "DRAG_SCROLL": "Drag scroll",
+    "CONFIG_MODE": "Config mode", "OLED_PAGE": "OLED page", "WIGGLE": "Mouse wiggle", "CYCLE": "Cycle base", "DRAG_SCROLL": "Drag scroll",
 }
 for i in range(10):
     LABELS[f"KC_KP_{i}"] = f"P{i}"
@@ -106,12 +106,27 @@ EFFECT_NAMES = {
 }
 
 
-def parse_vialrgb_effects():
-    """VialRGB effect id -> name, from quantum/vialrgb_effects.inc."""
+# Key-press effects (led_layers.c): REACT ones can go over a whole-keyboard
+# effect, SOLO ones paint every key themselves. Everything else is a
+# whole-keyboard effect.
+REACT_EFFECTS = ["SOLID_REACTIVE_SIMPLE", "SOLID_REACTIVE_WIDE", "SOLID_REACTIVE_MULTIWIDE", "SOLID_REACTIVE_CROSS",
+                 "SOLID_REACTIVE_MULTICROSS", "SOLID_REACTIVE_NEXUS", "SOLID_REACTIVE_MULTINEXUS", "SPLASH",
+                 "MULTISPLASH", "SOLID_SPLASH", "SOLID_MULTISPLASH"]
+SOLO_EFFECTS = ["SOLID_REACTIVE", "TYPING_HEATMAP"]
+LAYERED_ID = 0xFE  # LED_LAYERS_VIALRGB_ID (led_layers.h)
+
+
+def vialrgb_effect_enum():
     text = (QMK_ROOT / "quantum" / "vialrgb_effects.inc").read_text(encoding="utf-8")
     body = text[text.index("enum {"):text.index("};")]
-    names = re.findall(r"VIALRGB_EFFECT_([A-Z0-9_]+)", body)
-    return [EFFECT_NAMES.get(n, n.replace("_", " ").capitalize()) for n in names]
+    return re.findall(r"VIALRGB_EFFECT_([A-Z0-9_]+)", body)
+
+
+def parse_vialrgb_effects():
+    """VialRGB effect id -> name, from quantum/vialrgb_effects.inc."""
+    names = {i: EFFECT_NAMES.get(n, n.replace("_", " ").capitalize()) for i, n in enumerate(vialrgb_effect_enum())}
+    names[LAYERED_ID] = "Whole keyboard + key presses"
+    return names
 
 LED_IDLE_LABELS = ["Never", "1 min", "2 min", "5 min", "10 min", "30 min"]
 
@@ -138,7 +153,7 @@ def main():
     kc = parse_keycodes()
     vial = json.loads((KEYMAP_DIR / "vial.json").read_text(encoding="utf-8"))
     custom = vial.get("customKeycodes", [])
-    c_custom_names = ["CYCLE", "DRAG_SCROLL", "CONFIG_MODE", "OLED_PAGE"]
+    c_custom_names = ["CYCLE", "DRAG_SCROLL", "CONFIG_MODE", "OLED_PAGE", "WIGGLE"]
     for i, name in enumerate(c_custom_names):
         kc[name] = kc["QK_KB_0"] + i if "QK_KB_0" in kc else 0x7E00 + i
 
@@ -230,6 +245,10 @@ def main():
         "layout": layout,
         "layerNames": LAYER_NAMES,
         "ledEffects": parse_vialrgb_effects(),
+        "ledReact": [vialrgb_effect_enum().index(n) for n in REACT_EFFECTS],
+        "ledSolo": [vialrgb_effect_enum().index(n) for n in SOLO_EFFECTS],
+        "ledLayeredId": LAYERED_ID,
+        "ledDirectId": vialrgb_effect_enum().index("DIRECT"),
         "ledZones": ["Effect on keys + underglow", "Effect on keys, solid underglow", "Keys only (underglow off)"],
         "ledIdle": LED_IDLE_LABELS,
         "ranges": {k: kc[k] for k in ["QK_MODS", "QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO",

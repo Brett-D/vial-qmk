@@ -36,6 +36,7 @@
 #include "bridge.h"
 #include "config_picker.h"
 #include "led_cal.h"
+#include "led_layers.h"
 #include "led_map.h"
 #include "dynamic_keymap.h"
 #include "keymap_introspection.h"
@@ -68,7 +69,9 @@
 //                            effect (VialRGB id), zone, underglow hue, underglow sat,
 //                            calibration state (led_cal.h), map flags (1 measured, 2 last commit ok),
 //                            capture seq, row, col, flags, right half map (0 ?, 1 same, 2 differs),
-//                            knob nav (CMD_NAV only): turns (int8), presses, long presses, nav on]
+//                            knob nav (CMD_NAV only): turns (int8), presses, long presses, nav on,
+//                            layers: base effect, key-press effect (VialRGB ids), key-press hue, sat,
+//                            wiggler (bit 0 on, bits 1-2 interval)]
 #define CFG_RAW_HID_ID 0xF6
 enum cfg_hid_cmd {
     CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
@@ -87,6 +90,9 @@ enum cfg_hid_cmd {
     CMD_MAP_RESET   = 0x0D, // back to the built-in map
     CMD_CAL_TEST    = 0x0E, // light the mapped LED of each pressed key (ends with CMD_CAL_END)
     CMD_NAV         = 0x12, // arg 1: page focused, the right knob drives it (events returned + cleared); 0: release it
+    CMD_LAYERS      = 0x14, // whole-keyboard effect, key-press effect (VialRGB ids, 0 = none), key-press hue, sat, save
+    CMD_LOOK        = 0x15, // speed, hue, sat, val (preview; saved by VIA lighting save)
+    CMD_WIGGLE      = 0x16, // mouse wiggler: on, interval index (not saved)
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -208,6 +214,7 @@ typedef struct {
     uint8_t zone, ug_hue, ug_sat; // LED zones, for the right half's LEDs
     uint8_t cal;                  // LED calibration / test state (led_cal.h)
     uint8_t nav;                  // right knob drives the page
+    uint8_t lay_base, lay_react, lay_hue, lay_sat; // layered lighting (led_layers.c)
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -298,9 +305,22 @@ typedef struct {
 #    define LED_MODE_COUNT (RGB_MATRIX_EFFECT_MAX - 1)
 
 static uint8_t led_effect_of(uint8_t mode) {
+    if (mode == led_layers_mode()) {
+        return LED_LAYERS_VIALRGB_ID;
+    }
     for (uint8_t i = 0; i < sizeof(supported_modes) / sizeof(supported_modes[0]); i++) {
         if (pgm_read_word(&supported_modes[i].qmk_id) == mode) {
             return pgm_read_word(&supported_modes[i].vialrgb_id);
+        }
+    }
+    return 0;
+}
+
+// VialRGB id -> rgb_matrix mode (0 = none / unknown).
+static uint8_t led_mode_of(uint8_t id) {
+    for (uint8_t i = 0; id && i < sizeof(supported_modes) / sizeof(supported_modes[0]); i++) {
+        if (pgm_read_word(&supported_modes[i].vialrgb_id) == id) {
+            return pgm_read_word(&supported_modes[i].qmk_id);
         }
     }
     return 0;
@@ -659,6 +679,7 @@ static void cfg_raw_hid(uint8_t *data) {
             return;
         case CMD_LED_REVERT:
             if (hid_writes_allowed()) {
+                led_layers_revert();
                 rgb_matrix_reload_from_eeprom();
                 zones_load();
                 zones_apply_flags(zones.zone);
@@ -670,6 +691,20 @@ static void cfg_raw_hid(uint8_t *data) {
                 zones.hue  = data[3];
                 zones.sat  = data[4];
                 zones_apply_flags(zones.zone);
+            }
+            break;
+        case CMD_LAYERS: {
+            uint8_t base = led_mode_of(data[2]), react = led_mode_of(data[3]);
+            bool    ok   = hid_writes_allowed() && (base || !data[2]) && (react || !data[3]) && led_layers_apply(base, react, data[4], data[5]);
+            if (ok && data[6]) {
+                led_layers_save();
+            }
+            break;
+        }
+        case CMD_LOOK:
+            if (hid_writes_allowed()) {
+                rgb_matrix_set_speed_noeeprom(data[2]);
+                rgb_matrix_sethsv_noeeprom(data[3], data[4], data[5]);
             }
             break;
         case CMD_SAVE_ZONE:
@@ -722,6 +757,11 @@ static void cfg_raw_hid(uint8_t *data) {
                 config_mode_exit();
             }
             break;
+        case CMD_WIGGLE:
+            if (hid_writes_allowed()) {
+                wiggler_set(data[2], data[3]);
+            }
+            break;
         case CMD_NAV:
             if (hid.state == HS_ACTIVE) {
                 hid.time = timer_read32();
@@ -754,6 +794,17 @@ static void cfg_raw_hid(uint8_t *data) {
 #endif
     data[9]  = vial_unlocked ? 1 : 0;
     data[10] = (ask_left + 999) / 1000;
+#ifdef RGB_MATRIX_ENABLE
+    {
+        uint8_t base, react, hue, sat;
+        led_layers_get(&base, &react, &hue, &sat);
+        data[26] = led_effect_of(base);
+        data[27] = led_effect_of(react);
+        data[28] = hue;
+        data[29] = sat;
+    }
+#endif
+    data[30] = (wiggler_on() ? 1 : 0) | wiggler_interval() << 1;
     if (data[1] == CMD_NAV) {
         data[22]    = (uint8_t)nav.turns;
         data[23]    = nav.presses;
@@ -1272,6 +1323,9 @@ uint8_t bridge_next_frame(uint8_t *buf) {
 static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_len, void *out_data) {
     if (in_len == sizeof(oled_state)) {
         memcpy(&oled_state, in_data, sizeof(oled_state));
+#ifdef RGB_MATRIX_ENABLE
+        led_layers_set_remote(oled_state.lay_base, oled_state.lay_react, oled_state.lay_hue, oled_state.lay_sat);
+#endif
     }
 }
 
@@ -1279,8 +1333,12 @@ static void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
     cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat, led_cal_code(), nav.on};
+#ifdef RGB_MATRIX_ENABLE
+    led_layers_get(&now.lay_base, &now.lay_react, &now.lay_hue, &now.lay_sat);
+#endif
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal;
-    bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || (active && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
+    // Resent now and then even when idle: the right half may have restarted.
+    bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || timer_elapsed(last_time) > (active ? CONFIG_MODE_OLED_SYNC_MS : 5000);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
         last_sent = now;
         last_time = timer_read();

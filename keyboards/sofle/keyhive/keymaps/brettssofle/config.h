@@ -126,8 +126,12 @@
 #    define RGB_MATRIX_MAXIMUM_BRIGHTNESS 100 // power cap, as keyhive's rgblight max_brightness
 // Each half drives only its own 37 LEDs; see rgb_driver.c.
 // EEPROM keyboard datablock (unused by the sofle code): the measured LED map
-// (led_map.c). EECONFIG_USER keeps the 32-bit settings word.
-#    define EECONFIG_KB_DATA_SIZE 80
+// (0-75, led_map.c), the OLED page (78-79, oled_pages.c) and the layered
+// lighting choice (80-85, led_layers.c). EECONFIG_USER keeps the 32-bit
+// settings word. The version stays at the first size (80) so data saved by
+// earlier builds stays valid; new parts carry their own magic.
+#    define EECONFIG_KB_DATA_SIZE 88
+#    define EECONFIG_KB_DATA_VERSION 80
 #    define WS2812_LED_COUNT 37
 #    define RGB_MATRIX_KEYPRESSES // reactive / splash effects
 #    define RGB_MATRIX_FRAMEBUFFER_EFFECTS

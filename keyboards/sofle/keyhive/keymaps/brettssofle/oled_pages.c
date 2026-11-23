@@ -8,6 +8,7 @@
 // only: the 128x32 screen is too small for settings.
 
 #include "brettssofle.h"
+#include "led_layers.h"
 #include "led_map.h"
 #include "transactions.h"
 #include "version.h"
@@ -24,7 +25,8 @@ enum { TPF_TOUCHING = 1, TPF_PRESSED = 2, TPF_CLICK_ON = 4 };
 typedef struct {
     uint8_t page;
     uint8_t tp_z, tp_peak, tp_last, tp_flags, tp_thr, tp_rel;
-    uint8_t led_on, led_mode, led_val, led_zone;
+    uint8_t led_on, led_mode, led_val, led_zone, led_base, led_react;
+    uint8_t wiggle; // mouse wiggler on (shown on every page)
 } view_t;
 
 static view_t view; // master: what it sent; right half: what it shows
@@ -58,7 +60,7 @@ void oled_pages_task(void) {
     if (!is_keyboard_master()) {
         return;
     }
-    view_t now = {.page = view.page};
+    view_t now = {.page = view.page, .wiggle = wiggler_on()};
 #ifdef POINTING_DEVICE_ENABLE
     if (now.page == OLED_PAGE_TRACKPAD) {
         const trackpad_z_t *z = trackpad_z_get();
@@ -77,6 +79,9 @@ void oled_pages_task(void) {
         now.led_mode = rgb_matrix_get_mode();
         now.led_val  = rgb_matrix_get_val();
         user_config_get_led_zone(&now.led_zone, &hue, &sat);
+        if (now.led_mode == led_layers_mode()) {
+            led_layers_get(&now.led_base, &now.led_react, &hue, &sat);
+        }
     }
 #endif
     uint16_t elapsed = timer_elapsed(sent_time);
@@ -243,10 +248,17 @@ static void page_leds(void) {
         oled_write_P(PSTR(" off "), false);
         return;
     }
-    oled_write(effect_name(view.led_mode), false);
-    oled_write_P(PSTR("     Zone "), false);
+    if (view.led_mode == led_layers_mode()) {
+        oled_write(view.led_base ? effect_name(view.led_base) : "Dark      ", false);
+        oled_write_P(PSTR("  +  "), false);
+        oled_write(effect_name(view.led_react), false);
+    } else {
+        oled_write(effect_name(view.led_mode), false);
+        oled_write_P(PSTR("     "), false);
+    }
+    oled_write_P(PSTR("Zone "), false);
     oled_write(zones[view.led_zone < 3 ? view.led_zone : 0], false);
-    oled_write_P(PSTR("     Brt  "), false);
+    oled_write_P(PSTR("Brt  "), false);
     write_num(view.led_val, false);
     write_bar(view.led_val, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
 }
@@ -264,7 +276,17 @@ static void page_info(void) {
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
     oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR("  v5 "), false);
+    oled_write_P(PSTR("  v6 "), false);
+}
+
+// Last line: page number, "W" while the mouse wiggler is on.
+static void footer(uint8_t page) {
+    oled_set_cursor(0, 15);
+    char s[6] = "  1/4";
+    s[0]      = view.wiggle ? 'W' : ' ';
+    s[2]      = '1' + page;
+    s[4]      = '0' + OLED_PAGE_COUNT;
+    oled_write(s, false);
 }
 
 // Right half: draws the selected page; false = page 0 (the caller draws the status).
@@ -288,21 +310,12 @@ bool oled_pages_render(void) {
         default:
             return false;
     }
-    // Page number on the last line.
-    oled_set_cursor(0, 15);
-    char s[6] = "  1/4";
-    s[2]      = '1' + view.page;
-    s[4]      = '0' + OLED_PAGE_COUNT;
-    oled_write(s, false);
+    footer(view.page);
     return true;
 }
 
-// The status page reuses the page-number line.
 void oled_pages_status_footer(void) {
-    oled_set_cursor(0, 15);
-    char s[6] = "  1/4";
-    s[4]      = '0' + OLED_PAGE_COUNT;
-    oled_write(s, false);
+    footer(0);
 }
 
 #endif

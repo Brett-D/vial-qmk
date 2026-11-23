@@ -11,6 +11,8 @@ RGB_MATRIX_ENABLE = yes
 VIALRGB_ENABLE = yes
 # rgb_driver.c wraps the WS2812 driver so each half only drives its own LEDs.
 RGB_MATRIX_DRIVER = custom
+# rgb_matrix_user.inc: LAYERED (whole-keyboard + key-press effect, led_layers.c).
+RGB_MATRIX_CUSTOM_USER = yes
 WS2812_DRIVER_REQUIRED = yes
 ENCODER_MAP_ENABLE = yes
 EXTRAKEY_ENABLE = yes
@@ -42,7 +44,7 @@ SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
 # Config mode + keystroke bridge (config_page/sofle-config.html). After
 # editing config_page/gen_config.py or page.html, rerun:
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
-SRC += config_mode.c bridge.c
+SRC += config_mode.c bridge.c wiggler.c
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
-    SRC += rgb_driver.c rgb_layout.c led_map.c led_cal.c
+    SRC += rgb_driver.c rgb_layout.c led_map.c led_cal.c led_layers.c
 endif

@@ -17,6 +17,7 @@
  */
 
 #include "brettssofle.h"
+#include "led_layers.h"
 
 // Default keymap. Everything here can be changed live in Vial.
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -162,6 +163,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 config_mode_toggle();
             }
             return false;
+        case WIGGLE:
+            if (record->event.pressed) {
+                wiggler_toggle();
+            }
+            return false;
         case OLED_PAGE: {
             // On release, and not after a long hold (the hold-both-knobs
             // config combo takes 2 s), so entering config mode keeps the page.
@@ -206,6 +212,9 @@ void keyboard_post_init_user(void) {
     trackpad_z_post_init();
 #endif
     oled_pages_init();
+#ifdef RGB_MATRIX_ENABLE
+    led_layers_init();
+#endif
     config_mode_init();
 }
 
@@ -220,5 +229,6 @@ void housekeeping_task_user(void) {
     trackpad_z_sync_task();
 #endif
     oled_pages_task();
+    wiggler_task();
     config_mode_task();
 }

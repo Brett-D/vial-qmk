@@ -27,6 +27,11 @@
       "name": "OLED\npage",
       "title": "Next page on the right OLED: status, trackpad, LEDs, info",
       "shortName": "OLEDPG"
+    },
+    {
+      "name": "Mouse\nwiggle",
+      "title": "Mouse wiggler on/off: nudges the pointer after a while without input so the computer stays awake",
+      "shortName": "WIGGLE"
     }
   ],
   "layouts": {
