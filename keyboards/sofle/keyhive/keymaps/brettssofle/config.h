@@ -49,8 +49,12 @@
 /* ---------------------------------------------------------------------------
  * I2C (Cirque on the left, OLED on the right; both on GP2 SDA / GP3 SCL)
  * ------------------------------------------------------------------------ */
-// Drop to 100000 if the trackpad ever stops responding (long/noisy wiring).
-#define I2C1_CLOCK_SPEED 400000
+// Left at the 100 kHz default: 400 kHz made the trackpad unreliable on this
+// board, and the resulting I2C timeouts stalled the left half's main loop
+// (choppy cursor + stuttering left-half LEDs).
+// Fail fast on a bad transfer instead of the driver's 20 ms default, so an
+// I2C hiccup can't freeze the left half. A normal read takes ~1 ms.
+#define CIRQUE_PINNACLE_TIMEOUT 5
 
 /* ---------------------------------------------------------------------------
  * Cirque Pinnacle trackpad (23 mm, left half)

@@ -56,7 +56,11 @@ Change these in `config.h` and rebuild:
 | `TRACKPAD_MOVE_THRESHOLD` | 6 | Movement that cancels a tap / long press |
 | `TRACKPAD_DRAG_SCROLL_DIVISOR` | 8 | Higher = slower drag scroll |
 | `AUTO_MOUSE_TIME` | 650 ms | How long the Mouse layer stays on after you stop touching the trackpad |
-| `I2C1_CLOCK_SPEED` | 400000 | Use 100000 if the trackpad is unreliable |
+| `CIRQUE_PINNACLE_TIMEOUT` | 5 ms | Give up on a failed trackpad I2C transfer after this long |
+
+The I2C bus runs at QMK's 100 kHz default. 400 kHz made the trackpad
+unreliable on this board: the timeouts stalled the left half, so the cursor
+went choppy and the left LEDs stuttered.
 
 ## Building
 
@@ -77,6 +81,7 @@ docker run --rm -v "${PWD}:/qmk_firmware" -w /qmk_firmware ghcr.io/qmk/qmk_cli `
 Output: `sofle_keyhive_brettssofle_rp2040_ce.uf2` in the repository root.
 
 For trackpad debug output (`qmk console` / hid_listen), add `TRACKPAD_DEBUG=yes`.
+To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE=no`.
 
 ## Flashing
 

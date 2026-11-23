@@ -12,7 +12,7 @@ EXTRAKEY_ENABLE = yes
 MOUSEKEY_ENABLE = yes
 OLED_ENABLE = yes
 
-POINTING_DEVICE_ENABLE = yes
+POINTING_DEVICE_ENABLE ?= yes
 POINTING_DEVICE_DRIVER = cirque_pinnacle_i2c
 
 # Not used on this board.

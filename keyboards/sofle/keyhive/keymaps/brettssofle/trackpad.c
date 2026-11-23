@@ -16,6 +16,11 @@
 
 #include "brettssofle.h"
 
+#ifndef POINTING_DEVICE_ENABLE
+// Trackpad disabled at build time (e.g. POINTING_DEVICE_ENABLE=no for A/B tests).
+void trackpad_set_drag_scroll(bool enable) {}
+#else
+
 #ifndef TRACKPAD_TAP_TERM
 #    define TRACKPAD_TAP_TERM 200
 #endif
@@ -221,3 +226,5 @@ bool is_mouse_record_user(uint16_t keycode, keyrecord_t *record) {
     // Keep the auto mouse layer active while DRAG_SCROLL is used.
     return keycode == DRAG_SCROLL;
 }
+
+#endif // POINTING_DEVICE_ENABLE
