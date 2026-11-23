@@ -137,6 +137,10 @@ void via_eeprom_set_valid(bool valid);
 void eeconfig_init_via(void);
 void via_init(void);
 
+// Runs before VIA/Vial handle a raw HID command. Return true if handled (the
+// hook then sends the reply with raw_hid_send()).
+bool via_command_kb(uint8_t *data, uint8_t length);
+
 // Used by VIA to store and retrieve the layout options.
 uint32_t via_get_layout_options(void);
 void     via_set_layout_options(uint32_t value);

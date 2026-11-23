@@ -10,53 +10,79 @@
   :root { --bg:#15171c; --panel:#1f232b; --line:#323844; --text:#e6e8ec; --dim:#8a93a3; --acc:#4fa3ff; --ok:#3fcf7f; --warn:#ffb648; --bad:#ff5d6c; --key:#2a2f3a; }
   * { box-sizing: border-box; }
   body { margin:0; font:14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; gap:12px; padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; }
   header h1 { font-size:17px; margin:0; font-weight:600; }
   .pill { padding:2px 10px; border-radius:99px; font-size:12px; font-weight:600; background:var(--line); }
   .pill.ok { background:#1d4630; color:#9ff0c2; } .pill.wait { background:#4a3a17; color:#ffd58f; } .pill.bad { background:#4c1d23; color:#ffb3bb; }
   .spacer { flex:1; } .dim { color:var(--dim); } .small { font-size:12px; }
-  #focusWarn { display:none; background:var(--bad); color:#fff; padding:8px 18px; font-weight:600; }
-  body.blurred #focusWarn { display:block; }
-  main { padding:16px 18px; display:grid; grid-template-columns: minmax(0,1fr) 330px; gap:16px; }
+  button { font:inherit; color:var(--text); background:var(--key); border:1px solid var(--line); border-radius:8px; padding:6px 14px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:var(--acc); color:#06121f; border-color:var(--acc); font-weight:700; }
+  button.big { font-size:17px; padding:10px 26px; }
+  button:disabled { opacity:.5; cursor:default; }
+  input[type=text], select { font:inherit; color:var(--text); background:#11141a; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .banner { padding:8px 18px; font-weight:600; }
+  #focusWarn { display:none; background:var(--bad); color:#fff; }
+  body.blurred.bridgeish #focusWarn { display:block; }
+  main { padding:16px 18px; display:grid; grid-template-columns: minmax(0,1fr) 340px; gap:16px; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .panel + .panel { margin-top:14px; }
   .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; }
-  #connect ol { margin:6px 0 0 20px; padding:0; } #connect li { margin:6px 0; }
-  .code { font:700 44px/1 ui-monospace, Consolas, monospace; letter-spacing:.3em; color:var(--acc); margin:12px 0; }
+  ol { margin:6px 0 0 20px; padding:0; } li { margin:6px 0; }
+  .code { font:700 56px/1 ui-monospace, Consolas, monospace; color:var(--acc); margin:12px 0; }
   kbd { background:var(--key); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:12px; }
+  .err { color:#ffb3bb; background:#3a1a1f; border:1px solid #6b2a33; border-radius:8px; padding:10px 12px; margin-top:10px; white-space:pre-line; }
+  .err pre { white-space:pre-wrap; background:#11141a; padding:8px; border-radius:6px; color:var(--text); font-size:12px; }
+  .note { color:#ffd58f; background:#3a3017; border:1px solid #6b5a2a; border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; }
+  .info { color:#bcd8ff; background:#17283c; border:1px solid #2a4a6b; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
   .tabs { display:flex; gap:6px; margin-bottom:12px; }
   .tab { padding:6px 14px; border-radius:8px; background:var(--key); color:var(--dim); font-weight:600; }
   .tab.on { background:var(--acc); color:#06121f; }
+  body.hid .tab, body.hid .layer, body.hid .k, body.hid .slot, body.hid .cat { cursor:pointer; }
+  body.hid .tab:not(.on):hover, body.hid .k:hover, body.hid .slot:hover { outline:1px solid var(--acc); }
   .layers { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
   .layer { padding:3px 10px; border-radius:6px; background:var(--key); color:var(--dim); font-size:12px; }
   .layer.on { outline:2px solid var(--acc); color:var(--text); }
   #kb { position:relative; height:330px; }
-  .k { position:absolute; border-radius:6px; background:var(--key); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; padding:2px; overflow:hidden; word-break:break-word; }
+  .k { position:absolute; border-radius:6px; background:var(--key); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; padding:2px; overflow:hidden; word-break:break-word; user-select:none; }
   .k.trns { color:var(--dim); } .k.none { opacity:.45; }
-  .k.sel { outline:3px solid var(--acc); z-index:1; } .k.held { background:#203a5a; }
+  .k.sel { outline:3px solid var(--acc) !important; z-index:1; } .k.held { background:#203a5a; }
   .k.knob { border-radius:50%; background:#262b35; font-size:10px; flex-direction:column; }
-  .k.knob.sel { outline:3px solid var(--acc); }
   .k .new { color:var(--warn); font-weight:700; }
   .knobs { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px; }
   .knobbox { background:var(--key); border-radius:8px; padding:8px 10px; }
   .slot { display:flex; justify-content:space-between; padding:3px 6px; border-radius:5px; }
   .slot.on { outline:2px solid var(--acc); }
-  #picker .cats { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
-  #picker .cat { font-size:11px; padding:1px 7px; border-radius:5px; background:var(--key); color:var(--dim); }
-  #picker .cat.on { background:var(--acc); color:#06121f; }
-  #picker .list div { padding:3px 8px; border-radius:5px; font-family: ui-monospace, Consolas, monospace; }
-  #picker .list div.on { background:var(--acc); color:#06121f; font-weight:700; }
+  .cats { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0; }
+  .cat { font-size:11px; padding:1px 7px; border-radius:5px; background:var(--key); color:var(--dim); }
+  .cat.on { background:var(--acc); color:#06121f; }
+  .list div { padding:3px 8px; border-radius:5px; font-family: ui-monospace, Consolas, monospace; }
+  .list div.on { background:var(--acc); color:#06121f; font-weight:700; }
+  #hidList { max-height:380px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
+  #hidList .item { display:flex; justify-content:space-between; gap:8px; cursor:pointer; padding:4px 8px; border-radius:5px; }
+  #hidList .item:hover { background:#203a5a; }
+  #hidList .item.cur { background:var(--acc); color:#06121f; font-weight:700; }
+  #hidList .hdr { color:var(--dim); font-size:11px; text-transform:uppercase; padding:6px 8px 2px; }
   .big { font-size:22px; font-weight:700; } .arrow { color:var(--dim); margin:0 6px; }
   .rows .row { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-radius:6px; }
   .rows .row.on { outline:2px solid var(--acc); background:#1c2a3d; }
+  .ctl .row { display:grid; grid-template-columns: 170px 1fr 70px; gap:12px; align-items:center; padding:7px 4px; }
+  .ctl .row .v { text-align:right; font-family:ui-monospace,monospace; }
+  .btns { display:flex; gap:8px; margin-top:10px; align-items:center; }
   .swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
   .badge { font-size:11px; padding:1px 8px; border-radius:99px; background:#4a3a17; color:#ffd58f; display:none; }
   .badge.show { display:inline-block; }
   canvas { width:100%; background:#11141a; border-radius:8px; display:block; }
-  .help dt { font-weight:600; margin-top:6px; } .help dd { margin:0 0 0 0; color:var(--dim); }
+  .help dt { font-weight:600; margin-top:6px; } .help dd { margin:0; color:var(--dim); }
   details { margin-top:16px; } pre { white-space:pre-wrap; font-size:11px; color:var(--dim); max-height:240px; overflow:auto; }
   .hidden { display:none !important; }
   .peaks span { display:inline-block; margin:2px; padding:1px 6px; border-radius:5px; background:var(--key); font-family:ui-monospace,monospace; }
   .peaks span.click { background:#1d4630; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1d4630; color:#c9f7dd; padding:8px 16px; border-radius:8px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; z-index:5; }
+  #toast.show { opacity:1; } #toast.bad { background:#4c1d23; color:#ffd0d5; }
+  .adv { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+  .adv .line { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
 </style>
 </head>
 <body>
@@ -65,30 +91,48 @@
   <span id="status" class="pill">Not connected</span>
   <span id="stats" class="dim small"></span>
   <span class="spacer"></span>
-  <span class="dim small">Works offline. Nothing is sent to the keyboard by this page.</span>
+  <button id="disconnectBtn" class="hidden">Disconnect</button>
+  <span class="dim small">Works offline from this file.</span>
 </header>
-<div id="focusWarn">This page isn't focused. Click here before using the keyboard, or its messages will be typed into another window.</div>
+<div id="focusWarn" class="banner">This page isn't focused. Click here first, or the keyboard's messages will be typed into another window.</div>
 <main>
   <section>
-    <div id="connect" class="panel">
-      <h2>Connect</h2>
-      <div id="connectSteps">
-        <ol>
-          <li>Turn on config mode: <kbd>Raise</kbd> + the top-right key (<b>Config</b>), or hold the <b>right</b> knob button, then the <b>left</b> one, for 2 seconds. The right screen shows <b>CONFG</b>.</li>
-          <li>Click this page so it has focus.</li>
-          <li>Press <kbd>Space</kbd> on the keyboard.</li>
-        </ol>
+    <div id="connect">
+      <div class="panel" id="hidConnect">
+        <h2>Connect</h2>
+        <div id="hidYes">
+          <button id="connectBtn" class="primary big">Connect</button>
+          <p>Click <b>Connect</b>, choose <b>Sofle</b> in the browser's list, then confirm on the keyboard: its screen shows <b>CONF?</b> — press the <b>right knob</b> (or <kbd>Enter</kbd>).</p>
+          <p class="small dim">Close Vial/VIA first; only one app can use the keyboard's config channel at a time.</p>
+        </div>
+        <div id="hidNo" class="hidden">
+          <p>This browser can't connect to the keyboard directly (no WebHID, e.g. Firefox or Safari). Use <b>keyboard-only mode</b> below, or open this file in Chrome or Edge to use the mouse.</p>
+        </div>
+        <div id="hidWait" class="info hidden"></div>
+        <div id="hidErr" class="err hidden"></div>
       </div>
-      <div id="challenge" class="hidden">
-        Type these letters on the keyboard:
-        <div class="code" id="code"></div>
-        <span class="dim small">This proves the page is receiving. Press <kbd>Space</kbd> to get new letters.</span>
+      <div class="panel" id="bridgeConnect">
+        <h2>Keyboard-only mode <span class="dim small">(any browser — controlled with the keyboard's keys and knobs)</span></h2>
+        <div id="connectSteps">
+          <ol>
+            <li>Click this page so it has focus.</li>
+            <li>Press <kbd>Raise</kbd> + the top-right key (<b>Config</b>), or hold both knob buttons for 2 s. The screen shows <b>CONF?</b></li>
+            <li>Press the <b>right knob</b> (or <kbd>Space</kbd> / <kbd>Enter</kbd>).</li>
+            <li>Press the letter that appears here.</li>
+          </ol>
+        </div>
+        <div id="challenge" class="hidden">
+          Press this letter on the keyboard:
+          <div class="code" id="code"></div>
+          <span class="dim small">This proves the keyboard is typing into this page. <kbd>Space</kbd> gets a new letter.</span>
+        </div>
+        <div id="closed" class="hidden">Keyboard-only mode is off. Saved changes stay on the keyboard.</div>
+        <div id="mismatch" class="hidden err">This page and the keyboard firmware come from different builds; keycode picking may be wrong. Use the sofle-config.html from the same build.</div>
       </div>
-      <div id="closed" class="hidden">Config mode is off. Your saved changes stay on the keyboard. Turn it on again to reconnect.</div>
-      <div id="mismatch" class="hidden" style="color:var(--bad);margin-top:8px">This page and the keyboard firmware come from different builds; keycode picking may be wrong. Use the sofle-config.html from the same build.</div>
     </div>
 
     <div id="editor" class="hidden">
+      <div id="modeNote"></div>
       <div class="tabs" id="tabs"></div>
       <div id="keysView" class="panel">
         <div class="layers" id="layers"></div>
@@ -96,12 +140,28 @@
         <div class="knobs" id="knobs"></div>
       </div>
       <div id="ledView" class="panel hidden">
-        <h2>Underglow <span id="ledUnsaved" class="badge">unsaved — right knob press to save</span></h2>
+        <h2>Underglow <span id="ledUnsaved" class="badge">unsaved</span></h2>
         <div class="rows" id="ledRows"></div>
+        <div class="ctl hidden" id="ledCtl">
+          <div class="row"><span>Lights</span><label><input type="checkbox" id="ledOn"> on</label><span></span></div>
+          <div class="row"><span>Effect</span><select id="ledMode"></select><span></span></div>
+          <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
+          <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
+          <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
+          <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="3"><span class="v" id="ledSpeedV"></span></div>
+          <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
+          <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
+        </div>
       </div>
       <div id="padView" class="panel hidden">
-        <h2>Trackpad press-to-click <span id="tpUnsaved" class="badge">unsaved — right knob press to save</span></h2>
+        <h2>Trackpad press-to-click <span id="tpUnsaved" class="badge">unsaved</span></h2>
         <div class="rows" id="tpRows"></div>
+        <div class="ctl hidden" id="tpCtl">
+          <div class="row"><span>Press-to-click</span><label><input type="checkbox" id="tpOn"> on</label><span></span></div>
+          <div class="row"><span>Threshold (press)</span><input type="range" id="tpThr" min="1" max="63"><span class="v" id="tpThrV"></span></div>
+          <div class="row"><span>Release Z</span><input type="range" id="tpRel" min="0" max="62"><span class="v" id="tpRelV"></span></div>
+          <div class="btns"><button id="tpSave" class="primary">Save</button><button id="tpRevert">Undo changes</button></div>
+        </div>
         <h2 style="margin-top:14px">Live Z</h2>
         <canvas id="zbar" width="600" height="70"></canvas>
         <canvas id="zhist" width="600" height="140" style="margin-top:8px"></canvas>
@@ -115,22 +175,44 @@
   <aside>
     <div id="picker" class="panel hidden">
       <h2 id="pickTitle">Keycode</h2>
-      <div><span id="curName" class="big"></span><span class="arrow">→</span><span id="newName" class="big" style="color:var(--warn)"></span></div>
-      <div class="small dim" id="pickHint" style="margin:4px 0 10px"></div>
-      <div class="cats" id="cats"></div>
-      <div class="list" id="list"></div>
+      <div><span id="curName" class="big"></span><span id="pickArrow" class="arrow">→</span><span id="newName" class="big" style="color:var(--warn)"></span></div>
+      <div class="small dim" id="pickHint" style="margin:4px 0 6px"></div>
+      <div id="pickBridge">
+        <div class="cats" id="cats"></div>
+        <div class="list" id="list"></div>
+      </div>
+      <div id="pickHid" class="hidden">
+        <input type="text" id="search" placeholder="Search keycodes (e.g. vol, F5, mouse, MO)" style="width:100%">
+        <div class="cats" id="hidCats"></div>
+        <div id="hidList"></div>
+        <div class="adv">
+          <div class="small dim">Hold/tap keys: tap sends the key, hold gives a layer or modifier.</div>
+          <div class="line">
+            <select id="advKind"><option value="lt">Layer-tap: hold for layer</option><option value="mt">Mod-tap: hold for modifier</option><option value="mod">Key + modifier</option></select>
+            <select id="advLayer"></select>
+          </div>
+          <div class="line" id="advMods">
+            <label><input type="checkbox" value="1"> Ctrl</label><label><input type="checkbox" value="2"> Shift</label>
+            <label><input type="checkbox" value="4"> Alt</label><label><input type="checkbox" value="8"> GUI</label>
+            <label><input type="checkbox" value="16"> right-hand</label>
+          </div>
+          <div class="line">tap key <select id="advBase"></select> <button id="advApply">Assign</button></div>
+          <div class="line">or keycode value <input type="text" id="rawKc" placeholder="0x5223" size="8"> <button id="rawApply">Assign</button></div>
+        </div>
+      </div>
     </div>
-    <div class="panel help" style="margin-top:16px">
-      <h2>Controls</h2>
+    <div class="panel help">
+      <h2>How to use</h2>
       <dl id="help"></dl>
-      <p class="small dim">Exit: <kbd>Raise</kbd> + <b>Config</b>, hold both knob buttons 2 s, hold <kbd>Esc</kbd> 2 s, or 5 min without input. Unsaved LED/trackpad changes are dropped on exit.</p>
+      <p class="small dim" id="helpFoot"></p>
     </div>
     <details>
-      <summary class="dim small">Received frames</summary>
+      <summary class="dim small">Log</summary>
       <pre id="log"></pre>
     </details>
   </aside>
 </main>
+<div id="toast"></div>
 
 <script>
 "use strict";
@@ -141,13 +223,16 @@ const TABS = ["Keys", "Knobs", "LEDs", "Trackpad"];
 const CHALLENGE = "ACDEFHJKLMNPRSTUWXY";
 const KNOB_L = [4, 0], KNOB_R = [9, 5];
 const SLOT_NAMES = ["Turn left", "Turn right", "Press"];
+const HS = { NONE:0, ASK:1, ACTIVE:2, DENIED:3, TIMEOUT:4 };
 
+// mode: null (not connected) | "bridge" (keyboard-only) | "hid" (WebHID, mouse)
 const S = {
-  state: "idle", nonce: 0, ready: null, ui: null, keymap: [], enc: [], led: null, tp: null, tpz: null,
-  frames: 0, missed: 0, lastSeq: null, lastFrameAt: 0, zHist: [], peaks: [], wasTouching: false,
+  mode: null, state: "idle", nonce: 0, ready: null, ui: null, keymap: [], enc: [], led: null, tp: null, tpz: null,
+  frames: 0, missed: 0, lastSeq: null, zHist: [], peaks: [], wasTouching: false, modeEffects: [], bridgeOn: false,
 };
+const $ = (id) => document.getElementById(id);
 
-// ---------------------------------------------------------------- decoding
+// ================================================================ keyboard-only mode (bridge)
 const SYM = {};
 "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((c, i) => (SYM["Key" + c] = i));
 for (let d = 2; d <= 7; d++) SYM["Digit" + d] = 24 + d;
@@ -160,7 +245,6 @@ function crc8(bytes) {
   }
   return crc;
 }
-
 function base32ToBytes(symbols) {
   const out = [];
   let acc = 0, bits = 0;
@@ -170,7 +254,6 @@ function base32ToBytes(symbols) {
   }
   return out;
 }
-
 let rx = null;
 function feedCode(code) {
   if (code === "Comma") { rx = []; return true; }
@@ -178,14 +261,15 @@ function feedCode(code) {
   if (code in SYM) { if (rx) { rx.push(SYM[code]); if (rx.length > 120) rx = null; } return true; }
   return false;
 }
-
 document.addEventListener("keydown", (e) => {
+  if (S.mode === "hid" || S.mode === "hidAsk") return;
   if (e.ctrlKey || e.altKey || e.metaKey) return; // the keyboard never sends modifiers
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   if (feedCode(e.code)) e.preventDefault();
 }, true);
 window.addEventListener("blur", () => document.body.classList.add("blurred"));
 window.addEventListener("focus", () => document.body.classList.remove("blurred"));
-document.getElementById("focusWarn").addEventListener("click", () => window.focus());
+$("focusWarn").addEventListener("click", () => window.focus());
 
 function handleSymbols(symbols) {
   const bytes = base32ToBytes(symbols);
@@ -198,14 +282,14 @@ function handleSymbols(symbols) {
   if (type !== F.HELLO && S.lastSeq !== null && seq !== ((S.lastSeq + 1) & 0xff)) S.missed++;
   S.lastSeq = seq;
   S.frames++;
-  S.lastFrameAt = Date.now();
   handleFrame(type, p);
   scheduleRender();
 }
-
 const u16 = (p, i) => p[i] | (p[i + 1] << 8);
 
 function handleFrame(type, p) {
+  if (type === F.HELLO) { S.mode = "bridge"; }
+  if (S.mode !== "bridge") return;
   switch (type) {
     case F.HELLO:
       S.state = "challenge"; S.nonce = u16(p, 1); S.missed = 0;
@@ -223,7 +307,7 @@ function handleFrame(type, p) {
     case F.BYE: S.state = "closed"; log("BYE"); break;
     case F.UI:
       S.ui = { tab: p[0], layer: p[1], row: p[2], col: p[3], pick: (u16(p, 4) << 16) >> 16, pending: u16(p, 6),
-               slot: p[8], ledField: p[9], tpField: p[10], ledDirty: !!(p[11] & 1), tpDirty: !!(p[11] & 2), held: !!(p[11] & 4) };
+               slot: p[8], ledField: p[9], tpField: p[10], held: !!(p[11] & 4) };
       break;
     case F.ROW: {
       if (!S.ready) return;
@@ -239,21 +323,360 @@ function handleFrame(type, p) {
       S.led = { enable: p[0], mode: p[1], effect: p[2], variant: p[3], hue: p[4], sat: p[5], val: p[6], speed: p[7], idle: p[8], max: p[9], dirty: p[10] };
       break;
     case F.TP: S.tp = { enable: p[0], threshold: p[1], release: p[2], dirty: p[3] }; break;
-    case F.TPZ: {
-      const z = { z: p[0], peak: p[1], lastPeak: p[2], touching: p[3], pressed: p[4] };
-      if (S.wasTouching && !z.touching) { S.peaks.unshift(z.lastPeak); S.peaks.length = Math.min(S.peaks.length, 16); }
-      S.wasTouching = !!z.touching;
-      S.tpz = z;
-      S.zHist.push(z.touching ? z.z : 0);
-      if (S.zHist.length > 150) S.zHist.shift();
-      break;
-    }
+    case F.TPZ: addZ({ z: p[0], peak: p[1], lastPeak: p[2], touching: p[3], pressed: p[4] }); break;
     default: log("unknown frame type " + type);
   }
   if (type !== F.TPZ && type !== F.ROW) log(Object.keys(F).find((k) => F[k] === type) + " " + p.join(","));
 }
 
-// ---------------------------------------------------------------- names
+function addZ(z) {
+  if (S.wasTouching && !z.touching) { S.peaks.unshift(z.lastPeak); S.peaks.length = Math.min(S.peaks.length, 16); }
+  S.wasTouching = !!z.touching;
+  S.tpz = z;
+  S.zHist.push(z.touching ? z.z : 0);
+  if (S.zHist.length > 150) S.zHist.shift();
+}
+
+// ================================================================ WebHID mode
+const HID = { dev: null, queue: Promise.resolve(), waiter: null, poll: null, zpoll: null, busy: false };
+const isRaw = (d) => d.vendorId === DATA.usb.vid && d.productId === DATA.usb.pid && d.collections.some((c) => c.usagePage === 0xff60 && c.usage === 0x61);
+const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+
+function onReport(e) {
+  if (!HID.waiter) return;
+  const w = HID.waiter; HID.waiter = null;
+  w.res(new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength));
+}
+// One request at a time; the reply is the next input report.
+function cmd(bytes) {
+  const run = () => new Promise((res, rej) => {
+    if (!HID.dev || !HID.dev.opened) return rej(new Error("not connected"));
+    const buf = new Uint8Array(32); buf.set(bytes);
+    const timer = setTimeout(() => { if (HID.waiter && HID.waiter.res === res) { HID.waiter = null; rej(new Error("timeout")); } }, 1000);
+    HID.waiter = { res: (d) => { clearTimeout(timer); res(d); } };
+    HID.dev.sendReport(0, buf).catch((e) => { clearTimeout(timer); HID.waiter = null; rej(e); });
+  });
+  const r = HID.queue.then(run, run);
+  HID.queue = r.catch(() => {});
+  return r;
+}
+
+function showHidErr(html) { const el = $("hidErr"); el.innerHTML = html; el.classList.toggle("hidden", !html); }
+function showHidWait(html) { const el = $("hidWait"); el.innerHTML = html; el.classList.toggle("hidden", !html); }
+
+const UDEV = `KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="${DATA.usb.vid.toString(16).padStart(4, "0")}", ATTRS{idProduct}=="${DATA.usb.pid.toString(16).padStart(4, "0")}", MODE="0660", TAG+="uaccess"`;
+function openHelp() {
+  let s = "<b>Couldn't open the keyboard.</b>\nIt's probably in use: close Vial / VIA (app or browser tab) and any other page connected to it, then click Connect again.";
+  if (isLinux) s += `\n\n<b>On Linux</b> the browser also needs permission for the keyboard's hidraw device. Once, run:<pre>echo '${UDEV}' | sudo tee /etc/udev/rules.d/59-sofle.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger</pre>then unplug and replug the keyboard. (Or use keyboard-only mode below, which needs no setup.)`;
+  return s;
+}
+
+async function connect() {
+  showHidErr(""); showHidWait("");
+  let dev;
+  try {
+    dev = (await navigator.hid.getDevices()).find(isRaw);
+    if (!dev) {
+      const picked = await navigator.hid.requestDevice({ filters: [{ vendorId: DATA.usb.vid, productId: DATA.usb.pid, usagePage: 0xff60, usage: 0x61 }] });
+      dev = picked.find(isRaw) || picked[0];
+    }
+  } catch (e) {
+    showHidErr(e.name === "SecurityError" || e.name === "NotAllowedError"
+      ? "<b>The browser blocked access to USB devices</b> (permission denied or blocked by policy). Use keyboard-only mode below."
+      : "Couldn't ask for the keyboard: " + escapeHtml(e.message));
+    return;
+  }
+  if (!dev) { showHidErr("No keyboard was chosen. Click <b>Connect</b> and pick <b>Sofle</b> in the list (if it isn't listed, the cable or firmware may be the problem)."); return; }
+  try { if (!dev.opened) await dev.open(); } catch (e) { log("open: " + e.name + " " + e.message); showHidErr(openHelp()); return; }
+  HID.dev = dev;
+  dev.addEventListener("inputreport", onReport);
+  let st;
+  try { st = await cmd([0xf6, 0x00, 0]); } catch (e) {
+    showHidErr("The keyboard didn't answer. Close Vial/VIA and other tabs using it, then try again.");
+    await closeHid(); return;
+  }
+  if (st[0] !== 0xf6) { showHidErr("This keyboard's firmware doesn't support web config yet. Flash the new firmware (sofle_brettssofle_config-v2.uf2 or later)."); await closeHid(); return; }
+  await requestSession();
+}
+
+async function requestSession() {
+  S.mode = "hidAsk"; render();
+  let st = await cmd([0xf6, 0x10]);
+  while (st[3] === HS.ASK) {
+    showHidWait(`<b>Confirm on the keyboard.</b> Its screen shows <b>CONF?</b> — press the <b>right knob</b> (or <kbd>Enter</kbd>). Press the left knob or <kbd>Esc</kbd> to refuse. (${st[10]} s)`);
+    await sleep(300);
+    try { st = await cmd([0xf6, 0x00, 0]); } catch (e) { break; }
+  }
+  showHidWait("");
+  if (st[3] === HS.ACTIVE) { await startHidSession(st); return; }
+  const why = { [HS.DENIED]: "<b>Refused on the keyboard.</b> Click Connect to ask again (wait a few seconds after a refusal).",
+                [HS.TIMEOUT]: "<b>Not confirmed within 30 seconds.</b> Click Connect and press the right knob when the screen shows CONF?." }[st[3]]
+              || "The keyboard didn't confirm. Click Connect to try again.";
+  showHidErr(why);
+  await closeHid();
+}
+
+async function startHidSession(st) {
+  S.mode = "hid"; S.state = "loading";
+  document.body.classList.add("hid");
+  readStatus(st);
+  render();
+  try {
+    await hidLoadAll();
+  } catch (e) { log("load: " + e.message); toast("Lost the keyboard while reading: " + e.message, true); await closeHid(); return; }
+  S.state = "ready";
+  HID.poll = setInterval(pollStatus, 1500);
+  render();
+  toast("Connected — click a key, then a keycode");
+}
+
+function readStatus(st) {
+  S.hidState = st[3]; S.bridgeOn = st[4] !== 0; S.vialUnlocked = !!st[9];
+  S.ledInfo = { idle: st[5], max: st[6], modes: st[7], enabled: st[8] };
+}
+
+async function pollStatus() {
+  if (S.mode !== "hid") return;
+  try {
+    const st = await cmd([0xf6, 0x00, S.ui && S.ui.tab === 2 ? 1 : 0]);
+    readStatus(st);
+    if (st[3] !== HS.ACTIVE) { S.sessionLost = true; }
+    renderNote();
+  } catch (e) { log("poll: " + e.message); }
+}
+
+async function hidLoadAll() {
+  const R = DATA.rows, C = DATA.cols;
+  const layers = (await cmd([0x11]))[1];
+  S.ready = { layers, rows: R, cols: C, encoders: 2, defLayer: null };
+  S.keymap = Array.from({ length: layers }, () => Array.from({ length: R }, () => Array(C).fill(null)));
+  const total = layers * R * C * 2, bytes = [];
+  for (let off = 0; off < total; off += 28) {
+    const n = Math.min(28, total - off);
+    const d = await cmd([0x12, off >> 8, off & 0xff, n]);
+    for (let i = 0; i < n; i++) bytes.push(d[4 + i]);
+  }
+  for (let i = 0; i < total / 2; i++) {
+    const l = Math.floor(i / (R * C)), r = Math.floor((i % (R * C)) / C), c = i % C;
+    S.keymap[l][r][c] = (bytes[i * 2] << 8) | bytes[i * 2 + 1];
+  }
+  S.enc = [];
+  for (let l = 0; l < layers; l++) {
+    S.enc[l] = [];
+    for (let e = 0; e < 2; e++) { const d = await cmd([0xfe, 0x03, l, e]); S.enc[l][e] = [(d[0] << 8) | d[1], (d[2] << 8) | d[3]]; }
+  }
+  S.modeEffects = [];
+  for (let first = 1; first <= S.ledInfo.modes; first += 28) {
+    const d = await cmd([0xf6, 0x02, first]);
+    for (let i = 0; i < 28 && first + i <= d[3]; i++) S.modeEffects[first + i] = d[4 + i];
+  }
+  buildLedSelects();
+  await hidLoadLed();
+  await hidLoadTp();
+  S.ui = { tab: 0, layer: 0, row: 0xff, col: 0xff, slot: -1, pick: -1, pending: null, ledField: -1, tpField: -1 };
+}
+
+async function hidLoadLed() {
+  const st = await cmd([0xf6, 0x00, 1]); readStatus(st);
+  const val = (await cmd([0x08, 0x80]))[2], mode = (await cmd([0x08, 0x81]))[2], speed = (await cmd([0x08, 0x82]))[2];
+  const c = await cmd([0x08, 0x83]);
+  S.led = { enable: S.ledInfo.enabled, mode: mode || 1, hue: c[2], sat: c[3], val, speed, idle: S.ledInfo.idle, max: S.ledInfo.max, dirty: 0 };
+  S.ledSent = { ...S.led };
+}
+async function hidLoadTp() {
+  const d = await cmd([0xf5, 0x00]);
+  S.tp = { enable: d[7], threshold: d[8], release: d[9], dirty: 0 };
+}
+
+async function closeHid() {
+  clearInterval(HID.poll); HID.poll = null; stopZPoll();
+  if (S.mode === "hid" && S.led && S.led.dirty && HID.dev && HID.dev.opened) { try { await cmd([0xf6, 0x04]); } catch (e) { /* gone */ } }
+  const dev = HID.dev; HID.dev = null;
+  if (dev) {
+    try { if (dev.opened) { await sendEnd(dev); await dev.close(); } } catch (e) { /* already gone */ }
+    dev.removeEventListener("inputreport", onReport);
+  }
+  document.body.classList.remove("hid");
+  if (S.mode === "hid" || S.mode === "hidAsk") { S.mode = null; S.state = "idle"; S.ui = null; }
+  render();
+}
+async function sendEnd(dev) {
+  const buf = new Uint8Array(32); buf[0] = 0xf6; buf[1] = 0x11;
+  try { await dev.sendReport(0, buf); } catch (e) { /* ignore */ }
+}
+if (navigator.hid) navigator.hid.addEventListener("disconnect", (e) => {
+  if (e.device === HID.dev) { toast("Keyboard unplugged", true); HID.dev = null; closeHid(); }
+});
+window.addEventListener("pagehide", () => { if (HID.dev && HID.dev.opened) sendEnd(HID.dev); });
+
+// ---------------------------------------------------------------- HID edits
+async function setKey(layer, row, col, kc) {
+  const d = await cmd([0x05, layer, row, col, kc >> 8, kc & 0xff]);
+  if (d[0] === 0xff) throw new Error("refused — confirm the connection on the keyboard again");
+  S.keymap[layer][row][col] = kc;
+}
+async function setEnc(layer, knob, cw, kc) {
+  const d = await cmd([0xfe, 0x04, layer, knob, cw ? 1 : 0, kc >> 8, kc & 0xff]);
+  if (d[0] === 0xff) throw new Error("refused — confirm the connection on the keyboard again");
+  S.enc[layer][knob][cw ? 1 : 0] = kc;
+}
+function targetLabel(ui) {
+  if (ui.tab === 1 && ui.slot >= 0) return `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()}`;
+  return ui.row === 0xff ? null : `Key ${ui.row},${ui.col}`;
+}
+async function assign(kc) {
+  const ui = S.ui;
+  if (!ui || targetLabel(ui) === null) { toast("Click a key or a knob action first", true); return; }
+  try {
+    if (ui.tab === 1 && ui.slot >= 0) {
+      const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
+      if (i === 2) { const [r, c] = knob ? KNOB_R : KNOB_L; await setKey(ui.layer, r, c, kc); }
+      else await setEnc(ui.layer, knob, i === 1, kc);
+    } else {
+      await setKey(ui.layer, ui.row, ui.col, kc);
+    }
+    toast(`${targetLabel(ui)} on layer ${ui.layer} = ${kcName(kc) || "(none)"}`);
+  } catch (e) { toast("Not saved: " + e.message, true); }
+  render();
+}
+
+// LEDs: live preview through the VIA lighting commands, saved with Save.
+let ledFlushing = false;
+async function flushLed() {
+  if (ledFlushing) return;
+  ledFlushing = true;
+  const send = async (bytes) => { const d = await cmd(bytes); if (d[0] === 0xff) throw new Error("refused — reconnect"); };
+  try {
+    for (;;) {
+      const l = S.led, s = S.ledSent;
+      // VIA's "set effect" also turns the lights on, so on/off goes last.
+      if (l.mode !== s.mode) { await send([0x07, 0x81, l.mode]); s.mode = l.mode; s.enable = -1; continue; }
+      if (l.hue !== s.hue || l.sat !== s.sat) { await send([0x07, 0x83, l.hue, l.sat]); s.hue = l.hue; s.sat = l.sat; continue; }
+      if (l.val !== s.val) { await send([0x07, 0x80, l.val]); s.val = l.val; continue; }
+      if (l.speed !== s.speed) { await send([0x07, 0x82, l.speed]); s.speed = l.speed; continue; }
+      if (l.enable !== s.enable) { await send([0xf6, 0x05, l.enable]); s.enable = l.enable; continue; }
+      break;
+    }
+  } catch (e) { toast("Lighting change failed: " + e.message, true); }
+  ledFlushing = false;
+}
+function ledInput() {
+  const l = S.led;
+  l.enable = $("ledOn").checked ? 1 : 0;
+  l.mode = +$("ledMode").value; l.hue = +$("ledHue").value; l.sat = +$("ledSat").value;
+  l.val = +$("ledVal").value; l.speed = +$("ledSpeed").value; l.idle = +$("ledIdle").value;
+  l.dirty = 1;
+  flushLed();
+  render();
+}
+async function ledSave() {
+  try {
+    await flushLed();
+    const d = await cmd([0x09]);
+    if (d[0] === 0xff) throw new Error("refused");
+    await cmd([0xf6, 0x01, S.led.idle]);
+    await hidLoadLed();
+    toast("Underglow saved");
+  } catch (e) { toast("Not saved: " + e.message, true); }
+  render();
+}
+async function ledRevert() {
+  if (!S.led || !S.led.dirty) return;
+  try { await cmd([0xf6, 0x04]); await hidLoadLed(); } catch (e) { log("revert: " + e.message); }
+  render();
+}
+function buildLedSelects() {
+  const sel = $("ledMode"); sel.innerHTML = "";
+  for (let m = 1; m < S.modeEffects.length; m++) {
+    const eff = S.modeEffects[m]; let v = 0;
+    while (m - v - 1 >= 1 && S.modeEffects[m - v - 1] === eff) v++;
+    sel.add(new Option(`${DATA.ledEffects[eff] || "Effect " + eff}${v || S.modeEffects[m + 1] === eff ? " " + (v + 1) : ""}`, m));
+  }
+  $("ledIdle").innerHTML = DATA.ledIdle.map((t, i) => `<option value="${i}">${t}</option>`).join("");
+  $("ledVal").max = S.ledInfo.max;
+}
+["ledOn", "ledMode", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle"].forEach((id) => $(id).addEventListener("input", ledInput));
+$("ledSave").addEventListener("click", ledSave);
+$("ledRevert").addEventListener("click", ledRevert);
+
+// Trackpad: live Z through 0xF5 get; settings saved with Save.
+function tpInput() {
+  const t = S.tp;
+  t.enable = $("tpOn").checked ? 1 : 0;
+  t.threshold = +$("tpThr").value;
+  t.release = Math.min(+$("tpRel").value, t.threshold - 1);
+  t.dirty = 1;
+  render();
+}
+async function tpSave() {
+  try {
+    const d = await cmd([0xf5, 0x01, S.tp.enable, S.tp.threshold, S.tp.release]);
+    if (d[0] === 0xff) throw new Error("refused");
+    S.tp = { enable: d[7], threshold: d[8], release: d[9], dirty: 0 };
+    toast("Trackpad settings saved");
+  } catch (e) { toast("Not saved: " + e.message, true); }
+  render();
+}
+async function tpRevert() { await hidLoadTp(); render(); }
+["tpOn", "tpThr", "tpRel"].forEach((id) => $(id).addEventListener("input", tpInput));
+$("tpSave").addEventListener("click", tpSave);
+$("tpRevert").addEventListener("click", tpRevert);
+
+function startZPoll() {
+  if (HID.zpoll) return;
+  HID.zpoll = setInterval(async () => {
+    if (S.mode !== "hid" || !S.ui || S.ui.tab !== 3) return stopZPoll();
+    if (HID.zbusy) return;
+    HID.zbusy = true;
+    try { const d = await cmd([0xf5, 0x00]); addZ({ z: d[1], peak: d[2], lastPeak: d[3], touching: d[4], pressed: d[10] }); scheduleRender(); }
+    catch (e) { /* skip a sample */ }
+    HID.zbusy = false;
+  }, 40);
+}
+function stopZPoll() { clearInterval(HID.zpoll); HID.zpoll = null; }
+
+async function setTab(tab) {
+  if (S.mode !== "hid" || !S.ui || tab === S.ui.tab) return;
+  if (S.ui.tab === 2) await ledRevert();
+  if (S.ui.tab === 3 && S.tp && S.tp.dirty) await hidLoadTp();
+  S.ui.tab = tab;
+  if (tab === 2) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
+  if (tab === 3) startZPoll();
+  render();
+}
+
+// Clicks (WebHID mode only).
+$("tabs").addEventListener("click", (e) => { const t = e.target.closest("[data-tab]"); if (t) setTab(+t.dataset.tab); });
+$("layers").addEventListener("click", (e) => { const t = e.target.closest("[data-layer]"); if (t && S.mode === "hid") { S.ui.layer = +t.dataset.layer; render(); } });
+$("kb").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-r]"); if (!t || S.mode !== "hid") return;
+  S.ui.row = +t.dataset.r; S.ui.col = +t.dataset.c; S.ui.tab = 0; S.ui.slot = -1; render(); scrollToCurrent();
+});
+$("knobs").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-slot]"); if (!t || S.mode !== "hid") return;
+  S.ui.slot = +t.dataset.slot; S.ui.tab = 1; render(); scrollToCurrent();
+});
+let hidCat = -1;
+$("hidCats").addEventListener("click", (e) => { const t = e.target.closest("[data-cat]"); if (t) { hidCat = +t.dataset.cat; renderHidList(); } });
+$("search").addEventListener("input", renderHidList);
+$("hidList").addEventListener("click", (e) => { const t = e.target.closest("[data-kc]"); if (t) assign(+t.dataset.kc); });
+$("advKind").addEventListener("change", renderAdv);
+$("advApply").addEventListener("click", () => {
+  const kind = $("advKind").value, base = +$("advBase").value & 0xff;
+  const mods = [...$("advMods").querySelectorAll("input:checked")].reduce((a, i) => a | +i.value, 0);
+  if (kind === "lt") assign(R.QK_LAYER_TAP | ((+$("advLayer").value & 0xf) << 8) | base);
+  else if (!(mods & 0xf)) toast("Tick at least one modifier", true);
+  else if (kind === "mt") assign(R.QK_MOD_TAP | ((mods & 0x1f) << 8) | base);
+  else assign(((mods & 0x1f) << 8) | base);
+});
+$("rawApply").addEventListener("click", () => {
+  const v = parseInt($("rawKc").value.trim(), $("rawKc").value.trim().startsWith("0x") ? 16 : 10);
+  if (Number.isInteger(v) && v >= 0 && v <= 0xffff) assign(v); else toast("Enter a number like 0x5223", true);
+});
+$("connectBtn").addEventListener("click", connect);
+$("disconnectBtn").addEventListener("click", closeHid);
+
+// ================================================================ names
 const R = DATA.ranges;
 function modsStr(m) {
   const parts = [];
@@ -277,42 +700,50 @@ function kcName(v) {
   if (v >= R.QK_USER && v < R.QK_USER + 0x1c0) return "USER" + (v - R.QK_USER);
   return "0x" + v.toString(16).padStart(4, "0");
 }
-function keyText(v) {
-  if (v === 0) return "";
-  return kcName(v);
-}
-function hsvToCss(h, s, v, max) {
-  h = (h / 256) * 360; s /= 255; v = Math.min(1, v / 255 * (255 / Math.max(max || 255, 1)));
+function keyText(v) { return v === 0 ? "" : kcName(v); }
+function hsvToCss(h, s, v) {
+  h = (h / 256) * 360; s /= 255; v /= 255;
   const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
   return `rgb(${Math.round(f(5) * 255)},${Math.round(f(3) * 255)},${Math.round(f(1) * 255)})`;
 }
 
-// ---------------------------------------------------------------- rendering
-const $ = (id) => document.getElementById(id);
+// ================================================================ rendering
 let renderQueued = false;
 function scheduleRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(render); } }
 
 function render() {
   renderQueued = false;
-  const st = S.state;
+  const hid = S.mode === "hid", hidAsk = S.mode === "hidAsk", bridge = S.mode === "bridge";
+  document.body.classList.toggle("bridgeish", !hid && !hidAsk);
   const pill = $("status");
-  pill.className = "pill " + (st === "ready" ? "ok" : st === "challenge" ? "wait" : st === "closed" ? "" : "");
-  pill.textContent = { idle: "Not connected", challenge: "Type the code", ready: "Connected", closed: "Config mode off" }[st];
-  $("stats").textContent = S.frames ? `${S.frames} frames` + (S.missed ? ` · ${S.missed} missed — hold the left knob 1 s to resend` : "") : "";
-  $("connect").classList.toggle("hidden", st === "ready");
-  $("connectSteps").classList.toggle("hidden", st === "challenge");
-  $("challenge").classList.toggle("hidden", st !== "challenge");
-  $("closed").classList.toggle("hidden", st !== "closed");
-  $("mismatch").classList.toggle("hidden", !(S.ready && S.ready.hash !== DATA.pickerHash));
-  if (st === "challenge") $("code").textContent = [0, 1, 2].map((i) => CHALLENGE[(S.nonce >> (i * 5)) % CHALLENGE.length]).join("");
-  const ready = st === "ready" && S.ui;
+  if (hid) { pill.className = "pill ok"; pill.textContent = S.state === "loading" ? "Reading keyboard…" : "Connected (USB)"; }
+  else if (hidAsk) { pill.className = "pill wait"; pill.textContent = "Confirm on the keyboard"; }
+  else {
+    const st = S.state;
+    pill.className = "pill " + (st === "ready" ? "ok" : st === "challenge" ? "wait" : "");
+    pill.textContent = { idle: "Not connected", challenge: "Press the letter", ready: "Keyboard-only mode", closed: "Keyboard-only mode off" }[st] || "Not connected";
+  }
+  $("stats").textContent = bridge && S.frames ? `${S.frames} frames` + (S.missed ? ` · ${S.missed} missed — hold the left knob 1 s to resend` : "") : "";
+  $("disconnectBtn").classList.toggle("hidden", !hid);
+  $("hidYes").classList.toggle("hidden", !navigator.hid);
+  $("hidNo").classList.toggle("hidden", !!navigator.hid);
+  $("connectBtn").disabled = hidAsk;
+
+  const ready = (hid && S.state === "ready" && S.ui) || (bridge && S.state === "ready" && S.ui);
+  $("connect").classList.toggle("hidden", !!ready);
+  $("connectSteps").classList.toggle("hidden", bridge && S.state === "challenge");
+  $("challenge").classList.toggle("hidden", !(bridge && S.state === "challenge"));
+  $("closed").classList.toggle("hidden", !(bridge && S.state === "closed"));
+  $("mismatch").classList.toggle("hidden", !(bridge && S.ready && S.ready.hash !== DATA.pickerHash));
+  if (bridge && S.state === "challenge") $("code").textContent = CHALLENGE[S.nonce % CHALLENGE.length];
   $("editor").classList.toggle("hidden", !ready);
   $("picker").classList.toggle("hidden", !(ready && S.ui.tab <= 1));
   renderHelp();
   if (!ready) return;
 
   const ui = S.ui;
-  $("tabs").innerHTML = TABS.map((t, i) => `<span class="tab ${i === ui.tab ? "on" : ""}">${t}</span>`).join("");
+  renderNote();
+  $("tabs").innerHTML = TABS.map((t, i) => `<span class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}">${t}</span>`).join("");
   $("keysView").classList.toggle("hidden", ui.tab > 1);
   $("ledView").classList.toggle("hidden", ui.tab !== 2);
   $("padView").classList.toggle("hidden", ui.tab !== 3);
@@ -321,10 +752,24 @@ function render() {
   if (ui.tab === 3) renderPad(ui);
 }
 
+function renderNote() {
+  const el = $("modeNote");
+  if (S.mode === "bridge") {
+    el.innerHTML = `<div class="info"><b>Keyboard-only mode:</b> use the keyboard's knobs and keys (see “How to use”). Clicking does nothing in this mode${navigator.hid ? " — for mouse control, exit it and click Connect" : ""}.</div>`;
+  } else if (S.mode === "hid") {
+    let s = "";
+    if (S.sessionLost) s += `<div class="note">The keyboard ended the session (idle, or unplugged). <button id="reconnectBtn">Reconnect</button></div>`;
+    if (S.bridgeOn) s += `<div class="note">Keyboard-only mode is also on, so the keyboard isn't typing. <button id="exitBridgeBtn">Turn it off</button></div>`;
+    el.innerHTML = s;
+    const rc = $("reconnectBtn"); if (rc) rc.onclick = async () => { S.sessionLost = false; clearInterval(HID.poll); await requestSession(); };
+    const eb = $("exitBridgeBtn"); if (eb) eb.onclick = async () => { await cmd([0xf6, 0x03]); pollStatus(); };
+  } else el.innerHTML = "";
+}
+
 function renderKeys(ui) {
-  const names = DATA.layerNames;
-  $("layers").innerHTML = names.slice(0, S.ready.layers).map((n, i) =>
-    `<span class="layer ${i === ui.layer ? "on" : ""}">${i} ${n}${i === S.ready.defLayer ? " (default)" : ""}</span>`).join("");
+  const hid = S.mode === "hid";
+  $("layers").innerHTML = DATA.layerNames.slice(0, S.ready.layers).map((n, i) =>
+    `<span class="layer ${i === ui.layer ? "on" : ""}" data-layer="${i}">${i} ${n}${i === S.ready.defLayer ? " (default)" : ""}</span>`).join("");
   const U = 52, km = S.keymap[ui.layer];
   let html = "";
   for (const k of DATA.layout) {
@@ -334,8 +779,8 @@ function renderKeys(ui) {
     const knobSlot = isKnob && ui.tab === 1 && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
     const cls = ["k", isKnob ? "knob" : "", v === 1 ? "trns" : "", v === 0 ? "none" : "", selKey || knobSlot ? "sel" : "", selKey && ui.held ? "held" : ""].join(" ");
     let text = escapeHtml(v === null ? "…" : keyText(v));
-    if ((selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
-    html += `<div class="${cls}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${text}</div>`;
+    if (!hid && (selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
+    html += `<div class="${cls}" data-r="${k.r}" data-c="${k.c}" title="${hid ? "Click to change" : ""}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${text}</div>`;
   }
   $("kb").innerHTML = html;
   $("kb").style.height = (5.9 * U) + "px";
@@ -345,25 +790,37 @@ function renderKeys(ui) {
     const vals = enc ? [enc[knob][0], enc[knob][1], pressKc] : [null, null, pressKc];
     return `<div class="knobbox"><b>${title}</b>` + vals.map((v, i) => {
       const slot = knob * 3 + i, on = ui.tab === 1 && ui.slot === slot;
-      return `<div class="slot ${on ? "on" : ""}"><span>${SLOT_NAMES[i]}</span><span>${escapeHtml(kcName(v))}${on && ui.pending !== v ? ` <span class="new" style="color:var(--warn)">→ ${escapeHtml(kcName(ui.pending))}</span>` : ""}</span></div>`;
+      const pend = !hid && on && ui.pending !== v ? ` <span class="new" style="color:var(--warn)">→ ${escapeHtml(kcName(ui.pending))}</span>` : "";
+      return `<div class="slot ${on ? "on" : ""}" data-slot="${slot}"><span>${SLOT_NAMES[i]}</span><span>${escapeHtml(kcName(v))}${pend}</span></div>`;
     }).join("") + "</div>";
   }).join("");
 }
 
 function currentValue(ui) {
   if (ui.tab === 0) return ui.row === 0xff ? null : S.keymap[ui.layer][ui.row][ui.col];
+  if (ui.slot < 0) return null;
   const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
   if (i === 2) return S.keymap[ui.layer][knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
   return S.enc[ui.layer] ? S.enc[ui.layer][knob][i] : null;
 }
 
 function renderPicker(ui) {
-  const what = ui.tab === 0
-    ? (ui.row === 0xff ? "Press a key to select it" : `Key ${ui.row},${ui.col} on layer ${ui.layer}`)
-    : `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`;
-  $("pickTitle").textContent = what;
+  const hid = S.mode === "hid";
+  $("pickBridge").classList.toggle("hidden", hid);
+  $("pickHid").classList.toggle("hidden", !hid);
   const cur = currentValue(ui);
+  const target = ui.tab === 0
+    ? (ui.row === 0xff ? null : `Key ${ui.row},${ui.col} on layer ${ui.layer}`)
+    : (ui.slot < 0 ? null : `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`);
+  $("pickTitle").textContent = target || (hid ? "Click a key or a knob action" : "Press a key to select it");
   $("curName").textContent = cur === null ? "–" : kcName(cur) || "(none)";
+  $("pickArrow").classList.toggle("hidden", hid);
+  $("newName").classList.toggle("hidden", hid);
+  if (hid) {
+    $("pickHint").textContent = target ? "Click a keycode below to assign it (saved immediately)." : "";
+    renderHidList();
+    return;
+  }
   $("newName").textContent = kcName(ui.pending) || "(none)";
   $("pickHint").textContent = ui.pending === cur ? "Turn the right knob to choose a keycode." : "Press the right knob to apply.";
   let cat = 0;
@@ -379,15 +836,61 @@ function renderPicker(ui) {
   $("list").innerHTML = rows;
 }
 
+let lastHidListKey = "";
+function renderHidList() {
+  const q = $("search").value.trim().toLowerCase();
+  const cur = S.ui ? currentValue(S.ui) : null;
+  const key = q + "|" + hidCat + "|" + cur;
+  if (key === lastHidListKey) return;
+  lastHidListKey = key;
+  $("hidCats").innerHTML = [["All", -1]].concat(DATA.cats.map((c, i) => [c, i])).map(([c, i]) =>
+    `<span class="cat ${i === hidCat ? "on" : ""}" data-cat="${i}">${c}</span>`).join("");
+  let html = "";
+  DATA.cats.forEach((cat, ci) => {
+    if (hidCat >= 0 && ci !== hidCat) return;
+    const end = DATA.catStarts[ci + 1] || DATA.picker.length;
+    const items = DATA.picker.slice(DATA.catStarts[ci], end).filter(([v, label]) =>
+      !q || (label || "").toLowerCase().includes(q) || kcName(v).toLowerCase().includes(q) || cat.toLowerCase().includes(q));
+    if (!items.length) return;
+    html += `<div class="hdr">${cat}</div>` + items.map(([v, label]) =>
+      `<div class="item ${v === cur ? "cur" : ""}" data-kc="${v}"><span>${escapeHtml(label || "(none)")}</span><span class="dim small">${v === 0 ? "nothing" : v === 1 ? "lower layer" : ""}</span></div>`).join("");
+  });
+  $("hidList").innerHTML = html || "<div class='dim' style='padding:8px'>No match. Use “keycode value” below for anything else.</div>";
+}
+function scrollToCurrent() {
+  const el = $("hidList").querySelector(".item.cur");
+  if (el) el.scrollIntoView({ block: "nearest" });
+}
+function renderAdv() {
+  const kind = $("advKind").value;
+  $("advLayer").classList.toggle("hidden", kind !== "lt");
+  $("advMods").classList.toggle("hidden", kind === "lt");
+}
+
+function setIfIdle(id, value) { const el = $(id); if (document.activeElement !== el && String(el.value) !== String(value)) el.value = value; }
+
 function renderLeds(ui) {
-  const l = S.led;
+  const l = S.led, hid = S.mode === "hid";
   $("ledUnsaved").classList.toggle("show", !!(l && l.dirty));
+  $("ledRows").classList.toggle("hidden", hid);
+  $("ledCtl").classList.toggle("hidden", !hid);
   if (!l) { $("ledRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
+  if (hid) {
+    $("ledOn").checked = !!l.enable;
+    setIfIdle("ledMode", l.mode); setIfIdle("ledHue", l.hue); setIfIdle("ledSat", l.sat); setIfIdle("ledVal", l.val);
+    setIfIdle("ledSpeed", l.speed); setIfIdle("ledIdle", l.idle);
+    $("ledHueV").textContent = Math.round(l.hue / 256 * 360) + "°";
+    $("ledSwatch").style.background = hsvToCss(l.hue, l.sat, 255);
+    $("ledSatV").textContent = Math.round(l.sat / 255 * 100) + "%";
+    $("ledValV").textContent = Math.round(l.val / Math.max(l.max, 1) * 100) + "%";
+    $("ledSpeedV").textContent = l.speed;
+    return;
+  }
   const effect = DATA.ledEffects[l.effect] || "Effect " + l.effect;
   const rows = [
     ["Lights", l.enable ? "On" : "Off"],
     ["Effect", `${effect}${l.variant ? " " + (l.variant + 1) : ""} <span class="dim small">(mode ${l.mode})</span>`],
-    ["Hue", `${Math.round(l.hue / 256 * 360)}°<span class="swatch" style="background:${hsvToCss(l.hue, l.sat, 255, 255)}"></span>`],
+    ["Hue", `${Math.round(l.hue / 256 * 360)}°<span class="swatch" style="background:${hsvToCss(l.hue, l.sat, 255)}"></span>`],
     ["Saturation", Math.round(l.sat / 255 * 100) + "%"],
     ["Brightness", `${Math.round(l.val / Math.max(l.max, 1) * 100)}% <span class="dim small">(${l.val}/${l.max})</span>`],
     ["Speed", `${l.speed} <span class="dim small">(0–3)</span>`],
@@ -397,11 +900,19 @@ function renderLeds(ui) {
 }
 
 function renderPad(ui) {
-  const t = S.tp;
+  const t = S.tp, hid = S.mode === "hid";
   $("tpUnsaved").classList.toggle("show", !!(t && t.dirty));
+  $("tpRows").classList.toggle("hidden", hid);
+  $("tpCtl").classList.toggle("hidden", !hid);
   if (!t) { $("tpRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
-  const rows = [["Press-to-click", t.enable ? "On" : "Off"], ["Threshold (press)", t.threshold], ["Release Z", t.release]];
-  $("tpRows").innerHTML = rows.map(([k, v], i) => `<div class="row ${i === ui.tpField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+  if (hid) {
+    $("tpOn").checked = !!t.enable;
+    setIfIdle("tpThr", t.threshold); setIfIdle("tpRel", t.release);
+    $("tpThrV").textContent = t.threshold; $("tpRelV").textContent = t.release;
+  } else {
+    const rows = [["Press-to-click", t.enable ? "On" : "Off"], ["Threshold (press)", t.threshold], ["Release Z", t.release]];
+    $("tpRows").innerHTML = rows.map(([k, v], i) => `<div class="row ${i === ui.tpField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+  }
   drawZ(t);
   $("peaks").innerHTML = S.peaks.map((p) => `<span class="${p >= t.threshold ? "click" : ""}">${p}</span>`).join("") || "<span class='dim'>touch the trackpad…</span>";
 }
@@ -417,7 +928,6 @@ function drawZ(t) {
   if (z.peak) { g.fillStyle = "#e6e8ec"; g.fillRect(x(z.peak) - 1, 16, 2, 34); }
   g.fillStyle = "#e6e8ec"; g.font = "12px system-ui";
   g.fillText(`Z ${z.touching ? z.z : "–"}   peak ${z.peak}   last ${z.lastPeak}   ${z.pressed ? "CLICK HELD" : ""}`, 10, 13);
-
   const h = $("zhist"), hg = h.getContext("2d"), HW = h.width, HH = h.height, y = (v) => HH - 6 - (HH - 12) * v / 63;
   hg.clearRect(0, 0, HW, HH);
   hg.strokeStyle = "#ffb648"; hg.beginPath(); hg.moveTo(0, y(t.threshold)); hg.lineTo(HW, y(t.threshold)); hg.stroke();
@@ -428,31 +938,55 @@ function drawZ(t) {
 }
 
 function renderHelp() {
-  const tab = S.state === "ready" && S.ui ? S.ui.tab : -1;
-  const common = [["Left knob press", "Next tab (hold ~1 s: resend everything)"]];
-  const per = {
-    0: [["Any key", "Select it"], ["Hold a key + tap another", "Copy the other key's default-layer keycode"],
-        ["Left knob turn", "Change layer"], ["Right knob turn", "Choose keycode (turn fast to skip)"],
-        ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selected key"]],
-    1: [["Left knob turn", "Choose knob action (turn / press); change layer on the Keys tab"],
-        ["Right knob turn", "Choose keycode"], ["Hold right knob + turn", "Jump between categories"],
-        ["Any key", "Copy its default-layer keycode"], ["Right knob press", "Apply"]],
-    2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
-    3: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
-  };
-  const items = tab < 0 ? [["Space", "Connect (in config mode)"]] : per[tab].concat(common);
+  let items, foot = "";
+  if (S.mode === "hid") {
+    items = [["Keys / Knobs", "Click a key (or a knob action), then click a keycode in the list. It's saved right away."],
+             ["Layers", "Click a layer name above the keyboard."], ["Hold/tap keys", "Use the box under the keycode list."],
+             ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them."],
+             ["Trackpad", "Touch the pad to see Z live. Click Save to keep settings."]];
+    foot = "The keyboard keeps typing normally while connected. Disconnect (or close the page) to end the session.";
+  } else if (S.mode === "bridge" && S.state === "ready" && S.ui) {
+    const per = {
+      0: [["Any key", "Select it"], ["Hold a key + tap another", "Copy the other key's default-layer keycode"],
+          ["Left knob turn", "Change layer"], ["Right knob turn", "Choose keycode (turn fast to skip)"],
+          ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selected key"]],
+      1: [["Left knob turn", "Choose knob action (turn / press); change layer on the Keys tab"],
+          ["Right knob turn", "Choose keycode"], ["Hold right knob + turn", "Jump between categories"],
+          ["Any key", "Copy its default-layer keycode"], ["Right knob press", "Apply"]],
+      2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
+      3: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
+    };
+    items = per[S.ui.tab].concat([["Left knob press", "Next tab (hold ~1 s: resend everything)"]]);
+    foot = "Exit: Raise + Config, hold both knob buttons 2 s, hold Esc 2 s, or 5 min without input. Unsaved LED/trackpad changes are dropped on exit.";
+  } else {
+    items = navigator.hid
+      ? [["With the mouse", "Click Connect, then press the right knob on the keyboard to confirm."], ["Without WebHID", "Use keyboard-only mode."]]
+      : [["Keyboard-only mode", "Follow the steps on the left."]];
+  }
   $("help").innerHTML = items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  $("helpFoot").textContent = foot;
 }
 
+let toastTimer;
+function toast(msg, bad) {
+  const t = $("toast"); t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = ""), bad ? 4000 : 2000);
+}
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const logLines = [];
 function log(s) { logLines.unshift(new Date().toLocaleTimeString() + "  " + s); logLines.length = Math.min(logLines.length, 200); $("log").textContent = logLines.join("\n"); }
+
+// Advanced builder options.
+$("advLayer").innerHTML = DATA.layerNames.map((n, i) => `<option value="${i}">layer ${i} ${n}</option>`).join("");
+$("advBase").innerHTML = DATA.picker.filter(([v]) => v > 1 && v < 0x100).map(([v, l]) => `<option value="${v}">${escapeHtml(l)}</option>`).join("");
+renderAdv();
 
 // Test hook: feed a string of KeyboardEvent.code values separated by spaces.
 window.sofleFeed = (codes) => codes.split(/\s+/).filter(Boolean).forEach(feedCode);
 if (!document.hasFocus()) document.body.classList.add("blurred");
 render();
-setInterval(() => { if (S.state === "ready") scheduleRender(); }, 1000);
+setInterval(() => { if (S.mode === "bridge" && S.state === "ready") scheduleRender(); }, 1000);
 </script>
 </body>
 </html>

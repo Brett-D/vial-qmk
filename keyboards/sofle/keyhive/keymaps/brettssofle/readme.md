@@ -19,50 +19,6 @@ Keymap for a Keyhive Sofle v2 with:
 | Underglow | Turns off after 1 minute (changeable in config mode: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input |
 | Right OLED | Default layer, active layer, Caps/Num lock, active mods (S C A G). Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
 
-## Config mode
-
-Configure the keymap, knobs, underglow and trackpad press-to-click **without
-installing anything and without WebHID** — on Windows, Linux or macOS, in any
-browser (Firefox too), offline, with no udev rules or admin rights.
-
-The keyboard stays a plain keyboard (no new USB device or driver). In config
-mode it reads its own keys and knobs to drive the editor, and *types* short
-coded messages (only letters A–Z, digits 2–7, `,` and `.` — never Enter, Tab,
-modifiers or F-keys) into `sofle-config.html`, which decodes them and draws the
-editor. The page reads physical key positions, so the computer's keyboard
-layout doesn't matter. Nothing is ever sent from the computer to the keyboard.
-
-1. Open `config_page/sofle-config.html` from disk (double-click it; keep a
-   copy on any computer you use).
-2. Turn on config mode: **Raise + top-right key** (`CONFIG`), or hold the
-   **right** knob button, then the **left** one, for 2 s. The right OLED shows
-   `CONFG` / `Press Space`. Keys don't type normally while config mode is on.
-3. Click the page, then press **Space**. Type the 3 letters the page shows
-   (this proves the page is the window receiving the messages).
-
-| Control | Keys tab | Knobs tab | LEDs / Trackpad tabs |
-| --- | --- | --- | --- |
-| Left knob turn | Change layer | Choose knob action (turn left / right / press) | Choose setting |
-| Left knob press | Next tab (hold ~1 s: resend everything to the page) | ← | ← |
-| Right knob turn | Choose keycode (turn fast to skip ahead) | ← | Change value (LEDs preview live) |
-| Hold right knob + turn | Jump to the next/previous keycode category | ← | – |
-| Right knob press | Apply to the selected key | Apply to the knob action | Save |
-| Any key | Select it. Hold it and tap another key to copy that key's default-layer keycode | Copy its default-layer keycode | – |
-
-Exit with **Raise + `CONFIG`**, holding both knob buttons for 2 s, holding
-**Esc** for 2 s, or 5 minutes without input. Unsaved LED/trackpad changes are
-dropped on exit. Keymap changes are saved like Vial's (EEPROM; a new firmware
-build resets them to the defaults in `keymap.c`).
-
-Tips: keep the page focused (it warns when it isn't). Pressing the left knob
-first while entering config mode sends Mute once — press the right knob first.
-v1 covers keymap, knobs, underglow and trackpad; use Vial for combos, tap
-dance and macros.
-
-After changing `config_page/gen_config.py` or `config_page/page.html`,
-regenerate `config_picker.h` and the page:
-`python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
-
 ### Trackpad
 
 | Gesture | Result |
@@ -129,6 +85,71 @@ Change these in `config.h` and rebuild:
 | `CIRQUE_PINNACLE_TIMEOUT` | 5 ms | Give up on a failed trackpad I2C transfer after this long |
 
 The I2C bus runs at QMK's 100 kHz default, like the original firmware.
+
+## Config mode
+
+Configure the keymap, knobs, underglow and trackpad press-to-click from
+`config_page/sofle-config.html` — a single file you open from disk (keep a
+copy on any computer). Nothing to install, no internet. Two ways to use it:
+
+### With the mouse (Chrome / Edge — WebHID)
+
+1. Open the page and click **Connect**, then pick **Sofle** in the browser's list.
+2. The right OLED shows **CONF?** — press the **right knob** (or Enter) to
+   allow it (left knob / Esc refuses; it gives up after 30 s).
+3. Click a key or a knob action, then click a keycode — it's saved
+   immediately. LEDs and trackpad have sliders with live preview and **Save**.
+
+The keyboard keeps typing normally while connected. The session ends when you
+click **Disconnect**, close the page, or 90 s after the page stops polling.
+Close Vial/VIA first (only one app can use the config channel). On Linux the
+browser needs a one-time udev rule for `/dev/hidraw*`; the page shows it if
+connecting fails.
+
+**Write protection:** without a session confirmed on the keyboard, raw HID
+commands that change the keyboard (keymap/encoder/lighting sets, macros,
+QMK settings, trackpad 0xF5 set, …) are refused, so another web page can't
+silently rewrite it. Reading still works. **The Vial app is affected too:
+unlock it first** (Vial → Security → Unlock, then hold the four corner keys),
+otherwise its changes are refused. `trackpad_z.html` can read live Z, but
+needs Vial unlocked to save — use the Trackpad tab here instead.
+
+### Keyboard-only mode (any browser, incl. Firefox — no WebHID, no udev)
+
+1. Open the page and click it so it has focus.
+2. Press **Raise + top-right key** (`CONFIG`) or hold both knob buttons for
+   2 s. The OLED asks **CONF?** — press the **right knob** (or Space/Enter).
+3. Press the letter the page shows (it only appears on the page that received
+   the keyboard's hello, so this proves the right window has focus).
+
+The keyboard stays a plain keyboard: in this mode it reads its own keys and
+knobs to drive the editor and *types* short coded messages (only A–Z, 2–7,
+`,` and `.` — never Enter, Tab, modifiers or F-keys) into the page, which
+decodes them. The page only displays; clicking does nothing in this mode.
+Keys don't type normally while it is on.
+
+| Control | Keys tab | Knobs tab | LEDs / Trackpad tabs |
+| --- | --- | --- | --- |
+| Left knob turn | Change layer | Choose knob action (turn left / right / press) | Choose setting |
+| Left knob press | Next tab (hold ~1 s: resend everything to the page) | ← | ← |
+| Right knob turn | Choose keycode (turn fast to skip ahead) | ← | Change value (LEDs preview live) |
+| Hold right knob + turn | Jump to the next/previous keycode category | ← | – |
+| Right knob press | Apply to the selected key | Apply to the knob action | Save |
+| Any key | Select it. Hold it and tap another key to copy that key's default-layer keycode | Copy its default-layer keycode | – |
+
+Exit with **Raise + `CONFIG`**, holding both knob buttons for 2 s, holding
+**Esc** for 2 s, or 5 minutes without input. Unsaved LED/trackpad changes are
+dropped on exit. Tip: when holding both knobs, press the right one first —
+the left knob is Mute.
+
+Keymap changes are saved like Vial's (EEPROM; a new firmware build resets them
+to the defaults in `keymap.c`). v1 covers keymap, knobs, underglow and
+trackpad; use Vial for combos, tap dance and macros.
+
+After changing `config_page/gen_config.py` or `config_page/page.html`,
+regenerate `config_picker.h` and the page:
+`python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
+
 ## Building
 
 The Sea-Picro EXT uses the Elite-C pinout with VBUS detect on GPIO19, so build

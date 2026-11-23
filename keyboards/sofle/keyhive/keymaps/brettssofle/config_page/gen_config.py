@@ -201,6 +201,9 @@ def main():
 
     data = {
         "pickerHash": phash,
+        "rows": vial["matrix"]["rows"],
+        "cols": vial["matrix"]["cols"],
+        "usb": {"vid": int(vial["vendorId"], 16), "pid": int(vial["productId"], 16)},
         "picker": [[v, label] for _, v, label in picker],
         "cats": cats,
         "catStarts": cat_starts,

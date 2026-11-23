@@ -208,9 +208,20 @@ __attribute__((weak)) void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
 //
 // raw_hid_send() is called at the end, with the same buffer, which was
 // possibly modified with returned values.
+// Keyboard/keymap hook run before any VIA/Vial command (as in upstream QMK).
+// Return true if the command was handled; the hook must then call
+// raw_hid_send() itself.
+__attribute__((weak)) bool via_command_kb(uint8_t *data, uint8_t length) {
+    return false;
+}
+
 void raw_hid_receive(uint8_t *data, uint8_t length) {
     uint8_t *command_id   = &(data[0]);
     uint8_t *command_data = &(data[1]);
+
+    if (via_command_kb(data, length)) {
+        return;
+    }
 
 #ifdef VIAL_ENABLE
     /* When unlock is in progress, we can only react to a subset of commands */

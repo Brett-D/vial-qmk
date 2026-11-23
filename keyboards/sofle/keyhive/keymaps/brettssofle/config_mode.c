@@ -1,17 +1,27 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Config mode. While it is on, every key and knob event is swallowed and used
-// to drive the editor below; the keyboard reports the editor state to
-// sofle-config.html through the keystroke bridge (bridge.c). The page only
-// displays; nothing is ever sent from the computer to the keyboard.
+// Config mode, for sofle-config.html. Two ways in, both confirmed on the
+// keyboard (the right OLED asks "CONF?"; right knob / Enter / Space = yes,
+// left knob / Esc = no, 30 s timeout):
 //
-// Toggle: the CONFIG keycode (Raise layer by default; inside config mode hold
-// Raise and press it again to exit), or hold both knob buttons for 2 s. Also
-// exits after CONFIG_MODE_IDLE_EXIT_MS without input, or when the key that is
-// Esc on the default layer is held for 2 s.
+// 1. Web session (Chrome/Edge, WebHID): the page sends 0xF6 "request session".
+//    Once confirmed, raw HID writes (VIA keymap/encoder/lighting sets, the
+//    trackpad 0xF5 set, 0xF6 sets) are allowed until the page stops polling
+//    for CONFIG_HID_SESSION_IDLE_MS. Without a session (or Vial unlock) those
+//    writes are refused, so another website can't silently rewrite the
+//    keyboard. The keyboard keeps working normally during a web session.
 //
-// Controls once connected:
+// 2. Keyboard-only mode (any browser): the CONFIG keycode (Raise + top-right
+//    by default) or holding both knob buttons for 2 s asks "CONF?". After the
+//    confirm, every key and knob event is swallowed and drives the editor
+//    below; the keyboard reports the editor state by typing frames into the
+//    page through the keystroke bridge (bridge.c). The page shows one letter
+//    to press, which proves it is the window receiving the frames. Exit with
+//    Raise + CONFIG, both knob buttons held 2 s, Esc held 2 s, or
+//    CONFIG_MODE_IDLE_EXIT_MS without input.
+//
+// Keyboard-only controls once connected:
 //   left knob turn       layer (Keys) / slot (Knobs) / field (LEDs, Trackpad)
 //   left knob press      next tab; hold ~1 s = resend everything to the page
 //   right knob turn      pick keycode / change value (fast turns jump faster)
@@ -26,18 +36,48 @@
 #include "config_picker.h"
 #include "dynamic_keymap.h"
 #include "keymap_introspection.h"
+#include "raw_hid.h"
 #include "transactions.h"
+#include "via.h"
 
 #ifndef CONFIG_MODE_IDLE_EXIT_MS
 #    define CONFIG_MODE_IDLE_EXIT_MS 300000
 #endif
+#ifndef CONFIG_HID_SESSION_IDLE_MS
+#    define CONFIG_HID_SESSION_IDLE_MS 90000
+#endif
+#define CONFIG_MODE_ASK_MS 30000
+#define CONFIG_HID_DENY_COOLDOWN_MS 5000
 #define CONFIG_MODE_COMBO_MS 2000
 #define CONFIG_MODE_ESC_HOLD_MS 2000
 #define CONFIG_MODE_RESYNC_HOLD_MS 800
 #define CONFIG_MODE_FAST_TURN_MS 80
 #define CONFIG_MODE_TPZ_INTERVAL_MS 100
 #define CONFIG_MODE_OLED_SYNC_MS 1000
-#define CONFIG_MODE_PROTOCOL 1
+#define CONFIG_MODE_PROTOCOL 2
+
+// Raw HID command for the page (keep in sync with page.html):
+//   [0xF6, sub, args...] -> [0xF6, sub, proto, hid state, keyboard-only state,
+//                            led idle idx, led max val, led mode count,
+//                            led enabled, vial unlocked, ask seconds left]
+#define CFG_RAW_HID_ID 0xF6
+enum cfg_hid_cmd {
+    CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
+    CMD_SET_IDLE    = 0x01, // arg: idle timeout index (saved)
+    CMD_MODE_TABLE  = 0x02, // arg: first mode -> [.., .., first, mode count, effect id x 28]
+    CMD_EXIT_BRIDGE = 0x03, // end keyboard-only mode
+    CMD_LED_REVERT  = 0x04, // drop unsaved lighting changes
+    CMD_LED_ENABLE  = 0x05, // arg: 0/1 = lights off/on (preview; saved by VIA lighting save)
+    CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
+    CMD_END         = 0x11, // end the web session
+};
+enum hid_state { HS_NONE, HS_ASK, HS_ACTIVE, HS_DENIED, HS_TIMEOUT };
+
+// Vial subcommands (quantum/vial.h) that change the keyboard.
+#define VIAL_SET_ENCODER 0x04
+#define VIAL_QMK_SETTINGS_SET 0x0B
+#define VIAL_QMK_SETTINGS_RESET 0x0C
+#define VIAL_DYNAMIC_ENTRY_OP 0x0D
 
 // Knob push switches in the matrix (keyhive keyboard.json).
 #define KNOB_L_ROW 4
@@ -63,16 +103,18 @@ enum frame_type {
     F_TPZ   = 0x22, // z, peak, last peak, touching, pressed
 };
 
-enum cfg_state { ST_OFF, ST_WAIT, ST_CHALLENGE, ST_READY, ST_CLOSING };
+enum cfg_state { ST_OFF, ST_ASK, ST_CHALLENGE, ST_READY, ST_CLOSING };
 enum cfg_tab { TAB_KEYS, TAB_KNOBS, TAB_LEDS, TAB_TRACKPAD, TAB_COUNT };
 enum led_field { LF_ENABLE, LF_EFFECT, LF_HUE, LF_SAT, LF_VAL, LF_SPEED, LF_IDLE, LF_COUNT };
 enum tp_field { TF_ENABLE, TF_THRESHOLD, TF_RELEASE, TF_COUNT };
 // Knobs tab slots: left ccw/cw/press, right ccw/cw/press.
 #define KNOB_SLOTS 6
 
-// Letters for the connect code (no I/O/Q/Z/B/G/V to avoid look-alikes).
+// Letters for the connect check (no I/O/Q/Z/B/G/V to avoid look-alikes). One
+// letter is enough: it is only shown by the page that received the HELLO, so
+// pressing it proves that page has focus.
 static const char challenge_letters[] = "ACDEFHJKLMNPRSTUWXY";
-#define CHALLENGE_LEN 3
+#define CHALLENGE_LEN 1
 
 typedef struct {
     bool    enable;
@@ -98,6 +140,7 @@ static struct {
     uint8_t  led_field, tp_field;
     uint16_t nonce;
     uint8_t  challenge_pos;
+    uint32_t ask_time;
 
     bool     knob_down[2], knob_used[2];
     uint32_t knob_time[2];
@@ -122,9 +165,15 @@ static struct {
 // release is swallowed too, even after config mode ends.
 static matrix_row_t held_swallowed[MATRIX_ROWS];
 
+// Web (raw HID) session.
+static struct {
+    uint8_t  state;
+    uint32_t time; // ask start / last poll / deny time
+} hid;
+
 // State mirrored to the right half for its OLED.
 typedef struct {
-    uint8_t state, tab, layer;
+    uint8_t state, tab, layer, hid;
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -332,18 +381,31 @@ static void tp_change(int8_t dir) {
  * Enter / exit
  * ------------------------------------------------------------------------ */
 
-static void config_mode_enter(void) {
+static void start_handshake(void);
+
+// Stop sending keys to the computer (keyboard-only mode and confirm prompts).
+static void block_keys(void) {
     clear_keyboard();
     clear_oneshot_mods();
     layer_clear();
     trackpad_set_drag_scroll(false);
+}
 
+// Keyboard-only mode: ask "CONF?" on the OLED first.
+static void bridge_ask(void) {
+    block_keys();
+    cfg.state    = ST_ASK;
+    cfg.ask_time = timer_read32();
+}
+
+// Confirmed: start keyboard-only mode and send HELLO to the page.
+static void bridge_start(void) {
     memset(&cfg, 0, sizeof(cfg));
-    cfg.state   = ST_WAIT;
     cfg.sel_row = NO_KEY;
     cfg.sel_col = NO_KEY;
     cfg.pick    = 0;
     cfg.pending = picker_at(0);
+    start_handshake();
 }
 
 static void finish_exit(void) {
@@ -373,11 +435,174 @@ bool config_mode_active(void) {
 }
 
 void config_mode_toggle(void) {
+    if (hid.state == HS_ASK) {
+        return; // a web session prompt is on screen
+    }
     if (cfg.state == ST_OFF) {
-        config_mode_enter();
+        bridge_ask();
+    } else if (cfg.state == ST_ASK) {
+        cfg.state = ST_OFF;
     } else if (cfg.state != ST_CLOSING) {
         config_mode_exit();
     }
+}
+
+/* ---------------------------------------------------------------------------
+ * Web session (raw HID)
+ * ------------------------------------------------------------------------ */
+
+#ifdef VIAL_ENABLE
+extern int vial_unlocked;
+#else
+static const int vial_unlocked = 0;
+#endif
+
+static bool hid_writes_allowed(void) {
+    return hid.state == HS_ACTIVE || vial_unlocked;
+}
+
+static void hid_request(void) {
+    if (hid.state == HS_ACTIVE) {
+        hid.time = timer_read32();
+        return;
+    }
+    if (hid.state == HS_ASK || (hid.state == HS_DENIED && timer_elapsed32(hid.time) < CONFIG_HID_DENY_COOLDOWN_MS)) {
+        return;
+    }
+    if (cfg.state == ST_ASK) {
+        cfg.state = ST_OFF;
+    } else if (cfg.state != ST_OFF && cfg.state != ST_CLOSING) {
+        config_mode_exit(); // keyboard-only mode makes way for the web session
+    }
+    block_keys();
+    hid.state = HS_ASK;
+    hid.time  = timer_read32();
+}
+
+// Answer to a "CONF?" prompt (web session or keyboard-only mode).
+static void ask_key(uint8_t row, uint8_t col) {
+    uint16_t base = basic_of(default_layer_keycode(row, col));
+    bool     yes  = (row == KNOB_R_ROW && col == KNOB_R_COL) || base == KC_ENTER || base == KC_SPACE;
+    bool     no   = (row == KNOB_L_ROW && col == KNOB_L_COL) || base == KC_ESCAPE;
+    if (!yes && !no) {
+        return;
+    }
+    if (hid.state == HS_ASK) {
+        hid.state = yes ? HS_ACTIVE : HS_DENIED;
+        hid.time  = timer_read32();
+    } else if (yes) {
+        bridge_start();
+    } else {
+        cfg.state = ST_OFF;
+    }
+}
+
+static bool is_write_command(const uint8_t *d) {
+    switch (d[0]) {
+        case id_set_keyboard_value:
+        case id_dynamic_keymap_set_keycode:
+        case id_dynamic_keymap_reset:
+        case id_lighting_set_value:
+        case id_lighting_save:
+        case id_eeprom_reset:
+        case id_dynamic_keymap_macro_set_buffer:
+        case id_dynamic_keymap_macro_reset:
+        case id_dynamic_keymap_set_buffer:
+            return true;
+        case id_vial_prefix:
+            // Dynamic entry ops: even subcommands (2, 4, ...) are the "set"s.
+            return d[1] == VIAL_SET_ENCODER || d[1] == VIAL_QMK_SETTINGS_SET || d[1] == VIAL_QMK_SETTINGS_RESET || (d[1] == VIAL_DYNAMIC_ENTRY_OP && d[2] != 0 && d[2] % 2 == 0);
+        case 0xF5: // trackpad press-to-click settings (trackpad_z.c)
+            return d[1] == 0x01;
+        default:
+            return false;
+    }
+}
+
+static void cfg_raw_hid(uint8_t *data) {
+    uint8_t arg = data[2];
+    switch (data[1]) {
+        case CMD_STATUS:
+            if (hid.state == HS_ACTIVE) {
+                hid.time = timer_read32();
+                if (arg & 1) {
+                    // The page is editing the underglow: count as activity so
+                    // the idle timeout doesn't turn it off mid-edit.
+                    set_activity_timestamps(timer_read32(), last_encoder_activity_time(), last_pointing_device_activity_time());
+                }
+            }
+            break;
+#ifdef RGBLIGHT_ENABLE
+        case CMD_SET_IDLE:
+            if (hid_writes_allowed()) {
+                user_config_set_rgb_idle_idx(arg);
+            }
+            break;
+        case CMD_MODE_TABLE:
+            data[3] = RGBLIGHT_MODES;
+            for (uint8_t i = 0; i < 28; i++) {
+                uint8_t mode = arg + i;
+                data[4 + i]  = mode >= 1 && mode <= RGBLIGHT_MODES ? led_effect_of(mode) : 0xFF;
+            }
+            return;
+        case CMD_LED_REVERT:
+            if (hid_writes_allowed()) {
+                rgblight_reload_from_eeprom();
+            }
+            break;
+        case CMD_LED_ENABLE:
+            if (hid_writes_allowed()) {
+                if (arg) {
+                    rgblight_enable_noeeprom();
+                } else {
+                    rgblight_disable_noeeprom();
+                }
+            }
+            break;
+#endif
+        case CMD_EXIT_BRIDGE:
+            if (hid_writes_allowed() && cfg.state != ST_OFF && cfg.state != ST_CLOSING) {
+                config_mode_exit();
+            }
+            break;
+        case CMD_REQUEST:
+            hid_request();
+            break;
+        case CMD_END:
+            hid.state = HS_NONE;
+            break;
+    }
+    uint32_t ask_left = hid.state == HS_ASK ? CONFIG_MODE_ASK_MS - timer_elapsed32(hid.time) : 0;
+    data[2]           = CONFIG_MODE_PROTOCOL;
+    data[3]           = hid.state;
+    data[4]           = cfg.state;
+#ifdef RGBLIGHT_ENABLE
+    data[5] = user_config_rgb_idle_idx();
+    data[6] = RGBLIGHT_LIMIT_VAL;
+    data[7] = RGBLIGHT_MODES;
+    data[8] = rgblight_is_enabled();
+#endif
+    data[9]  = vial_unlocked ? 1 : 0;
+    data[10] = (ask_left + 999) / 1000;
+}
+
+bool via_command_kb(uint8_t *data, uint8_t length) {
+    if (data[0] == CFG_RAW_HID_ID) {
+        cfg_raw_hid(data);
+    } else if (is_write_command(data)) {
+        if (!hid_writes_allowed()) {
+            data[0] = id_unhandled; // refused: no confirmed session
+        } else {
+            if (hid.state == HS_ACTIVE) {
+                hid.time = timer_read32();
+            }
+            return false; // let VIA/Vial handle it
+        }
+    } else {
+        return false;
+    }
+    raw_hid_send(data, length);
+    return true;
 }
 
 /* ---------------------------------------------------------------------------
@@ -612,11 +837,6 @@ static void key_event(uint8_t row, uint8_t col, bool pressed) {
     }
 
     switch (cfg.state) {
-        case ST_WAIT:
-            if (base == KC_SPACE || base == KC_ENTER) {
-                start_handshake();
-            }
-            break;
         case ST_CHALLENGE:
             challenge_key(base);
             break;
@@ -662,7 +882,9 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
     bool        is_key = ev->type == KEY_EVENT && ev->key.row < MATRIX_ROWS;
     uint8_t     row = ev->key.row, col = ev->key.col;
 
-    if (cfg.state == ST_OFF) {
+    bool asking = cfg.state == ST_ASK || hid.state == HS_ASK;
+
+    if (cfg.state == ST_OFF && !asking) {
         if (is_key && !ev->pressed && (held_swallowed[row] & ((matrix_row_t)1 << col))) {
             held_swallowed[row] &= ~((matrix_row_t)1 << col);
             return false;
@@ -681,6 +903,14 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
         } else {
             held_swallowed[row] &= ~((matrix_row_t)1 << col);
         }
+    }
+    if (asking) {
+        if (is_key && ev->pressed) {
+            ask_key(row, col);
+        }
+        return false;
+    }
+    if (is_key) {
         if (cfg.state != ST_CLOSING) {
             key_event(row, col, ev->pressed);
         }
@@ -828,8 +1058,9 @@ static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_l
 static void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
-    cfg_oled_t        now = {cfg.state, cfg.tab, cfg.layer};
-    bool              due = memcmp(&now, &last_sent, sizeof(now)) != 0 || (now.state != ST_OFF && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
+    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state};
+    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE;
+    bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || (active && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
         last_sent = now;
         last_time = timer_read();
@@ -838,25 +1069,34 @@ static void oled_sync_task(void) {
 
 #ifdef OLED_ENABLE
 bool config_mode_oled_task(void) {
-    static bool was_active;
-    bool        active = oled_state.state != ST_OFF;
-    if (active != was_active) {
+    static uint8_t last_screen;
+    bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
+    bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
+    uint8_t        screen = active ? 1 + (asking ? 0x80 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    if (screen != last_screen) {
         oled_clear();
-        was_active = active;
+        last_screen = screen;
     }
     if (!active) {
         return false;
     }
     // Portrait OLED: 5 characters per line, so each string below is one line.
     static const char tab_names[TAB_COUNT][6] PROGMEM = {"Keys ", "Knobs", "LEDs ", "Pad  "};
+    if (asking) {
+        oled_write_P(PSTR("CONF?"), true);
+        oled_write_P(oled_state.hid == HS_ASK ? PSTR("Web  ") : PSTR("     "), false);
+        oled_write_P(PSTR("Knob=yes  Esc= no   "), false);
+        return true;
+    }
     oled_write_P(PSTR("CONFG"), true);
     oled_write_P(PSTR("     "), false);
     switch (oled_state.state) {
-        case ST_WAIT:
-            oled_write_P(PSTR("PressSpace"), false);
+        case ST_OFF: // web session only
+            oled_write_P(PSTR("Web  page "), false);
             break;
         case ST_CHALLENGE:
-            oled_write_P(PSTR("Type code "), false);
+            oled_write_P(PSTR("Press"), false);
+            oled_write_P(PSTR("lettr"), false);
             break;
         case ST_READY:
             oled_write_P(tab_names[oled_state.tab % TAB_COUNT], false);
@@ -905,7 +1145,16 @@ void config_mode_task(void) {
     }
     knob_combo_task();
     oled_sync_task();
-    if (cfg.state == ST_OFF) {
+
+    if (hid.state == HS_ASK && timer_elapsed32(hid.time) >= CONFIG_MODE_ASK_MS) {
+        hid.state = HS_TIMEOUT;
+    } else if (hid.state == HS_ACTIVE && timer_elapsed32(hid.time) >= CONFIG_HID_SESSION_IDLE_MS) {
+        hid.state = HS_NONE; // the page stopped polling
+    }
+    if (cfg.state == ST_ASK && timer_elapsed32(cfg.ask_time) >= CONFIG_MODE_ASK_MS) {
+        cfg.state = ST_OFF;
+    }
+    if (cfg.state == ST_OFF || cfg.state == ST_ASK) {
         return;
     }
 
