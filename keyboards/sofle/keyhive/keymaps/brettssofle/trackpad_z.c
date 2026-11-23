@@ -6,10 +6,10 @@
 // used by trackpad_z.html over WebHID:
 //
 //   get:  [0xF5, 0x00]
-//   set:  [0xF5, 0x01, enabled, threshold, hysteresis]   (saved to EEPROM)
+//   set:  [0xF5, 0x01, enabled, threshold, release_z]    (saved to EEPROM)
 //   reply to both:
 //         [0xF5, z, peak, last_peak, touching, touches_lo, touches_hi,
-//          enabled, threshold, hysteresis, pressed]
+//          enabled, threshold, release_z, pressed]
 //
 // With TRACKPAD_Z_DEBUG the values are also synced to the right half for its
 // OLED.
@@ -25,7 +25,7 @@
 #    define TP_Z_RAW_HID_ID 0xF5
 #    define TP_Z_CMD_GET 0x00
 #    define TP_Z_CMD_SET 0x01
-#    define TP_CONFIG_VERSION 1
+#    define TP_CONFIG_VERSION 2 // 2: hysteresis replaced by an absolute release Z
 
 #    ifndef TP_Z_SYNC_INTERVAL_MS
 #        define TP_Z_SYNC_INTERVAL_MS 30
@@ -36,8 +36,8 @@
 #    ifndef TRACKPAD_PRESS_DEFAULT_THRESHOLD
 #        define TRACKPAD_PRESS_DEFAULT_THRESHOLD 51
 #    endif
-#    ifndef TRACKPAD_PRESS_DEFAULT_HYSTERESIS
-#        define TRACKPAD_PRESS_DEFAULT_HYSTERESIS 4
+#    ifndef TRACKPAD_PRESS_DEFAULT_RELEASE_Z
+#        define TRACKPAD_PRESS_DEFAULT_RELEASE_Z 24
 #    endif
 
 // Public in the Cirque I2C driver.
@@ -48,8 +48,8 @@ void RAP_ReadBytes(uint8_t address, uint8_t *data, uint8_t count);
 //   bit  4     press-to-click enabled
 //   bits 5-10  press-to-click Z threshold (default 51)
 //   bits 11-13 RGB idle timeout index (reserved, 1 = 1 min)
-//   bits 14-17 press-to-click hysteresis
-//   bits 18-31 reserved
+//   bits 14-19 press-to-click release Z
+//   bits 20-31 reserved
 typedef union {
     uint32_t raw;
     struct {
@@ -57,8 +57,8 @@ typedef union {
         uint32_t press_enabled : 1;
         uint32_t press_threshold : 6;
         uint32_t rgb_idle_timeout_idx : 3;
-        uint32_t press_hysteresis : 4;
-        uint32_t reserved : 14;
+        uint32_t press_release_z : 6;
+        uint32_t reserved : 12;
     };
 } tp_config_t;
 _Static_assert(sizeof(tp_config_t) == sizeof(uint32_t), "tp_config_t must fit EECONFIG_USER");
@@ -103,12 +103,12 @@ static void tp_config_set_defaults(void) {
     tp_config.version          = TP_CONFIG_VERSION;
     tp_config.press_enabled    = TRACKPAD_PRESS_DEFAULT_ENABLED;
     tp_config.press_threshold  = TRACKPAD_PRESS_DEFAULT_THRESHOLD;
-    tp_config.press_hysteresis = TRACKPAD_PRESS_DEFAULT_HYSTERESIS;
+    tp_config.press_release_z  = TRACKPAD_PRESS_DEFAULT_RELEASE_Z;
     tp_config.rgb_idle_timeout_idx = 1;
 }
 
 static bool tp_config_valid(void) {
-    return tp_config.version == TP_CONFIG_VERSION && tp_config.press_threshold >= 1 && tp_config.press_hysteresis < tp_config.press_threshold;
+    return tp_config.version == TP_CONFIG_VERSION && tp_config.press_threshold >= 1 && tp_config.press_release_z < tp_config.press_threshold;
 }
 
 void eeconfig_init_user(void) {
@@ -122,8 +122,8 @@ bool trackpad_press_enabled(void) {
 uint8_t trackpad_press_threshold(void) {
     return tp_config.press_threshold;
 }
-uint8_t trackpad_press_hysteresis(void) {
-    return tp_config.press_hysteresis;
+uint8_t trackpad_press_release_z(void) {
+    return tp_config.press_release_z;
 }
 
 /* ---------------------------------------------------------------------------
@@ -172,11 +172,11 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
         return;
     }
 
-    if (data[1] == TP_Z_CMD_SET && data[3] <= 63 && data[4] <= 15) {
+    if (data[1] == TP_Z_CMD_SET && data[3] <= 63 && data[4] <= 63) {
         tp_config_t new_config = tp_config;
         new_config.press_enabled    = data[2] ? 1 : 0;
         new_config.press_threshold  = data[3];
-        new_config.press_hysteresis = data[4];
+        new_config.press_release_z  = data[4];
         tp_config_t old_config      = tp_config;
         tp_config                   = new_config;
         if (tp_config_valid()) {
@@ -196,7 +196,7 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
     data[6]  = tp_z.touches >> 8;
     data[7]  = tp_config.press_enabled;
     data[8]  = tp_config.press_threshold;
-    data[9]  = tp_config.press_hysteresis;
+    data[9]  = tp_config.press_release_z;
     data[10] = tp_z.pressed;
 }
 

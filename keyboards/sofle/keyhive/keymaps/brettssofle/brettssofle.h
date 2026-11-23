@@ -44,5 +44,5 @@ void                trackpad_z_post_init(void);
 void                trackpad_z_sync_task(void);
 bool                trackpad_press_enabled(void);
 uint8_t             trackpad_press_threshold(void);
-uint8_t             trackpad_press_hysteresis(void);
+uint8_t             trackpad_press_release_z(void);
 #endif

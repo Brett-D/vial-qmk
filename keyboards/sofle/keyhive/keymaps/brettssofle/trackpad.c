@@ -4,8 +4,9 @@
 // Trackpad behaviour on top of the QMK Cirque Pinnacle driver (absolute mode):
 //
 //   tap                  -> left click (sent when the finger lifts)
-//   press harder         -> left button held while Z (signal strength) stays
-//                           above the threshold: click, or press and move to drag
+//   press harder         -> left button pressed when Z (signal strength) crosses
+//                           the threshold, held until the finger lifts or Z
+//                           drops below the release level (press, then drag)
 //   hold DRAG_SCROLL key -> trackpad movement scrolls
 //
 // Mouse buttons are also on the auto mouse layer (see keymap.c): T/Y = left
@@ -129,7 +130,7 @@ static void tp_press_step(bool touch, uint8_t z, bool scrolling) {
             tp.cancelled = true; // a press is not also a tap on lift
             tp_press_set(true);
         }
-    } else if (z + trackpad_press_hysteresis() < threshold && timer_elapsed(press.down_timer) >= TRACKPAD_PRESS_MIN_MS) {
+    } else if (z < trackpad_press_release_z() && timer_elapsed(press.down_timer) >= TRACKPAD_PRESS_MIN_MS) {
         tp_press_set(false);
     }
 }

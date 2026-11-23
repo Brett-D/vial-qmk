@@ -94,13 +94,14 @@
 #    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z
 #endif
 
-// Press-to-click: pressing harder (Z >= threshold for TRACKPAD_PRESS_DEBOUNCE
-// polls) holds the left button until Z drops below threshold - hysteresis or
-// the finger lifts. Enable/threshold/hysteresis are saved in EEPROM and can be
-// changed live in trackpad_z.html; these are the defaults.
+// Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE
+// polls presses the left button; it stays held at normal touch pressure (for
+// dragging) until the finger lifts or Z drops below the release Z. Enable,
+// threshold and release Z are saved in EEPROM and can be changed live in
+// trackpad_z.html; these are the defaults.
 #define TRACKPAD_PRESS_DEFAULT_ENABLED 1
-#define TRACKPAD_PRESS_DEFAULT_THRESHOLD 51  // Brett's light touches peaked at 49
-#define TRACKPAD_PRESS_DEFAULT_HYSTERESIS 4  // release below 47
+#define TRACKPAD_PRESS_DEFAULT_THRESHOLD 51  // Brett's light touches peaked at 36-49
+#define TRACKPAD_PRESS_DEFAULT_RELEASE_Z 24  // well below light-touch levels; lifting always releases
 #define TRACKPAD_PRESS_DEBOUNCE 2            // polls (~10 ms each)
 #define TRACKPAD_PRESS_MIN_MS 30             // shortest click before Z can release it
 #define TRACKPAD_PRESS_FREEZE_MS 60          // hold the cursor still after press/release
