@@ -35,6 +35,9 @@
 #include "brettssofle.h"
 #include "bridge.h"
 #include "deliver.h"
+#ifdef NETWORK_ENABLE
+#    include "net.h"
+#endif
 #include "config_picker.h"
 #include "led_cal.h"
 #include "led_layers.h"
@@ -217,6 +220,7 @@ typedef struct {
     uint8_t nav;                  // right knob drives the page
     uint8_t lay_base, lay_react, lay_hue, lay_sat; // layered lighting (led_layers.c)
     uint8_t dl, dl_pct;                            // typed page delivery (deliver.c)
+    uint8_t net;                                   // network mode: state | 0x80 = no address yet (fallbacks)
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -572,6 +576,12 @@ void config_mode_toggle(void) {
     if (hid.state == HS_ASK) {
         return; // a web session prompt is on screen
     }
+#ifdef NETWORK_ENABLE
+    if (net_mode_active()) {
+        net_mode_exit(); // CONFIG / both knobs leave network mode
+        return;
+    }
+#endif
     if (cfg.state == ST_OFF) {
         bridge_ask();
     } else if (cfg.state == ST_ASK) {
@@ -623,6 +633,13 @@ static void ask_key(uint8_t row, uint8_t col) {
         deliver_start(); // type the config page into the browser (deliver.c)
         return;
     }
+#ifdef NETWORK_ENABLE
+    if (hid.state != HS_ASK && base == KC_N) {
+        cfg.state = ST_OFF;
+        net_mode_enter(); // USB network + web page at 192.168.7.1 (net/)
+        return;
+    }
+#endif
     if (!yes && !no) {
         return;
     }
@@ -1120,6 +1137,24 @@ static void knob_turn(uint8_t knob, bool clockwise) {
     }
 }
 
+#ifdef NETWORK_ENABLE
+// Network mode got no DHCP request: P leaves it and types the page instead.
+static uint32_t fallback_deliver_at;
+static bool     net_fallback_key(keyrecord_t *record) {
+    keyevent_t *ev = &record->event;
+    if (!net_failed() || ev->type != KEY_EVENT || !ev->pressed || ev->key.row >= MATRIX_ROWS) {
+        return false;
+    }
+    if (basic_of(default_layer_keycode(ev->key.row, ev->key.col)) != KC_P) {
+        return false;
+    }
+    held_swallowed[ev->key.row] |= (matrix_row_t)1 << ev->key.col;
+    net_mode_exit();
+    fallback_deliver_at = timer_read32() | 1;
+    return true;
+}
+#endif
+
 bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
 #ifdef RGB_MATRIX_ENABLE
     if (led_cal_process(record)) {
@@ -1129,6 +1164,11 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (deliver_process(record)) {
         return false; // typing the config page into the browser
     }
+#ifdef NETWORK_ENABLE
+    if (net_fallback_key(record)) {
+        return false;
+    }
+#endif
     keyevent_t *ev     = &record->event;
     bool        is_key = ev->type == KEY_EVENT && ev->key.row < MATRIX_ROWS;
     uint8_t     row = ev->key.row, col = ev->key.col;
@@ -1348,7 +1388,10 @@ static void oled_sync_task(void) {
 #endif
     now.dl     = deliver_state();
     now.dl_pct = deliver_percent();
-    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl;
+#ifdef NETWORK_ENABLE
+    now.net = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) : 0;
+#endif
+    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl || now.net;
     // Resent now and then even when idle: the right half may have restarted.
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || timer_elapsed(last_time) > (active ? CONFIG_MODE_OLED_SYNC_MS : 5000);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
@@ -1362,10 +1405,33 @@ bool config_mode_oled_task(void) {
     static uint8_t last_screen;
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
-    uint8_t        screen = oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    uint8_t        screen = oled_state.net ? 0xE0 | (oled_state.net & 0x0F) | (oled_state.net & 0x80 ? 0x10 : 0) : oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
     if (screen != last_screen) {
         oled_clear();
         last_screen = screen;
+    }
+    if (oled_state.net) {
+        // USB network config mode (net/).
+        oled_write_P(PSTR("NET  "), true);
+        oled_write_P(PSTR("     "), false);
+        if (oled_state.net & 0x80) {
+            oled_write_P(PSTR("No IPyet  P=   type page "), false); // the fallback: type the page
+        } else {
+            switch (oled_state.net & 0x0F) {
+                case 1: // NET_USB
+                    oled_write_P(PSTR("USB  conn."), false);
+                    break;
+                case 2: // NET_LINK
+                    oled_write_P(PSTR("Link up   DHCP "), false);
+                    break;
+                default: // NET_READY
+                    oled_write_P(PSTR("Open 192. 168. 7.1  "), false);
+                    break;
+            }
+        }
+        oled_set_cursor(0, 13);
+        oled_write_P(PSTR("CONFG=exit "), false);
+        return true;
     }
     if (oled_state.dl) {
         // Typed page delivery (deliver.c).
@@ -1407,6 +1473,9 @@ bool config_mode_oled_task(void) {
         oled_write_P(PSTR("Knob=yes  Esc= no   "), false);
         if (oled_state.hid != HS_ASK) {
             oled_write_P(PSTR("P=   type page "), false); // deliver.c
+#ifdef NETWORK_ENABLE
+            oled_write_P(PSTR("N=   net  "), false); // net/
+#endif
         }
         return true;
     }
@@ -1481,6 +1550,13 @@ void config_mode_task(void) {
     }
     knob_combo_task();
     deliver_task();
+#ifdef NETWORK_ENABLE
+    net_task();
+    if (fallback_deliver_at && timer_elapsed32(fallback_deliver_at) > 2500) {
+        fallback_deliver_at = 0;
+        deliver_start(); // the plain keyboard is back: type the page instead
+    }
+#endif
     oled_sync_task();
 
     if (nav.on && (hid.state != HS_ACTIVE || cfg.state != ST_OFF || timer_elapsed32(nav.time) >= CONFIG_NAV_IDLE_MS)) {

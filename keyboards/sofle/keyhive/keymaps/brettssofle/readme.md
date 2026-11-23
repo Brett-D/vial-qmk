@@ -134,7 +134,30 @@ Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad
 `config_page/sofle-config.html` — a single file you open from disk (keep a
 copy on any computer). Nothing to install, no internet. Two ways to use it:
 
-### Get the page from the keyboard (no file needed)
+### USB network mode (keyboard at 192.168.7.1)
+
+Press `CONFIG` (or hold both knobs), and at **CONF?** press **N**. The
+keyboard reconnects as a composite USB device (keyboard, mouse, raw HID and
+a CDC-NCM network adapter, product ID `0x1288`); typing and the trackpad keep
+working. The computer gets **192.168.7.2** by DHCP — no gateway and no DNS,
+so its internet connection is untouched — and the keyboard is
+**192.168.7.1**. The OLED shows **NET**: `USB conn.` → `Link up DHCP` →
+`Open 192.168.7.1`. `CONFIG` / both knobs again return to the plain keyboard;
+it also does so by itself after 10 minutes without network traffic.
+
+- Windows 10 (1903+) / 11: a new "Ethernet" adapter appears (built-in
+  UsbNcm driver, selected by the keyboard's Microsoft OS 2.0 descriptors).
+  `ping 192.168.7.1`; `ipconfig` shows 192.168.7.2 with no default gateway.
+- Linux: a new `enx02536f666c65` / `usbX` interface; NetworkManager takes
+  the DHCP address. `ping 192.168.7.1`.
+- If nothing gets an address within 20 s the OLED shows `No IP yet`: press
+  **P** to go back to the plain keyboard and get the page typed instead
+  (below), or use the saved `sofle-config.html`.
+
+Milestones: v8 = network link, DHCP and ping; the page over HTTP and its
+API follow. Network code: `net/` (lwIP from `lib/chibios/ext`, extracted
+once — see rules.mk; build without it: `NETWORK_ENABLE=no`).
+
 
 The keyboard carries a copy of the page (`config_page_blob.h`, built from
 `sofle-config.html` at every build) and can type it into any browser:

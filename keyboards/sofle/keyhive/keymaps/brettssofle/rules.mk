@@ -1,4 +1,5 @@
 # Build: make sofle/keyhive:brettssofle -e CONVERT_TO=rp2040_ce
+BRETTS_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 # Hardware: Keyhive Sofle v2, Sea-Picro EXT (RP2040) on both halves,
 # Cirque Pinnacle trackpad on the left (USB) half, OLED on the right half.
 
@@ -47,8 +48,27 @@ SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
 SRC += config_mode.c bridge.c wiggler.c deliver.c
 # Typed page delivery: config_page_blob.h is the page as deliver.c types it,
 # regenerated from sofle-config.html at every build so the two never drift.
-CONFIG_PAGE_BLOB_GEN := $(shell python3 $(dir $(lastword $(MAKEFILE_LIST)))config_page/gen_page_blob.py 2>&1 || python $(dir $(lastword $(MAKEFILE_LIST)))config_page/gen_page_blob.py 2>&1)
+CONFIG_PAGE_BLOB_GEN := $(shell python3 $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1 || python $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1)
 $(info $(CONFIG_PAGE_BLOB_GEN))
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
     SRC += rgb_driver.c rgb_layout.c led_map.c led_cal.c led_layers.c
+endif
+
+# USB network config mode (net/): the keyboard re-enumerates with a CDC-NCM
+# network adapter and serves the config page at http://192.168.7.1 (lwIP).
+# lwIP ships inside ChibiOS as an archive; extract it once:
+#   7z x lib/chibios/ext/lwip-2.1.2.7z -olib/chibios/ext
+# (or: python -m pip install py7zr && python -c "import py7zr; py7zr.SevenZipFile('lib/chibios/ext/lwip-2.1.2.7z').extractall('lib/chibios/ext')")
+NETWORK_ENABLE ?= yes
+ifeq ($(strip $(NETWORK_ENABLE)), yes)
+    LWIP_DIR := lib/chibios/ext/lwip/src
+    ifeq ($(wildcard $(LWIP_DIR)/core/init.c),)
+        $(error lwIP not extracted: run  7z x lib/chibios/ext/lwip-2.1.2.7z -olib/chibios/ext  (or build with NETWORK_ENABLE=no))
+    endif
+    OPT_DEFS += -DNETWORK_ENABLE
+    EXTRAINCDIRS += $(BRETTS_DIR)/net $(LWIP_DIR)/include
+    SRC += net/ncm.c net/ntb.c net/stack.c
+    SRC += $(addprefix $(LWIP_DIR)/, core/init.c core/def.c core/inet_chksum.c core/ip.c core/mem.c core/memp.c \
+        core/netif.c core/pbuf.c core/sys.c core/tcp.c core/tcp_in.c core/tcp_out.c core/timeouts.c core/udp.c \
+        core/ipv4/etharp.c core/ipv4/icmp.c core/ipv4/ip4.c core/ipv4/ip4_addr.c core/ipv4/ip4_frag.c netif/ethernet.c)
 endif
