@@ -230,7 +230,7 @@ typedef struct {
     uint8_t cal;                  // LED calibration / test state (led_cal.h)
     uint8_t nav;                  // right knob drives the page
     uint8_t lay_base, lay_react, lay_hue, lay_sat; // layered lighting (led_layers.c)
-    uint8_t dl, dl_pct;                            // typed page delivery (deliver.c)
+    uint8_t dl, dl_pct, dl_pass;                   // typed page delivery (deliver.c)
     uint8_t net;                                   // network mode: state | 0x80 = no address yet (fallbacks)
     uint8_t net_bye;                               // network mode just ended: why (NET_EXIT_*)
 } cfg_oled_t;
@@ -640,9 +640,9 @@ static void ask_key(uint8_t row, uint8_t col) {
     uint16_t base = basic_of(default_layer_keycode(row, col));
     bool     yes  = (row == KNOB_R_ROW && col == KNOB_R_COL) || base == KC_ENTER || base == KC_SPACE;
     bool     no   = (row == KNOB_L_ROW && col == KNOB_L_COL) || base == KC_ESCAPE;
-    if (hid.state != HS_ASK && base == KC_P) {
+    if (hid.state != HS_ASK && (base == KC_P || base == KC_F)) {
         cfg.state = ST_OFF;
-        deliver_start(); // type the config page into the browser (deliver.c)
+        deliver_start(base == KC_F ? DL_FULL : DL_LIGHT); // type a config page into the browser (deliver.c)
         return;
     }
 #ifdef NETWORK_ENABLE
@@ -1418,6 +1418,7 @@ static void oled_sync_task(void) {
 #endif
     now.dl     = deliver_state();
     now.dl_pct = deliver_percent();
+    now.dl_pass = deliver_pass();
 #ifdef NETWORK_ENABLE
     now.net = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) : 0;
     uint32_t ago;
@@ -1494,15 +1495,20 @@ bool config_mode_oled_task(void) {
                 oled_write_P(PSTR("PressEnteragain"), false);
                 break;
             case DL_STREAM:
-                oled_write_P(PSTR("Send "), false);
+                oled_write_P(oled_state.dl_pass > 1 ? PSTR("Fix  ") : PSTR("Send "), false); // repair round / the page
                 break;
             default:
-                oled_write_P(PSTR("Sent      Knob=again"), false);
+                oled_write_P(PSTR("Sent      Knob=fix "), false); // repair blocks if the page asks
                 break;
         }
         if (oled_state.dl == DL_TYPE || oled_state.dl == DL_STREAM) {
             oled_write(get_u8_str(oled_state.dl_pct, ' '), false);
             oled_write_P(PSTR("%"), false);
+        }
+        if (oled_state.dl == DL_STREAM || oled_state.dl == DL_DONE) {
+            oled_set_cursor(0, 10);
+            oled_write_P(PSTR("pass "), false);
+            oled_write(get_u8_str(oled_state.dl_pass, ' ') + 1, false);
         }
         oled_set_cursor(0, 13);
         oled_write_P(PSTR("Esc= stop "), false);
@@ -1518,7 +1524,7 @@ bool config_mode_oled_task(void) {
         oled_write_P(oled_state.hid == HS_ASK ? PSTR("Web  ") : PSTR("     "), false);
         oled_write_P(PSTR("Knob=yes  Esc= no   "), false);
         if (oled_state.hid != HS_ASK) {
-            oled_write_P(PSTR("P=   type page "), false); // deliver.c
+            oled_write_P(PSTR("P=   lite F=   full "), false); // deliver.c: type the light / full page
 #ifdef NETWORK_ENABLE
             oled_write_P(PSTR("N=   net  "), false); // net/
 #endif
@@ -1600,7 +1606,7 @@ void config_mode_task(void) {
     net_task();
     if (fallback_deliver_at && timer_elapsed32(fallback_deliver_at) > 2500) {
         fallback_deliver_at = 0;
-        deliver_start(); // the plain keyboard is back: type the page instead
+        deliver_start(DL_LIGHT); // the plain keyboard is back: type the page instead
     }
 #endif
     oled_sync_task();

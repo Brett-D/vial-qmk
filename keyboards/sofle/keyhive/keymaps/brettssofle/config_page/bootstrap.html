@@ -2,13 +2,24 @@
 Bootstrap page the keyboard types into the browser's address bar as a
 data: URL (config_page/gen_page_blob.py compacts it to one line and checks
 that it only uses safe characters: no spaces, '#', '%' or newlines; "_" in
-messages becomes a space). After Brett presses Enter it loads, asks for a
-second Enter (Enter also resets a stopped transfer), then reads the gzipped config page that the keyboard types as
-base32 keystrokes (',' start, A-Z/2-7 symbols, '.' end). It reads
-KeyboardEvent.code, so the host keyboard layout doesn't matter. The gzip
-CRC rejects a damaged transfer; the right knob makes the keyboard send it again. The result is offered as a download
-(sofle-config.html: opened from disk it gets WebHID, a data: page doesn't).
-Stream: 4-byte big-endian length, then the gzip bytes.
+messages becomes a space). After Brett presses Enter it loads and asks for a
+second Enter; then the keyboard types the page (deliver.c) in blocks:
+  ',' + 96 base32 symbols (A-Z, 2-7): block index u16 (bit 15 = repair
+  block), gzip length u16, page kind u8 (0 light, 1 full), 51 bytes, CRC-32
+  ... and '...' at the end of a pass.
+A block one symbol short or long (a key lost or doubled) is mended by
+trying every insertion / deletion against the CRC-32 (F, X); 192 symbols
+(a lost ',') are split in two. Blocks that still fail are dropped; good
+ones are kept across passes. Repair block r is the XOR of the page blocks s with H(r,s) odd, so
+missing blocks are solved from repair blocks (GF(2) elimination, Z), as soon as there are enough of
+them (mid-pass: the page then says to press Esc). It
+reads KeyboardEvent.code, so the host keyboard layout doesn't matter. The
+result is offered as a download (opened from disk it gets WebHID).
+Functions share implicit globals, so each one's loop variables differ
+from those of the functions it calls (F: I O V w; X: i a l o p x; C: c i j).
+Variables: v symbols of the current block (0 = none), R block accepted, K page blocks, Q
+repair blocks, N block count, L gzip length, J kind, P pass, B bad blocks,
+G good blocks, k0 key count, t0 start time, A done.
 -->
 <title>Sofle</title>
 <body>
@@ -17,31 +28,44 @@ S="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 d=document;
 d.body.style.cssText="font:20px\x20sans-serif;margin:40px";
 T=t=>d.body.innerHTML=("<h2>Sofle_config</h2>"+t).replace(/_/g,"\x20");
-g=0;v=[];N=0;
-T("<p>Press_<b>Enter</b>_to_load_it_from_the_keyboard_(about_a_minute)._Don't_type_until_it's_done.");
-X=()=>(o=[],a=0,l=0,v.map(s=>{a=(a<<5|s)&4095;l+=5;if(l>7){l-=8;o.push(a>>l&255)}}),o);
-onkeydown=e=>{
-c=e.code;
-if(e.ctrlKey||e.altKey||e.metaKey||g>3)return;
+g=0;v=0;K=[];Q=[];N=0;L=0;J=0;P=1;B=0;G=0;k0=0;t0=0;A=0;
+T("<p>Press_<b>Enter</b>._Don't_type_until_it's_done.");
+H=(r,s)=>(h=Math.imul(r+1,0x9E3779B1)^Math.imul(s+1,0x85EBCA77),h^=h>>>15,h=Math.imul(h,0x2C1B3C6D),h^=h>>>12,h=Math.imul(h,0x297A2D39),(h^h>>>15)&1);
+C=o=>{c=-1;for(i=0;i<56;i++){c^=o[i];for(j=0;j<8;j++)c=c>>>1^(c&1?0xEDB88320:0)}return(~c>>>0)};
+X=w=>{o=[];a=0;l=0;for(i=0;i<96;i++){a=(a<<5|w[i])&4095;l+=5;if(l>7){l-=8;o.push(a>>l&255)}}
+if(C(o)!=(o[56]<<24|o[57]<<16|o[58]<<8|o[59])>>>0)return;R=1;
+x=o[0]<<8|o[1];Y=o[2]<<8|o[3];if(Y!=L){K=[];Q=[];L=Y;N=Math.ceil(L/51)}
+J=o[4];G++;p=o.slice(5,56);if(x<32768)K[x]=p;else{x&=32767;Q.some(q=>q[0]==x)||Q.push([x,p])}};
+F=()=>{if(!v)return;w=v;v=0;V=w.length;R=0;
+if(V==96)X(w);
+if(V==95)for(I=0;I<96&&!R;I++)for(O=0;O<32&&!R;O++)X(w.slice(0,I).concat([O],w.slice(I)));
+if(V==97)for(I=0;I<97&&!R;I++)X(w.slice(0,I).concat(w.slice(I+1)));
+if(V==192){X(w.slice(0,96));if(!R)B++;R=0;X(w.slice(96))}
+if(!R)B++};
+Z=()=>{M=[];for(s=0;s<N;s++)if(!K[s])M.push(s);m=M.length;if(!m||!N)return(N>0);if(Q.length<m)return(0);
+E=Q.map(w=>{q=w[1].slice();for(s=0;s<N;s++)if(K[s]&&H(w[0],s))for(j=0;j<51;j++)q[j]^=K[s][j];return([M.map(s=>H(w[0],s)),q])});
+for(c=0;c<m;c++){n=-1;for(i=c;i<E.length;i++)if(E[i][0][c]){n=i;break}if(n<0)return(0);
+w=E[c];E[c]=E[n];E[n]=w;
+for(i=0;i<E.length;i++)if(i!=c&&E[i][0][c]){for(j=c;j<m;j++)E[i][0][j]^=E[c][0][j];for(j=0;j<51;j++)E[i][1][j]^=E[c][1][j]}}
+for(c=0;c<m;c++)K[M[c]]=E[c][1];return(1)};
+U=f=>{n=0;for(s=0;s<N;s++)if(K[s])n++;r=Math.round(k0/Math.max(1,(Date.now()-t0)/1000));
+T("<p>"+(f?(N-n)+"_of_"+N+"_missing._Press_the_<b>right_knob</b>_for_repair_blocks.":"Receiving..._"+n+"/"+(N||"?"))+"<p>Pass_"+P+",_"+B+"_bad,_"+Q.length+"_repair,_"+r+"_keys/s")};
+D=async()=>{try{o=[];for(s=0;s<N;s++)o=o.concat(K[s]);o=o.slice(0,L);
+z=Reflect.construct(Blob,[[Uint8Array.from(o)]]).stream().pipeThrough(Reflect.construct(DecompressionStream,["gzip"]));
+W=await(Reflect.construct(Response,[z])).text();A=1;g=4;
+f=J?"sofle-config.html":"sofle-light.html";
+T("<p>Done_(pass_"+P+")._Press_<b>Esc</b>_if_it_still_types.<p><a_download="+f+"><button>Save_as_"+f+"</button></a><p>Open_the_saved_file_in_Chrome_or_Edge."+(J?"<p><button_id=u9>Use_it_here</button>":""));
+d.querySelector("a").href=URL.createObjectURL(Reflect.construct(Blob,[[W],{type:"text/html"}]));
+if(J)u9.onclick=()=>{d.open();d.write(W);d.close()};
+}catch(x){g=3;K=[];Q=[];T("<p>Failed_("+x+")._Press_the_<b>right_knob</b>.")}};
+onkeydown=e=>{y=e.code;
+if(e.ctrlKey||e.altKey||e.metaKey||A||g>4)return;
 e.preventDefault();
-if(/Enter/.test(c)){if(g<4){g=1;T("<p>Waiting_for_the_keyboard...")}return}
-if(c=="Comma"){v=[];N=0;g=2;return}
-if(g!=2)return;
-if(c=="Period"){g=3;D();return}
-k=S.indexOf(c.slice(-1));
-if(k<0||!/^(Key|Digit)/.test(c))return;
-v.push(k);
-if(v.length==7){o=X();N=((o[0]<<24|o[1]<<16|o[2]<<8|o[3])+4)*1.6}
-if(N&&!(v.length&511))T("<p>Receiving..._"+Math.floor(v.length*99/N)+"\x25");
-};
-D=async()=>{try{
-o=X();L=o[0]<<24|o[1]<<16|o[2]<<8|o[3];
-if(o.length<L+4)throw"incomplete";
-z=Reflect.construct(Blob,[[Uint8Array.from(o.slice(4,4+L))]]).stream().pipeThrough(Reflect.construct(DecompressionStream,["gzip"]));
-H=await(Reflect.construct(Response,[z])).text();
-g=4;
-T("<p><a_id=s_download=sofle-config.html><button>Save_as_sofle-config.html</button></a><p>Then_open_the_saved_file._In_Chrome_or_Edge_the_mouse_works_there.<p><button_id=u>Use_it_here_(keyboard-only_mode)</button>");
-s.href=URL.createObjectURL(Reflect.construct(Blob,[[H],{type:"text/html"}]));
-u.onclick=()=>{d.open();d.write(H);d.close()};
-}catch(x){g=1;T("<p>Transfer_failed_("+x+")._Press_the_<b>right_knob</b>_to_send_it_again.")}};
+if(/Enter/.test(y)){if(g<2){g=1;T("<p>Waiting_for_the_keyboard...")}return}
+if(y=="Comma"){F();v=[];if(g!=2){g=2;t0=Date.now();k0=0}if(P>1&&Z()){g=5;D()}else{if(!(G&7))U()}return}
+if(y=="Period"){F();if(g==2){if(Z()){g=5;D()}else{g=3;U(1);P++}}v=0;return}
+if(!v)return;
+n=S.indexOf(y.slice(-1));
+if(n<0||!/^(Key|Digit)/.test(y))return;
+v.push(n);k0++};
 </script>

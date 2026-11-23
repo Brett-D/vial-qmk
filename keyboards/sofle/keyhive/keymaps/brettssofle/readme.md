@@ -160,8 +160,8 @@ it also does so by itself after 10 minutes without network traffic.
 - Linux: a new `enx02536f666c65` / `usbX` interface; NetworkManager takes
   the DHCP address. `ping 192.168.7.1`.
 - If nothing gets an address within 20 s the OLED shows `No IP yet`: press
-  **P** to go back to the plain keyboard and get the page typed instead
-  (below), or use the saved `sofle-config.html`.
+  **P** to go back to the plain keyboard and get the light page typed
+  instead (below), or use a saved `sofle-config.html` / `sofle-light.html`.
 
 Milestones: v8 = network link, DHCP and ping; v9 = the page over HTTP; v10 = its API.
 
@@ -181,24 +181,57 @@ the CONF? confirm on the keyboard. Network code: `net/` (lwIP from `lib/chibios/
 once — see rules.mk; build without it: `NETWORK_ENABLE=no`).
 
 
-The keyboard carries a copy of the page (`config_page_blob.h`, built from
-`sofle-config.html` at every build) and can type it into any browser:
+### Typed page delivery (nothing to install, no network)
+
+The keyboard carries two copies of the page (`config_page_blob.h`, rebuilt
+from the HTML at every build) and can type either into any browser:
+
+| | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
+|---|---|---|
+| has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, layered effects, pet, wiggler, knob control, keyboard-only mode, help, …) |
+| gzipped | 8.6 KB | 45.3 KB |
+| typing (one clean pass) | ~19 s address + ~33 s | ~19 s address + ~172 s |
+
+The full page is also served by network mode, and a saved light page can be
+used to get it the same way (it has the same backup format).
 
 1. Open a new browser tab (the address bar is selected).
-2. Press **Raise + top-right** (`CONFIG`); the OLED asks **CONF?**. Press **P**.
-3. The keyboard types a short `data:` address (~10 s). Press **Enter**.
-4. The page asks for **Enter** again: press it. The keyboard types the page
-   (~50 s, progress on the screen and the OLED). Don't type meanwhile.
-5. Click **Save as sofle-config.html**, then open the saved file. In
-   Chrome/Edge it has mouse mode; anywhere, keyboard-only mode works (or use
-   **Use it here** straight away).
+2. Press **Raise + top-right** (`CONFIG`); the OLED asks **CONF?**. Press
+   **P** (light page) or **F** (full page).
+3. The keyboard types a short `data:` address (~19 s). Press **Enter**.
+4. The page asks for **Enter** again: press it. The keyboard types the page;
+   the screen shows blocks received, bad blocks and keys/s, the OLED
+   `Send nn%` and the pass number. Don't type meanwhile.
+5. If the page then says blocks are missing, press the **right knob**: the
+   keyboard sends repair blocks (slower) and the page fills the gaps as soon
+   as it has enough — when it says **Done**, press **Esc** to stop the rest.
+   Press the knob again if it still says blocks are missing.
+6. Click **Save as sofle-light.html** (or sofle-config.html) and open the
+   saved file: in Chrome/Edge it has mouse mode (WebHID can't work from a
+   `data:` address). The full page also offers **Use it here**
+   (keyboard-only mode).
 
-If the transfer is damaged the page says so: press the **right knob** to send
-it again. **Esc** stops at any time. The address part is typed for a **US
-keyboard layout** on the computer (the page part works with any layout).
-Only printable characters are typed — never Enter or shortcuts; the two
-Enters are yours.
+How the stream survives dropped keys: the page is sent in 60-byte blocks
+(`,` + 96 letters/digits `A–Z 2–7`: block number, page length, page kind,
+51 page bytes, CRC-32), every key as its own key-down and key-up report
+(2 ms per key on the first pass). A block with one key lost or doubled is
+mended by the page (it tries every insertion/deletion against the CRC);
+worse blocks are dropped and the rest kept. Repair blocks are XORs of
+pseudo-random sets of page blocks (`deliver_hash()` in `deliver.c` = `H` in
+`bootstrap.html`), so any repair block can stand in for any missing block
+(solved by GF(2) elimination); repair rounds are a quarter of the page and
+type at 4, then 6 ms per key. A page can't signal back to the keyboard (it
+can't set the lock LEDs, and a `data:` page has no WebHID), hence the knob
+press. In tests with 0.1–1 % of keys dropped, doubled or swapped the light
+page arrives byte for byte in ~34–87 s (the v15 single-CRC stream never
+survived those rates).
 
+**Esc** stops at any time. The address part is typed for a **US keyboard
+layout** on the computer (the page part works with any layout). Only
+printable characters are typed — never Enter or shortcuts; the two Enters
+are yours.
+
+### Mouse mode (WebHID: Chrome / Edge)
 
 1. Open the page and click **Connect**, then pick **Sofle** in the browser's list.
 2. The right OLED shows **CONF?** — press the **right knob** (or Enter) to
@@ -263,8 +296,8 @@ Keymap changes are saved like Vial's (EEPROM; a new firmware build resets them
 to the defaults in `keymap.c`). v1 covers keymap, knobs, LEDs and
 trackpad; use Vial for combos, tap dance and macros.
 
-After changing `config_page/gen_config.py` or `config_page/page.html`,
-regenerate `config_picker.h` and the page:
+After changing `config_page/gen_config.py`, `config_page/page.html` or
+`config_page/light.html`, regenerate `config_picker.h` and both pages:
 `python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
 
 ## Building

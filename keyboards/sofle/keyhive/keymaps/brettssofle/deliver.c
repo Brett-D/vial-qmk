@@ -11,14 +11,29 @@
 // 2. The keyboard types a short bootstrap data: URL (config_page/bootstrap.html)
 //    into the address bar: printable characters only, no Enter or shortcuts.
 // 3. Brett presses Enter himself; the bootstrap asks for Enter again; on that
-//    second Enter the keyboard types the page as base32 keystrokes
-//    (',' + symbols A-Z/2-7 + '.'), one report per symbol: the next key is
-//    pressed in the same report that releases the previous one (a release-only
-//    report separates equal symbols). The page reads KeyboardEvent.code, so
+//    second Enter the keyboard types the page (the light one, or the full one
+//    if F was chosen) as base32 keystrokes A-Z/2-7, in blocks:
+//
+//      ',' + 96 symbols (60 bytes: block index u16, gzip length u16, page
+//      kind u8, 51 page bytes, CRC-32)   ... one block after another, '...'
+//      at the end of the pass.
+//
+//    Every key is a key-down report and a separate key-up report, 1 ms apart
+//    on the first pass (2 ms per key). The page reads KeyboardEvent.code, so
 //    the host keyboard layout doesn't matter for this part.
-// 4. The bootstrap unpacks it (the gzip CRC catches errors) and offers
-//    "Save as sofle-config.html". If the transfer failed, the right knob
-//    sends it again. Esc stops at any time.
+// 4. The bootstrap keeps every block whose CRC is right. A block with one
+//    dropped or doubled key is mended by trying each insertion / deletion
+//    against the CRC-32; worse only costs that block (a lost ',' joins two
+//    blocks, which are split again). If blocks are missing after the
+//    pass, the right knob sends *repair* blocks (index bit 15 set): repair
+//    block r is the XOR of the page blocks s for which deliver_hash(r, s) is odd
+//    (the same hash in bootstrap.html), so any repair block can fill any hole
+//    and the page solves for the missing blocks (GF(2) elimination). Each
+//    repair round is a quarter of the page (+4 blocks) and slower: 2, then 3
+//    ms per report. There is no way back from a page to the keyboard (a page
+//    can't set the lock LEDs), so the page says when to press the knob.
+//    Then it offers "Save as sofle-light.html" / "sofle-config.html". Esc
+//    stops at any time.
 //
 // While typing, the keyboard's own key and knob events are swallowed (except
 // Esc), so nothing can mix into the stream. The bootstrap is typed for a US
@@ -32,7 +47,11 @@
 #include "usb_endpoints.h"
 
 #define DL_BOOT_REPORT_MS 3      // address bar: one report every 3 ms (down / up)
-#define DL_STREAM_REPORT_MS 1    // page: one report per USB frame
+#define DL_BLOCK_PAYLOAD 51
+#define DL_BLOCK_BYTES 60        // header 5 + payload 51 + CRC-32
+#define DL_BLOCK_SYMBOLS 96      // 60 * 8 / 5
+#define DL_BLOCK_KEYS (DL_BLOCK_SYMBOLS + 1)
+#define DL_END_KEYS 3            // '...' (one is enough; the rest in case one is lost)
 #define DL_GO_DELAY_MS 150       // after the triggering key is released
 #define DL_NAV_TIMEOUT_MS 60000  // waiting for the first Enter
 #define DL_WAIT_TIMEOUT_MS 120000 // waiting for the second Enter / a retry
@@ -40,18 +59,23 @@
 #define DL_KNOB_ROW 9 // right knob push (retry)
 #define DL_KNOB_COL 5
 
-#define DL_DATA_LEN (4 + CONFIG_PAGE_GZ_LEN)
-#define DL_SYMBOLS ((DL_DATA_LEN * 8 + 4) / 5)
-#define DL_STEPS (DL_SYMBOLS + 2) // ',' + symbols + '.'
+_Static_assert(DL_BLOCK_BYTES * 8 == DL_BLOCK_SYMBOLS * 5, "a block must be whole base32 symbols");
+_Static_assert(CONFIG_PAGE_GZ_LEN < 65536 && CONFIG_LIGHT_GZ_LEN < 65536, "gzip length is sent as 16 bits");
 
 extern usb_endpoint_in_t usb_endpoints_in[USB_ENDPOINT_IN_COUNT];
 
 static struct {
     uint8_t  state;
-    uint32_t pos;  // TYPE: report index (2 per character); STREAM: step
+    uint32_t pos;  // TYPE: report index (2 per character); STREAM: key in the pass
     uint8_t  held; // HID usage held down (0 = none)
     bool     shift;
     uint16_t last_report;
+    uint8_t  kind;            // DL_LIGHT / DL_FULL
+    uint8_t  pass;            // 1 = the page, 2+ = repair rounds
+    uint16_t blocks;          // blocks in this pass
+    uint16_t repair_next;     // next repair block number
+    uint8_t  buf[DL_BLOCK_BYTES];
+    uint8_t  interval;        // ms per report in this pass
     uint32_t time;    // state start
     bool     go;      // start the stream once the trigger key is released
     uint8_t  go_row, go_col;
@@ -68,9 +92,13 @@ uint8_t deliver_percent(void) {
         return dl.pos * 100 / (2 * CONFIG_BOOTSTRAP_LEN);
     }
     if (dl.state == DL_STREAM) {
-        return dl.pos * 100 / (DL_STEPS + 1);
+        return dl.pos * 100 / ((uint32_t)dl.blocks * DL_BLOCK_KEYS + DL_END_KEYS);
     }
     return dl.state == DL_DONE ? 100 : 0;
+}
+
+uint8_t deliver_pass(void) {
+    return dl.pass;
 }
 
 static bool endpoint_idle(void) {
@@ -113,9 +141,11 @@ static void set_state(uint8_t state) {
     dl.go    = false;
 }
 
-void deliver_start(void) {
+void deliver_start(uint8_t kind) {
     release_all();
     set_state(DL_TYPE);
+    dl.kind = kind;
+    dl.pass = 0;
 }
 
 void deliver_stop(void) {
@@ -123,30 +153,110 @@ void deliver_stop(void) {
     set_state(DL_OFF);
 }
 
-static uint8_t data_byte(uint32_t i) {
-    if (i < 4) {
-        return (uint32_t)CONFIG_PAGE_GZ_LEN >> (24 - 8 * i);
-    }
-    return i < DL_DATA_LEN ? pgm_read_byte(&config_page_gz[i - 4]) : 0;
+static const uint8_t *page_gz(void) {
+    return dl.kind == DL_FULL ? config_page_gz : config_light_gz;
 }
 
-static uint8_t symbol_at(uint32_t index) {
-    uint32_t bit   = index * 5;
+static uint16_t page_len(void) {
+    return dl.kind == DL_FULL ? CONFIG_PAGE_GZ_LEN : CONFIG_LIGHT_GZ_LEN;
+}
+
+static uint16_t page_blocks(void) {
+    return (page_len() + DL_BLOCK_PAYLOAD - 1) / DL_BLOCK_PAYLOAD;
+}
+
+// Which page blocks repair block r covers (bootstrap.html: H).
+uint32_t deliver_hash(uint32_t r, uint32_t s) {
+    uint32_t h = (r + 1) * 0x9E3779B1u ^ (s + 1) * 0x85EBCA77u;
+    h ^= h >> 15;
+    h *= 0x2C1B3C6Du;
+    h ^= h >> 12;
+    h *= 0x297A2D39u;
+    return (h ^ h >> 15) & 1;
+}
+
+static uint8_t page_byte(uint32_t i) {
+    return i < page_len() ? pgm_read_byte(&page_gz()[i]) : 0;
+}
+
+// CRC-32 (zlib's), bitwise: the block is checked once per 97 keys.
+uint32_t deliver_crc32(const uint8_t *b, uint8_t n) {
+    uint32_t c = 0xFFFFFFFF;
+    for (uint8_t i = 0; i < n; i++) {
+        c ^= b[i];
+        for (uint8_t j = 0; j < 8; j++) {
+            c = c >> 1 ^ (c & 1 ? 0xEDB88320 : 0);
+        }
+    }
+    return ~c;
+}
+
+// Block `n` of this pass into dl.buf.
+static void build_block(uint16_t n) {
+    uint16_t index = dl.pass == 1 ? n : (0x8000 | (dl.repair_next + n));
+    uint16_t len = page_len(), count = page_blocks();
+    dl.buf[0]    = index >> 8;
+    dl.buf[1]    = index;
+    dl.buf[2]    = len >> 8;
+    dl.buf[3]    = len;
+    dl.buf[4]    = dl.kind;
+    uint8_t *p   = dl.buf + 5;
+    if (dl.pass == 1) {
+        for (uint8_t j = 0; j < DL_BLOCK_PAYLOAD; j++) {
+            p[j] = page_byte((uint32_t)n * DL_BLOCK_PAYLOAD + j);
+        }
+    } else {
+        memset(p, 0, DL_BLOCK_PAYLOAD);
+        for (uint16_t s = 0; s < count; s++) {
+            if (deliver_hash(index & 0x7FFF, s)) {
+                for (uint8_t j = 0; j < DL_BLOCK_PAYLOAD; j++) {
+                    p[j] ^= page_byte((uint32_t)s * DL_BLOCK_PAYLOAD + j);
+                }
+            }
+        }
+    }
+    uint32_t crc = deliver_crc32(dl.buf, DL_BLOCK_BYTES - 4);
+    dl.buf[56]   = crc >> 24;
+    dl.buf[57]   = crc >> 16;
+    dl.buf[58]   = crc >> 8;
+    dl.buf[59]   = crc;
+}
+
+static uint8_t block_symbol(uint8_t i) {
+    uint16_t bit   = i * 5;
     uint8_t  value = 0;
-    for (uint8_t i = 0; i < 5; i++, bit++) {
-        value = value << 1 | ((data_byte(bit >> 3) >> (7 - (bit & 7))) & 1);
+    for (uint8_t k = 0; k < 5; k++, bit++) {
+        value = value << 1 | ((dl.buf[bit >> 3] >> (7 - (bit & 7))) & 1);
     }
     return value;
 }
 
-static uint8_t stream_key(uint32_t step) {
-    if (step == 0) {
-        return KC_COMMA;
+// Pass `pass`: 1 = the whole page, 2+ = a round of repair blocks.
+static void start_pass(void) {
+    uint8_t pass = dl.pass + 1;
+    if (pass > 1) {
+        dl.repair_next += dl.pass > 1 ? dl.blocks : 0;
+    } else {
+        dl.repair_next = 0;
     }
-    if (step > DL_SYMBOLS) {
+    set_state(DL_STREAM);
+    dl.pass     = pass;
+    dl.blocks   = pass == 1 ? page_blocks() : page_blocks() / 4 + 4;
+    dl.interval = pass == 1 ? 1 : pass == 2 ? 2 : 3;
+}
+
+// The key for position `pos` in the pass: ',' starts each block, '...' ends.
+static uint8_t stream_key(uint32_t pos) {
+    uint16_t block = pos / DL_BLOCK_KEYS;
+    uint8_t  at    = pos % DL_BLOCK_KEYS;
+    if (block >= dl.blocks) {
         return KC_DOT;
     }
-    uint8_t s = symbol_at(step - 1);
+    if (at == 0) {
+        build_block(block);
+        return KC_COMMA;
+    }
+    uint8_t s = block_symbol(at - 1);
     return s < 26 ? KC_A + s : KC_2 + (s - 26);
 }
 
@@ -160,12 +270,12 @@ void deliver_task(void) {
         return;
     }
     if (dl.go && dl.go_time && timer_elapsed32(dl.go_time) >= DL_GO_DELAY_MS) {
-        set_state(DL_STREAM);
+        start_pass();
     }
     if (dl.state != DL_TYPE && dl.state != DL_STREAM) {
         return;
     }
-    uint8_t interval = dl.state == DL_TYPE ? DL_BOOT_REPORT_MS : DL_STREAM_REPORT_MS;
+    uint8_t interval = dl.state == DL_TYPE ? DL_BOOT_REPORT_MS : dl.interval;
     if (timer_elapsed(dl.last_report) < interval || !endpoint_idle()) {
         return;
     }
@@ -183,18 +293,20 @@ void deliver_task(void) {
         dl.pos++;
         return;
     }
-    // DL_STREAM
-    if (dl.pos >= DL_STEPS) {
-        release_all();
+    // DL_STREAM: key down, then key up in its own report.
+    if (dl.held) {
+        report(0, false);
+        return;
+    }
+    if (dl.pos >= (uint32_t)dl.blocks * DL_BLOCK_KEYS + DL_END_KEYS) {
+        uint8_t pass   = dl.pass;
+        uint16_t blocks = dl.blocks;
         set_state(DL_DONE);
+        dl.pass   = pass;
+        dl.blocks = blocks;
         return;
     }
-    uint8_t k = stream_key(dl.pos);
-    if (k == dl.held) {
-        report(0, false); // equal symbols need a release in between
-        return;
-    }
-    report(k, false);
+    report(stream_key(dl.pos), false);
     dl.pos++;
 }
 

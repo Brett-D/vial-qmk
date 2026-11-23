@@ -43,12 +43,12 @@ endif
 
 SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
 # Config mode + keystroke bridge (config_page/sofle-config.html). After
-# editing config_page/gen_config.py or page.html, rerun:
+# editing config_page/gen_config.py, page.html or light.html, rerun:
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
 SRC += config_mode.c bridge.c wiggler.c deliver.c config_page_blob.c diag.c eeprom_layout.c pet.c pet_draw.c page_key.c
 OPT_DEFS += -DPET_ENABLE
 # Typed page delivery: config_page_blob.h is the page as deliver.c types it,
-# regenerated from sofle-config.html at every build so the two never drift.
+# regenerated from sofle-config.html / sofle-light.html at every build so they never drift.
 CONFIG_PAGE_BLOB_GEN := $(shell python3 $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1 || python $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1)
 $(info $(CONFIG_PAGE_BLOB_GEN))
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
