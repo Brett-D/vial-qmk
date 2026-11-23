@@ -7,6 +7,9 @@ VIAL_ENABLE = yes
 QMK_SETTINGS = yes
 
 RGBLIGHT_ENABLE = yes
+# rgb_driver.c wraps the WS2812 driver so each half only drives its own LEDs.
+RGBLIGHT_DRIVER = custom
+WS2812_DRIVER_REQUIRED = yes
 ENCODER_MAP_ENABLE = yes
 EXTRAKEY_ENABLE = yes
 MOUSEKEY_ENABLE = yes
@@ -34,3 +37,6 @@ else
 endif
 
 SRC += trackpad.c oled.c
+ifeq ($(strip $(RGBLIGHT_ENABLE)), yes)
+    SRC += rgb_driver.c
+endif

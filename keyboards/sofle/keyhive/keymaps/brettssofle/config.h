@@ -86,6 +86,8 @@
  * RGB underglow
  * ------------------------------------------------------------------------ */
 #ifdef RGBLIGHT_ENABLE
+// Each half drives only its own 37 LEDs (keyhive split_count); see rgb_driver.c.
+#    define WS2812_LED_COUNT 37
 #    define RGBLIGHT_DEFAULT_MODE (RGBLIGHT_MODE_RAINBOW_SWIRL + 2)
 #    define RGBLIGHT_EFFECT_ALTERNATING
 #    define RGBLIGHT_EFFECT_RGB_TEST
