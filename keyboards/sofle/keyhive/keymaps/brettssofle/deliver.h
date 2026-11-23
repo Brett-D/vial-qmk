@@ -11,8 +11,10 @@
 enum deliver_state {
     DL_OFF,
     DL_TYPE,     // typing the bootstrap address
-    DL_WAIT_NAV, // waiting for Brett's Enter in the address bar
-    DL_WAIT_GO,  // the page is open: waiting for Enter there
+    DL_WAIT_NAV, // waiting for Brett's Enter in the address bar (or the right knob)
+    DL_WAIT_GO,  // the address page is open: Enter (or the right knob) = type the loader
+    DL_LOADER,   // typing the loader into that page
+    DL_LOADED,   // Enter = type the page; the right knob = type the loader again
     DL_STREAM,   // typing the page
     DL_DONE,     // sent; the right knob = send repair blocks
 };

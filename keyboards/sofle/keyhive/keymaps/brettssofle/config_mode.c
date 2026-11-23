@@ -1484,6 +1484,7 @@ bool config_mode_oled_task(void) {
         // Typed page delivery (deliver.c).
         oled_write_P(PSTR("PAGE "), true);
         oled_write_P(PSTR("     "), false);
+        // Portrait: 5 characters per line.
         switch (oled_state.dl) {
             case DL_TYPE:
                 oled_write_P(PSTR("Typngaddr "), false);
@@ -1494,19 +1495,25 @@ bool config_mode_oled_task(void) {
             case DL_WAIT_GO:
                 oled_write_P(PSTR("PressEnteragain"), false);
                 break;
+            case DL_LOADER:
+                oled_write_P(PSTR("Load "), false);
+                break;
+            case DL_LOADED:
+                oled_write_P(PSTR("PressEnter     Knob=again"), false); // knob: the page said the loader is damaged
+                break;
             case DL_STREAM:
                 oled_write_P(oled_state.dl_pass > 1 ? PSTR("Fix  ") : PSTR("Send "), false); // repair round / the page
                 break;
             default:
-                oled_write_P(PSTR("Sent      Knob=fix "), false); // repair blocks if the page asks
+                oled_write_P(PSTR("Sent check page      Knob=fix  "), false); // the page says Done or "missing"
                 break;
         }
-        if (oled_state.dl == DL_TYPE || oled_state.dl == DL_STREAM) {
+        if (oled_state.dl == DL_TYPE || oled_state.dl == DL_LOADER || oled_state.dl == DL_STREAM) {
             oled_write(get_u8_str(oled_state.dl_pct, ' '), false);
             oled_write_P(PSTR("%"), false);
         }
         if (oled_state.dl == DL_STREAM || oled_state.dl == DL_DONE) {
-            oled_set_cursor(0, 10);
+            oled_set_cursor(0, 11);
             oled_write_P(PSTR("pass "), false);
             oled_write(get_u8_str(oled_state.dl_pass, ' ') + 1, false);
         }

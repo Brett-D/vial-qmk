@@ -190,7 +190,7 @@ from the HTML at every build) and can type either into any browser:
 |---|---|---|
 | has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, layered effects, pet, wiggler, knob control, keyboard-only mode, help, …) |
 | gzipped | 8.6 KB | 45.3 KB |
-| typing (one clean pass) | ~19 s address + ~33 s | ~19 s address + ~172 s |
+| typing (one clean pass) | ~21 s address + loader, then ~66 s | ~21 s, then ~345 s |
 
 The full page is also served by network mode, and a saved light page can be
 used to get it the same way (it has the same backup format).
@@ -198,32 +198,49 @@ used to get it the same way (it has the same backup format).
 1. Open a new browser tab (the address bar is selected).
 2. Press **Raise + top-right** (`CONFIG`); the OLED asks **CONF?**. Press
    **P** (light page) or **F** (full page).
-3. The keyboard types a short `data:` address (~19 s). Press **Enter**.
-4. The page asks for **Enter** again: press it. The keyboard types the page;
-   the screen shows blocks received, bad blocks and keys/s, the OLED
+3. The keyboard types a short `data:` address (~4 s). Press **Enter**.
+4. The page asks for **Enter**: press it. The keyboard types the loader
+   into the page (~17 s, OLED `Load nn%`). If the page says **Damaged**,
+   press the **right knob** to type it again.
+5. The page asks for **Enter** again (only once the computer has processed
+   everything): press it. The keyboard types the page; the screen shows
+   blocks good/bad, repair blocks, keys received and keys/s, the OLED
    `Send nn%` and the pass number. Don't type meanwhile.
-5. If the page then says blocks are missing, press the **right knob**: the
+6. If the page then says blocks are missing, press the **right knob**: the
    keyboard sends repair blocks (slower) and the page fills the gaps as soon
    as it has enough — when it says **Done**, press **Esc** to stop the rest.
    Press the knob again if it still says blocks are missing.
-6. Click **Save as sofle-light.html** (or sofle-config.html) and open the
+7. Click **Save as sofle-light.html** (or sofle-config.html) and open the
    saved file: in Chrome/Edge it has mouse mode (WebHID can't work from a
    `data:` address). The full page also offers **Use it here**
    (keyboard-only mode).
 
+Why three steps: address bars get slower with every character typed, and
+with the 3 KB v16 address Edge fell far behind the keyboard (whose 60 s
+wait then ran out). So the address is now only the ~680-character stage 1
+(`bootstrap.html`); it receives the loader (`loader.js`) typed into the
+page, checks its hash and runs it. The keyboard never runs ahead of USB
+(each report waits until the host has collected the last), and at 4 ms per
+key the page keeps up, so the OLED % matches the screen. The page never
+waits silently: an Enter it shouldn't get, a loader cut off or damaged, or
+3 s without keys in a pass (all end markers lost) each tell you what to
+press. If the keyboard gave up waiting (2-5 minutes), it says to start
+again. The right knob also starts the loader if the keyboard missed your
+Enter.
+
 How the stream survives dropped keys: the page is sent in 60-byte blocks
 (`,` + 96 letters/digits `A–Z 2–7`: block number, page length, page kind,
 51 page bytes, CRC-32), every key as its own key-down and key-up report
-(2 ms per key on the first pass). A block with one key lost or doubled is
+(4 ms per key on the first pass). A block with one key lost or doubled is
 mended by the page (it tries every insertion/deletion against the CRC);
 worse blocks are dropped and the rest kept. Repair blocks are XORs of
 pseudo-random sets of page blocks (`deliver_hash()` in `deliver.c` = `H` in
 `bootstrap.html`), so any repair block can stand in for any missing block
 (solved by GF(2) elimination); repair rounds are a quarter of the page and
-type at 4, then 6 ms per key. A page can't signal back to the keyboard (it
+type at 6, then 8 ms per key. A page can't signal back to the keyboard (it
 can't set the lock LEDs, and a `data:` page has no WebHID), hence the knob
 press. In tests with 0.1–1 % of keys dropped, doubled or swapped the light
-page arrives byte for byte in ~34–87 s (the v15 single-CRC stream never
+page arrives byte for byte in ~68–140 s of typing (the v15 single-CRC stream never
 survived those rates).
 
 **Esc** stops at any time. The address part is typed for a **US keyboard

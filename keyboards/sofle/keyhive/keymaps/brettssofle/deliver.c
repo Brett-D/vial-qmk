@@ -7,21 +7,32 @@
 // installed and nothing to download.
 //
 // 1. Brett opens a new tab (address bar focused), presses CONFIG and, at the
-//    OLED's CONF? prompt, P (the physical confirm).
-// 2. The keyboard types a short bootstrap data: URL (config_page/bootstrap.html)
-//    into the address bar: printable characters only, no Enter or shortcuts.
-// 3. Brett presses Enter himself; the bootstrap asks for Enter again; on that
-//    second Enter the keyboard types the page (the light one, or the full one
-//    if F was chosen) as base32 keystrokes A-Z/2-7, in blocks:
+//    OLED's CONF? prompt, P (light page) or F (full page): the physical
+//    confirm.
+// 2. The keyboard types a tiny data: URL (config_page/bootstrap.html, ~680
+//    characters: address bars get slower with every character, and the
+//    computer fell far behind with a 3 KB one) into the address bar:
+//    printable characters only, no Enter or shortcuts.
+// 3. Brett presses Enter himself; the page asks for Enter again; on that
+//    second Enter (kept from the computer) the keyboard types the loader
+//    (config_page/loader.js, ~4.3K characters) into the page, which checks
+//    its hash and runs it. The loader only asks for Enter once the computer
+//    has processed all of it, so the next step can't start early. If it
+//    arrived damaged the page says to press the right knob (= type it again).
+// 4. On the third Enter the keyboard types the page as base32 keystrokes
+//    A-Z/2-7, in blocks:
 //
 //      ',' + 96 symbols (60 bytes: block index u16, gzip length u16, page
 //      kind u8, 51 page bytes, CRC-32)   ... one block after another, '...'
 //      at the end of the pass.
 //
-//    Every key is a key-down report and a separate key-up report, 1 ms apart
-//    on the first pass (2 ms per key). The page reads KeyboardEvent.code, so
-//    the host keyboard layout doesn't matter for this part.
-// 4. The bootstrap keeps every block whose CRC is right. A block with one
+//    Every key is a key-down report and a separate key-up report, 2 ms apart
+//    on the first pass (4 ms per key, ~250 keys/s: at 500/s Brett's PC fell
+//    behind). Each report waits for the previous one to be collected by the
+//    host (endpoint idle), so the progress is what the computer has
+//    received. The page reads KeyboardEvent.code, so the host keyboard
+//    layout doesn't matter for this part.
+// 5. The loader keeps every block whose CRC is right. A block with one
 //    dropped or doubled key is mended by trying each insertion / deletion
 //    against the CRC-32; worse only costs that block (a lost ',' joins two
 //    blocks, which are split again). If blocks are missing after the
@@ -29,15 +40,18 @@
 //    block r is the XOR of the page blocks s for which deliver_hash(r, s) is odd
 //    (the same hash in bootstrap.html), so any repair block can fill any hole
 //    and the page solves for the missing blocks (GF(2) elimination). Each
-//    repair round is a quarter of the page (+4 blocks) and slower: 2, then 3
-//    ms per report. There is no way back from a page to the keyboard (a page
+//    repair round is a quarter of the page (+4 blocks) and slower: 3, then 4
+//    ms per report. The page ends a pass on '...' or after 3 s without keys. There is no way back from a page to the keyboard (a page
 //    can't set the lock LEDs), so the page says when to press the knob.
 //    Then it offers "Save as sofle-light.html" / "sofle-config.html". Esc
 //    stops at any time.
 //
 // While typing, the keyboard's own key and knob events are swallowed (except
-// Esc), so nothing can mix into the stream. The bootstrap is typed for a US
-// layout (the address must come out right); the page stream works with any.
+// Esc), so nothing can mix into the stream. The address and the loader are
+// typed for a US layout; the page stream works with any.
+//
+// Waiting states give up after a few minutes (Esc any time); while waiting,
+// the keyboard types normally except for the key that starts the next step.
 
 #include "brettssofle.h"
 #include "deliver.h"
@@ -47,14 +61,16 @@
 #include "usb_endpoints.h"
 
 #define DL_BOOT_REPORT_MS 3      // address bar: one report every 3 ms (down / up)
+#define DL_LOADER_REPORT_MS 2    // loader: one report every 2 ms
 #define DL_BLOCK_PAYLOAD 51
 #define DL_BLOCK_BYTES 60        // header 5 + payload 51 + CRC-32
 #define DL_BLOCK_SYMBOLS 96      // 60 * 8 / 5
 #define DL_BLOCK_KEYS (DL_BLOCK_SYMBOLS + 1)
 #define DL_END_KEYS 3            // '...' (one is enough; the rest in case one is lost)
 #define DL_GO_DELAY_MS 150       // after the triggering key is released
-#define DL_NAV_TIMEOUT_MS 60000  // waiting for the first Enter
-#define DL_WAIT_TIMEOUT_MS 120000 // waiting for the second Enter / a retry
+#define DL_NAV_TIMEOUT_MS 120000  // waiting for the first Enter
+#define DL_WAIT_TIMEOUT_MS 180000 // waiting for the second / third Enter
+#define DL_DONE_TIMEOUT_MS 300000 // after a pass: the right knob = repair blocks
 
 #define DL_KNOB_ROW 9 // right knob push (retry)
 #define DL_KNOB_COL 5
@@ -66,7 +82,7 @@ extern usb_endpoint_in_t usb_endpoints_in[USB_ENDPOINT_IN_COUNT];
 
 static struct {
     uint8_t  state;
-    uint32_t pos;  // TYPE: report index (2 per character); STREAM: key in the pass
+    uint32_t pos;  // TYPE / LOADER: report index (2 per character); STREAM: key in the pass
     uint8_t  held; // HID usage held down (0 = none)
     bool     shift;
     uint16_t last_report;
@@ -77,7 +93,8 @@ static struct {
     uint8_t  buf[DL_BLOCK_BYTES];
     uint8_t  interval;        // ms per report in this pass
     uint32_t time;    // state start
-    bool     go;      // start the stream once the trigger key is released
+    bool     go;      // start go_next once the trigger key is released
+    uint8_t  go_next; // DL_LOADER or DL_STREAM
     uint8_t  go_row, go_col;
     uint32_t go_time; // trigger key release time (0 = still down)
 } dl;
@@ -90,6 +107,9 @@ uint8_t deliver_state(void) {
 uint8_t deliver_percent(void) {
     if (dl.state == DL_TYPE) {
         return dl.pos * 100 / (2 * CONFIG_BOOTSTRAP_LEN);
+    }
+    if (dl.state == DL_LOADER) {
+        return dl.pos * 100 / (2 * CONFIG_LOADER_LEN);
     }
     if (dl.state == DL_STREAM) {
         return dl.pos * 100 / ((uint32_t)dl.blocks * DL_BLOCK_KEYS + DL_END_KEYS);
@@ -242,7 +262,7 @@ static void start_pass(void) {
     set_state(DL_STREAM);
     dl.pass     = pass;
     dl.blocks   = pass == 1 ? page_blocks() : page_blocks() / 4 + 4;
-    dl.interval = pass == 1 ? 1 : pass == 2 ? 2 : 3;
+    dl.interval = pass == 1 ? 2 : pass == 2 ? 3 : 4;
 }
 
 // The key for position `pos` in the pass: ',' starts each block, '...' ends.
@@ -265,26 +285,33 @@ void deliver_task(void) {
         return;
     }
     uint32_t waited = timer_elapsed32(dl.time);
-    if ((dl.state == DL_WAIT_NAV && waited > DL_NAV_TIMEOUT_MS) || ((dl.state == DL_WAIT_GO || dl.state == DL_DONE) && waited > DL_WAIT_TIMEOUT_MS)) {
+    uint32_t limit  = dl.state == DL_WAIT_NAV ? DL_NAV_TIMEOUT_MS : dl.state == DL_DONE ? DL_DONE_TIMEOUT_MS : DL_WAIT_TIMEOUT_MS;
+    if ((dl.state == DL_WAIT_NAV || dl.state == DL_WAIT_GO || dl.state == DL_LOADED || dl.state == DL_DONE) && waited > limit) {
         deliver_stop();
         return;
     }
     if (dl.go && dl.go_time && timer_elapsed32(dl.go_time) >= DL_GO_DELAY_MS) {
-        start_pass();
+        if (dl.go_next == DL_LOADER) {
+            set_state(DL_LOADER);
+        } else {
+            start_pass();
+        }
     }
-    if (dl.state != DL_TYPE && dl.state != DL_STREAM) {
+    if (dl.state != DL_TYPE && dl.state != DL_LOADER && dl.state != DL_STREAM) {
         return;
     }
-    uint8_t interval = dl.state == DL_TYPE ? DL_BOOT_REPORT_MS : dl.interval;
+    uint8_t interval = dl.state == DL_TYPE ? DL_BOOT_REPORT_MS : dl.state == DL_LOADER ? DL_LOADER_REPORT_MS : dl.interval;
     if (timer_elapsed(dl.last_report) < interval || !endpoint_idle()) {
         return;
     }
-    if (dl.state == DL_TYPE) {
-        if (dl.pos >= 2 * CONFIG_BOOTSTRAP_LEN) {
-            set_state(DL_WAIT_NAV);
+    if (dl.state == DL_TYPE || dl.state == DL_LOADER) {
+        bool           boot = dl.state == DL_TYPE;
+        const uint8_t *text = boot ? config_bootstrap_keys : config_loader_keys;
+        if (dl.pos >= 2u * (boot ? CONFIG_BOOTSTRAP_LEN : CONFIG_LOADER_LEN)) {
+            set_state(boot ? DL_WAIT_NAV : DL_LOADED);
             return;
         }
-        uint8_t k = pgm_read_byte(&config_bootstrap_keys[dl.pos / 2]);
+        uint8_t k = pgm_read_byte(&text[dl.pos / 2]);
         if (dl.pos & 1) {
             report(0, false); // key up
         } else {
@@ -342,7 +369,7 @@ bool deliver_process(keyrecord_t *record) {
     if (dl.state == DL_OFF) {
         return false;
     }
-    bool typing = dl.state == DL_TYPE || dl.state == DL_STREAM;
+    bool typing = dl.state == DL_TYPE || dl.state == DL_LOADER || dl.state == DL_STREAM;
     if (is_key && ev->pressed && is_escape(row, col)) {
         deliver_stop();
         if (typing) {
@@ -365,9 +392,21 @@ bool deliver_process(keyrecord_t *record) {
         set_state(DL_WAIT_GO); // the address bar opened the bootstrap
         return false;
     }
-    if (ev->pressed && !dl.go && ((dl.state == DL_WAIT_GO && is_enter(row, col)) || (dl.state == DL_DONE && row == DL_KNOB_ROW && col == DL_KNOB_COL))) {
-        // Start once this key is released, so its key-up can't land in the stream.
+    bool knob = row == DL_KNOB_ROW && col == DL_KNOB_COL, enter = is_enter(row, col);
+    uint8_t next = DL_OFF;
+    if (dl.state == DL_WAIT_NAV && knob) {
+        next = DL_LOADER; // the page is open but the keyboard didn't see its Enter
+    } else if (dl.state == DL_WAIT_GO && (enter || knob)) {
+        next = DL_LOADER;
+    } else if (dl.state == DL_LOADED) {
+        next = enter ? DL_STREAM : knob ? DL_LOADER : DL_OFF; // knob: the loader arrived damaged
+    } else if (dl.state == DL_DONE && knob) {
+        next = DL_STREAM; // repair blocks
+    }
+    if (ev->pressed && !dl.go && next != DL_OFF) {
+        // Start once this key is released, so its key-up can't land in the typing.
         dl.go      = true;
+        dl.go_next = next;
         dl.go_row  = row;
         dl.go_col  = col;
         dl.go_time = 0;

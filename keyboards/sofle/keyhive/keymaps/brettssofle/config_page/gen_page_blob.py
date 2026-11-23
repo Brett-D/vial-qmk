@@ -3,14 +3,17 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Build the copy of the config page the keyboard delivers by typing.
 
-Reads sofle-config.html, sofle-light.html and bootstrap.html (this folder)
-and writes ../config_page_blob.h:
+Reads sofle-config.html, sofle-light.html, bootstrap.html and loader.js
+(this folder) and writes ../config_page_blob.h:
 
   config_page_gz[]         the full page, minified and gzipped (served over
                            the network; typed with F)
   config_light_gz[]        the light page (typed with P)
-  config_bootstrap_keys[]  the bootstrap data: URL as US-layout HID usages
-                           (| 0x80 = with Shift), typed into the address bar
+  config_bootstrap_keys[]  stage 1: the bootstrap data: URL as US-layout HID
+                           usages (| 0x80 = with Shift), typed into the
+                           address bar (kept tiny: address bars get slow)
+  config_loader_keys[]     stage 2: "~" + loader.js on one line + "~" + its
+                           hash + "~", typed into the page stage 1 opened
 
 Run by rules.mk at every build (the header is only rewritten when it
 changes) and by gen_config.py, so the delivered page never drifts from
@@ -30,12 +33,13 @@ OUT = HERE.parent / "config_page_blob.h"
 
 # Report rates used for the time estimate (deliver.c).
 BOOT_REPORT_MS = 3   # address bar: key down + key up per character
-STREAM_KEY_MS = 2    # page, first pass: key down + key up, 1 ms each
+LOADER_KEY_MS = 4    # loader: key down + key up, 2 ms each
+STREAM_KEY_MS = 4    # page, first pass: key down + key up, 2 ms each
 BLOCK_PAYLOAD, BLOCK_KEYS = 51, 97  # deliver.c: ',' + 96 symbols per 51 bytes
 
 
 # Bump when the generated header's layout changes, so it is rewritten.
-HEADER_FORMAT = "3"
+HEADER_FORMAT = "4"
 
 
 def css_min(s):
@@ -73,6 +77,62 @@ def bootstrap_url(source):
     return url
 
 
+def squeeze_js(text):
+    """Drops the spaces that aren't needed: keeps string, template and regex
+    literals as they are, and one space only between two word characters."""
+    out, i, n = [], 0, len(text)
+    word = lambda ch: ch.isalnum() or ch in "_$"
+    while i < n:
+        ch = text[i]
+        if ch in "'\"`":
+            j = i + 1
+            while text[j] != ch:
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif ch == "/" and (not "".join(out).rstrip() or "".join(out).rstrip()[-1] in "(,=:[!&|?{};"):
+            j = i + 1
+            while text[j] != "/":
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif ch == " ":
+            prev = out[-1][-1] if out else ""
+            j = i
+            while j < n and text[j] == " ":
+                j += 1
+            if prev and j < n and word(prev) and word(text[j]):
+                out.append(" ")
+            i = j
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def loader_text(source):
+    """loader.js on one line: whole-line comments dropped, lines joined, spaces squeezed."""
+    lines = (line.strip() for line in source.split("\n"))
+    text = squeeze_js(" ".join(t for t in lines if t and not t.startswith("//")))
+    bad = sorted({ch for ch in text if not (" " <= ch <= "}")})
+    if bad:
+        sys.exit(f"loader.js: characters that can't be typed (or '~'): {bad!r}")
+    return text
+
+
+def js_hash(text):
+    """bootstrap.html's check: h = h * 31 + char, as a signed 32-bit number."""
+    h = 0
+    for ch in text:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return h - (1 << 32) if h & 0x80000000 else h
+
+
+def loader_keys_text():
+    text = loader_text((HERE / "loader.js").read_text(encoding="utf-8"))
+    return "~" + text + "~" + str(js_hash(text)) + "~"
+
+
 US_SHIFTED = {'!': '1', '@': '2', '$': '4', '^': '6', '&': '7', '*': '8', '(': '9', ')': '0', '_': '-', '+': '=',
               '{': '[', '}': ']', '|': '\\', ':': ';', '"': "'", '~': '`', '<': ',', '>': '.', '?': '/'}
 US_PLAIN = {'-': 0x2D, '=': 0x2E, '[': 0x2F, ']': 0x30, '\\': 0x31, ';': 0x33, "'": 0x34, '`': 0x35, ',': 0x36,
@@ -89,6 +149,8 @@ def us_key(c):
         return 0x1E + ord(c) - ord("1")
     if c == "0":
         return 0x27
+    if c == " ":
+        return 0x2C
     if c in US_PLAIN:
         return US_PLAIN[c]
     if c in US_SHIFTED:
@@ -126,17 +188,19 @@ def light_artifacts():
 def build():
     page, small, gz, url, keys = artifacts()
     lpage, lsmall, lgz = light_artifacts()
-    boot_s = len(keys) * 2 * BOOT_REPORT_MS / 1000
+    ltext = loader_keys_text()
+    lkeys = [us_key(ch) for ch in ltext]
+    boot_s = len(keys) * 2 * BOOT_REPORT_MS / 1000 + len(lkeys) * LOADER_KEY_MS / 1000
     full_s = stream_keys(gz) * STREAM_KEY_MS / 1000
     light_s = stream_keys(lgz) * STREAM_KEY_MS / 1000
-    source = hashlib.sha256((HEADER_FORMAT + "\0" + small + "\0" + lsmall + "\0" + url).encode("utf-8")).hexdigest()[:16]
+    source = hashlib.sha256((HEADER_FORMAT + "\0" + small + "\0" + lsmall + "\0" + url + "\0" + ltext).encode("utf-8")).hexdigest()[:16]
     text = f"""// Generated by config_page/gen_page_blob.py from sofle-config.html,
-// sofle-light.html and bootstrap.html - do not edit (rules.mk regenerates it).
+// sofle-light.html, bootstrap.html and loader.js - do not edit (rules.mk regenerates it).
 // Source {source}
 //
 // Full page: {len(page)} bytes, minified {len(small)}, gzipped {len(gz)}.
 // Light page: {len(lpage)} bytes, minified {len(lsmall)}, gzipped {len(lgz)}.
-// Typing time (first pass): address {boot_s:.1f} s, light page {light_s:.1f} s, full page {full_s:.1f} s.
+// Typing time: address + loader {boot_s:.1f} s; first pass: light page {light_s:.1f} s, full page {full_s:.1f} s.
 
 #pragma once
 
@@ -154,6 +218,10 @@ extern const uint8_t config_light_gz[CONFIG_LIGHT_GZ_LEN];
 #define CONFIG_BOOTSTRAP_LEN {len(keys)}
 extern const uint8_t config_bootstrap_keys[CONFIG_BOOTSTRAP_LEN];
 
+// The loader, typed into the page the address opened (same encoding).
+#define CONFIG_LOADER_LEN {len(lkeys)}
+extern const uint8_t config_loader_keys[CONFIG_LOADER_LEN];
+
 #ifdef CONFIG_PAGE_BLOB_DEFINE
 const uint8_t config_page_gz[CONFIG_PAGE_GZ_LEN] = {{
 {c_array(gz)}
@@ -166,13 +234,17 @@ const uint8_t config_light_gz[CONFIG_LIGHT_GZ_LEN] = {{
 const uint8_t config_bootstrap_keys[CONFIG_BOOTSTRAP_LEN] = {{
 {c_array(keys)}
 }};
+
+const uint8_t config_loader_keys[CONFIG_LOADER_LEN] = {{
+{c_array(lkeys)}
+}};
 #endif
 """
-    return text, url, (len(page), len(small), len(gz), len(keys), boot_s, full_s, len(lgz), light_s)
+    return text, url, (len(page), len(small), len(gz), len(keys), len(lkeys), boot_s, full_s, len(lgz), light_s)
 
 
 def main():
-    text, url, (raw, small, gz, boot, boot_s, full_s, lgz, light_s) = build()
+    text, url, (raw, small, gz, boot, loader, boot_s, full_s, lgz, light_s) = build()
     if "--print-url" in sys.argv:
         print(url)
         return
@@ -187,7 +259,7 @@ def main():
     if old != text:
         OUT.write_text(text, encoding="utf-8", newline="\n")
     print(f"config_page_blob.h: full page {raw} -> {small} minified -> {gz} gzipped, light page {lgz} gzipped; "
-          f"bootstrap {boot} keys; typing ~{boot_s:.0f} s + light ~{light_s:.0f} s (full ~{full_s:.0f} s){'' if old != text else ' (unchanged)'}", file=sys.stderr)
+          f"address {boot} + loader {loader} keys; typing ~{boot_s:.0f} s + light ~{light_s:.0f} s (full ~{full_s:.0f} s){'' if old != text else ' (unchanged)'}", file=sys.stderr)
 
 
 if __name__ == "__main__":
