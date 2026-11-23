@@ -90,8 +90,11 @@
 // OLED, to see whether a light touch and a firm press are distinguishable.
 // trackpad_z.html works without it (raw HID). Off by default.
 // #define TRACKPAD_Z_DEBUG
+// RPC_ID_USER_CFG mirrors config mode to the right OLED (config_mode.c).
 #ifdef TRACKPAD_Z_DEBUG
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG
+#else
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG
 #endif
 
 // Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE
@@ -120,6 +123,7 @@
 #    define RGBLIGHT_EFFECT_RAINBOW_SWIRL
 #    define RGBLIGHT_EFFECT_BREATHING
 #    define RGBLIGHT_EFFECT_SNAKE
-// Lights turn off after this much idle time (any key, encoder or trackpad).
-#    define RGB_IDLE_TIMEOUT_MS 60000
+// Lights turn off after a chosen idle time (any key, encoder or trackpad):
+// never / 1 / 2 / 5 / 10 / 30 min, default 1 min. Chosen in config mode (LEDs
+// tab) and saved in EEPROM; see user_config_rgb_idle_ms() in trackpad_z.c.
 #endif

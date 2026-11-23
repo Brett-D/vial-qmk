@@ -14,9 +14,54 @@ Keymap for a Keyhive Sofle v2 with:
 | Vial | Configure everything live at [vial.rocks](https://vial.rocks) (Chrome/Edge, WebHID) or the Vial desktop app. Unlock combo: hold the four corner keys (top-left `` ` ``, top-right `` ` ``, Left Shift, Right Shift). |
 | Layers | 0 QWERTY, 1 Colemak-DH, 2 Lower, 3 Raise, 4 Mouse (automatic), 5 spare |
 | `CYCLE` (Raise + top-left) | Switches the default layer between QWERTY and Colemak-DH (saved) |
+| `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
 | Encoders | Left: volume, press = mute. Right: page up/down |
-| Underglow | Turns off after 1 minute without key, knob or trackpad use; comes back on the next input |
-| Right OLED | Default layer, active layer, Caps/Num lock, active mods (S C A G). Sleeps after 1 minute of no input on **either** half |
+| Underglow | Turns off after 1 minute (changeable in config mode: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input |
+| Right OLED | Default layer, active layer, Caps/Num lock, active mods (S C A G). Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
+
+## Config mode
+
+Configure the keymap, knobs, underglow and trackpad press-to-click **without
+installing anything and without WebHID** — on Windows, Linux or macOS, in any
+browser (Firefox too), offline, with no udev rules or admin rights.
+
+The keyboard stays a plain keyboard (no new USB device or driver). In config
+mode it reads its own keys and knobs to drive the editor, and *types* short
+coded messages (only letters A–Z, digits 2–7, `,` and `.` — never Enter, Tab,
+modifiers or F-keys) into `sofle-config.html`, which decodes them and draws the
+editor. The page reads physical key positions, so the computer's keyboard
+layout doesn't matter. Nothing is ever sent from the computer to the keyboard.
+
+1. Open `config_page/sofle-config.html` from disk (double-click it; keep a
+   copy on any computer you use).
+2. Turn on config mode: **Raise + top-right key** (`CONFIG`), or hold the
+   **right** knob button, then the **left** one, for 2 s. The right OLED shows
+   `CONFG` / `Press Space`. Keys don't type normally while config mode is on.
+3. Click the page, then press **Space**. Type the 3 letters the page shows
+   (this proves the page is the window receiving the messages).
+
+| Control | Keys tab | Knobs tab | LEDs / Trackpad tabs |
+| --- | --- | --- | --- |
+| Left knob turn | Change layer | Choose knob action (turn left / right / press) | Choose setting |
+| Left knob press | Next tab (hold ~1 s: resend everything to the page) | ← | ← |
+| Right knob turn | Choose keycode (turn fast to skip ahead) | ← | Change value (LEDs preview live) |
+| Hold right knob + turn | Jump to the next/previous keycode category | ← | – |
+| Right knob press | Apply to the selected key | Apply to the knob action | Save |
+| Any key | Select it. Hold it and tap another key to copy that key's default-layer keycode | Copy its default-layer keycode | – |
+
+Exit with **Raise + `CONFIG`**, holding both knob buttons for 2 s, holding
+**Esc** for 2 s, or 5 minutes without input. Unsaved LED/trackpad changes are
+dropped on exit. Keymap changes are saved like Vial's (EEPROM; a new firmware
+build resets them to the defaults in `keymap.c`).
+
+Tips: keep the page focused (it warns when it isn't). Pressing the left knob
+first while entering config mode sends Mute once — press the right knob first.
+v1 covers keymap, knobs, underglow and trackpad; use Vial for combos, tap
+dance and macros.
+
+After changing `config_page/gen_config.py` or `config_page/page.html`,
+regenerate `config_picker.h` and the page:
+`python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
 
 ### Trackpad
 
@@ -60,7 +105,8 @@ Vial tab first) and click *Connect*. It graphs Z live with the press/release
 lines, has *Record LIGHT* / *Record FIRM* modes to measure your touches, and
 lets you switch press-to-click on/off and change the threshold and release Z.
 *Apply & save* stores them on the keyboard (EEPROM; a new firmware build resets
-them to the defaults). It talks raw HID command `0xF5`.
+them to the defaults). It talks raw HID command `0xF5`. The same settings, with
+a live Z graph, are also in config mode's **Trackpad** tab (no WebHID needed).
 
 Uncomment `TRACKPAD_Z_DEBUG` in `config.h` to also show live Z, peak, last
 peak and a touch counter on the right OLED.

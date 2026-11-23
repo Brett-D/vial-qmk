@@ -17,6 +17,7 @@ enum layers {
 enum custom_keycodes {
     CYCLE = QK_KB_0, // cycle the default layer between QWERTY and Colemak-DH
     DRAG_SCROLL,     // hold: trackpad movement scrolls instead of moving the cursor
+    CONFIG_MODE,     // toggle config mode (sofle-config.html)
 };
 
 // Number of default layers CYCLE rotates through.
@@ -46,3 +47,11 @@ bool                trackpad_press_enabled(void);
 uint8_t             trackpad_press_threshold(void);
 uint8_t             trackpad_press_release_z(void);
 #endif
+
+// Underglow idle timeout choice (0 = never, 1/2/5/10/30 min), saved in
+// EECONFIG_USER bits 11-13 (trackpad_z.c).
+uint8_t  user_config_rgb_idle_idx(void);
+void     user_config_set_rgb_idle_idx(uint8_t idx);
+uint32_t user_config_rgb_idle_ms(void);
+
+#include "config_mode.h"

@@ -82,7 +82,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 ),
 /* RAISE
  * ,-----------------------------------------.                    ,-----------------------------------------.
- * |Cycle |      |      |      |      |      |                    |      |      |      |      |      |      |
+* |Cycle |      |      |      |      |      |                    |      |      |      |      |      |Config|
  * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
  * |      | Ins  | Pscr | Menu |      |      |                    | PgUp |      |  Up  |      |      | Bspc |
  * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
@@ -92,7 +92,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  * `-----------------------------------------/       /     \      \-----------------------------------------'
  */
 [_RAISE] = LAYOUT(
-    CYCLE, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
+    CYCLE, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, CONFIG_MODE,
   _______, KC_INS , KC_PSCR, KC_APP , XXXXXXX, XXXXXXX,                         KC_PGUP, _______, KC_UP  , _______, _______, KC_BSPC,
   _______, KC_LALT, KC_LCTL, KC_LSFT, XXXXXXX, KC_CAPS,                         KC_PGDN, KC_LEFT, KC_DOWN, KC_RGHT, KC_DEL , KC_BSPC,
   _______, KC_UNDO, KC_CUT , KC_COPY, KC_PASTE, XXXXXXX, _______,   _______,    XXXXXXX, _______, XXXXXXX, _______, XXXXXXX, _______,
@@ -148,16 +148,23 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case DRAG_SCROLL:
             trackpad_set_drag_scroll(record->event.pressed);
             return false;
+        case CONFIG_MODE:
+            if (record->event.pressed) {
+                config_mode_toggle();
+            }
+            return false;
     }
     return true;
 }
 
 #ifdef RGBLIGHT_ENABLE
-// Turn the underglow off after RGB_IDLE_TIMEOUT_MS without any key, encoder or
-// trackpad activity, and restore the saved state on the next input.
+// Turn the underglow off after the chosen idle time (config mode, LEDs tab)
+// without any key, encoder or trackpad activity, and restore the saved state on
+// the next input.
 static void rgb_idle_task(void) {
     static bool idle_off = false;
-    bool        idle     = last_input_activity_elapsed() > RGB_IDLE_TIMEOUT_MS;
+    uint32_t    timeout  = user_config_rgb_idle_ms();
+    bool        idle     = timeout && last_input_activity_elapsed() > timeout;
 
     if (idle && !idle_off) {
         if (rgblight_is_enabled()) {
@@ -178,6 +185,7 @@ void keyboard_post_init_user(void) {
 #ifdef POINTING_DEVICE_ENABLE
     trackpad_z_post_init();
 #endif
+    config_mode_init();
 }
 
 void housekeeping_task_user(void) {
@@ -190,4 +198,5 @@ void housekeeping_task_user(void) {
 #ifdef POINTING_DEVICE_ENABLE
     trackpad_z_sync_task();
 #endif
+    config_mode_task();
 }

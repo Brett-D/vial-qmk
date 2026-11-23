@@ -17,6 +17,11 @@
       "name": "Drag\nscroll",
       "title": "Hold: trackpad movement scrolls instead of moving the cursor",
       "shortName": "DRG_SCR"
+    },
+    {
+      "name": "Config\nmode",
+      "title": "Toggle config mode (edit the keyboard from sofle-config.html)",
+      "shortName": "CONFIG"
     }
   ],
   "layouts": {

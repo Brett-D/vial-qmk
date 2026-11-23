@@ -126,6 +126,24 @@ uint8_t trackpad_press_release_z(void) {
     return tp_config.press_release_z;
 }
 
+#    define RGB_IDLE_CHOICES 6
+
+uint8_t user_config_rgb_idle_idx(void) {
+    return tp_config.rgb_idle_timeout_idx < RGB_IDLE_CHOICES ? tp_config.rgb_idle_timeout_idx : 1;
+}
+
+void user_config_set_rgb_idle_idx(uint8_t idx) {
+    if (idx < RGB_IDLE_CHOICES && idx != tp_config.rgb_idle_timeout_idx) {
+        tp_config.rgb_idle_timeout_idx = idx;
+        eeconfig_update_user(tp_config.raw);
+    }
+}
+
+uint32_t user_config_rgb_idle_ms(void) {
+    static const uint8_t minutes[RGB_IDLE_CHOICES] = {0, 1, 2, 5, 10, 30};
+    return minutes[user_config_rgb_idle_idx()] * 60000UL;
+}
+
 /* ---------------------------------------------------------------------------
  * Split sync for the right OLED (debug only)
  * ------------------------------------------------------------------------ */

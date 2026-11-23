@@ -128,6 +128,10 @@ bool oled_task_user(void) {
     }
     oled_on();
 
+    if (config_mode_oled_task()) {
+        return false;
+    }
+
 #    if defined(TRACKPAD_Z_DEBUG) && defined(POINTING_DEVICE_ENABLE)
     print_status_z();
 #    else

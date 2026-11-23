@@ -37,6 +37,10 @@ else
 endif
 
 SRC += trackpad.c trackpad_z.c oled.c
+# Config mode + keystroke bridge (config_page/sofle-config.html). After
+# editing config_page/gen_config.py or page.html, rerun:
+#   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
+SRC += config_mode.c bridge.c
 ifeq ($(strip $(RGBLIGHT_ENABLE)), yes)
     SRC += rgb_driver.c
 endif

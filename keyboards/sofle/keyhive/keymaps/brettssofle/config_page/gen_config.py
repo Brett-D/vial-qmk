@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+# Copyright 2026 Brett-D
+# SPDX-License-Identifier: GPL-2.0-or-later
+"""Generate the config-mode keycode picker (C) and the configurator page (HTML).
+
+Both come from the same picker list, so the firmware and the page always agree
+on picker indexes. Run from anywhere:
+
+    python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
+
+Outputs:
+    ../config_picker.h        compiled into the firmware
+    sofle-config.html         the page (open it from disk in any browser)
+"""
+
+import json
+import re
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+KEYMAP_DIR = HERE.parent
+QMK_ROOT = HERE.parents[5]
+
+# ---------------------------------------------------------------------------
+# Picker: categories of keycodes the right knob scrolls through.
+# Entries are C expressions; the generator evaluates them for the page.
+# ---------------------------------------------------------------------------
+LETTERS = [f"KC_{c}" for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+DIGITS = [f"KC_{c}" for c in "1234567890"]
+
+PICKER = [
+    ("Basic", ["KC_NO", "KC_TRNS"] + LETTERS + DIGITS + [
+        "KC_ENTER", "KC_ESCAPE", "KC_BACKSPACE", "KC_TAB", "KC_SPACE", "KC_MINUS", "KC_EQUAL",
+        "KC_LEFT_BRACKET", "KC_RIGHT_BRACKET", "KC_BACKSLASH", "KC_SEMICOLON", "KC_QUOTE", "KC_GRAVE",
+        "KC_COMMA", "KC_DOT", "KC_SLASH", "KC_CAPS_LOCK"]),
+    ("Symbols", [f"S({k})" for k in [
+        "KC_GRAVE", "KC_1", "KC_2", "KC_3", "KC_4", "KC_5", "KC_6", "KC_7", "KC_8", "KC_9", "KC_0",
+        "KC_MINUS", "KC_EQUAL", "KC_LEFT_BRACKET", "KC_RIGHT_BRACKET", "KC_BACKSLASH", "KC_SEMICOLON",
+        "KC_QUOTE", "KC_COMMA", "KC_DOT", "KC_SLASH"]]),
+    ("Navigation", ["KC_LEFT", "KC_DOWN", "KC_UP", "KC_RIGHT", "KC_HOME", "KC_END", "KC_PAGE_UP",
+                    "KC_PAGE_DOWN", "KC_INSERT", "KC_DELETE", "KC_PRINT_SCREEN", "KC_SCROLL_LOCK",
+                    "KC_PAUSE", "KC_APPLICATION"]),
+    ("Modifiers", ["KC_LEFT_CTRL", "KC_LEFT_SHIFT", "KC_LEFT_ALT", "KC_LEFT_GUI",
+                   "KC_RIGHT_CTRL", "KC_RIGHT_SHIFT", "KC_RIGHT_ALT", "KC_RIGHT_GUI"]),
+    ("Function", [f"KC_F{i}" for i in range(1, 25)]),
+    ("Media", ["KC_AUDIO_MUTE", "KC_AUDIO_VOL_UP", "KC_AUDIO_VOL_DOWN", "KC_MEDIA_PLAY_PAUSE",
+               "KC_MEDIA_NEXT_TRACK", "KC_MEDIA_PREV_TRACK", "KC_MEDIA_STOP", "KC_BRIGHTNESS_UP",
+               "KC_BRIGHTNESS_DOWN", "KC_CALCULATOR", "KC_MY_COMPUTER", "KC_WWW_SEARCH",
+               "KC_WWW_BACK", "KC_WWW_FORWARD", "KC_WWW_REFRESH"]),
+    ("Mouse", ["MS_BTN1", "MS_BTN2", "MS_BTN3", "MS_BTN4", "MS_BTN5", "MS_UP", "MS_DOWN", "MS_LEFT",
+               "MS_RGHT", "MS_WHLU", "MS_WHLD", "MS_WHLL", "MS_WHLR", "MS_ACL0", "MS_ACL1", "MS_ACL2"]),
+    ("Layers", [f"MO({i})" for i in range(1, 6)] + [f"TG({i})" for i in range(1, 6)]
+               + [f"TO({i})" for i in range(0, 6)] + [f"OSL({i})" for i in range(1, 6)]
+               + [f"TT({i})" for i in range(1, 6)] + ["PDF(0)", "PDF(1)"]),
+    ("Numpad", ["KC_NUM_LOCK", "KC_KP_SLASH", "KC_KP_ASTERISK", "KC_KP_MINUS", "KC_KP_PLUS",
+                "KC_KP_ENTER"] + [f"KC_KP_{i}" for i in range(1, 10)] + ["KC_KP_0", "KC_KP_DOT", "KC_KP_EQUAL"]),
+    ("Lighting", ["UG_TOGG", "UG_NEXT", "UG_PREV", "UG_HUEU", "UG_HUED", "UG_SATU", "UG_SATD",
+                  "UG_VALU", "UG_VALD", "UG_SPDU", "UG_SPDD"]),
+    ("Special", ["CONFIG_MODE", "CYCLE", "DRAG_SCROLL", "CW_TOGG", "QK_BOOT"]),
+]
+
+# Short labels for the page (anything missing falls back to the QMK name).
+LABELS = {
+    "KC_NO": "", "KC_TRNS": "▽", "KC_ENTER": "Enter", "KC_ESCAPE": "Esc", "KC_BACKSPACE": "Bksp",
+    "KC_TAB": "Tab", "KC_SPACE": "Space", "KC_MINUS": "-", "KC_EQUAL": "=", "KC_LEFT_BRACKET": "[",
+    "KC_RIGHT_BRACKET": "]", "KC_BACKSLASH": "\\", "KC_SEMICOLON": ";", "KC_QUOTE": "'",
+    "KC_GRAVE": "`", "KC_COMMA": ",", "KC_DOT": ".", "KC_SLASH": "/", "KC_CAPS_LOCK": "Caps",
+    "KC_LEFT": "←", "KC_DOWN": "↓", "KC_UP": "↑", "KC_RIGHT": "→", "KC_HOME": "Home", "KC_END": "End",
+    "KC_PAGE_UP": "PgUp", "KC_PAGE_DOWN": "PgDn", "KC_INSERT": "Ins", "KC_DELETE": "Del",
+    "KC_PRINT_SCREEN": "PrtSc", "KC_SCROLL_LOCK": "ScrLk", "KC_PAUSE": "Pause", "KC_APPLICATION": "Menu",
+    "KC_LEFT_CTRL": "LCtrl", "KC_LEFT_SHIFT": "LShift", "KC_LEFT_ALT": "LAlt", "KC_LEFT_GUI": "LGui",
+    "KC_RIGHT_CTRL": "RCtrl", "KC_RIGHT_SHIFT": "RShift", "KC_RIGHT_ALT": "RAlt", "KC_RIGHT_GUI": "RGui",
+    "KC_AUDIO_MUTE": "Mute", "KC_AUDIO_VOL_UP": "Vol+", "KC_AUDIO_VOL_DOWN": "Vol-",
+    "KC_MEDIA_PLAY_PAUSE": "Play", "KC_MEDIA_NEXT_TRACK": "Next", "KC_MEDIA_PREV_TRACK": "Prev",
+    "KC_MEDIA_STOP": "Stop", "KC_BRIGHTNESS_UP": "Bri+", "KC_BRIGHTNESS_DOWN": "Bri-",
+    "KC_CALCULATOR": "Calc", "KC_MY_COMPUTER": "MyPC", "KC_WWW_SEARCH": "Search", "KC_WWW_BACK": "Back",
+    "KC_WWW_FORWARD": "Fwd", "KC_WWW_REFRESH": "Refresh",
+    "MS_BTN1": "Click L", "MS_BTN2": "Click R", "MS_BTN3": "Click M", "MS_BTN4": "Btn4", "MS_BTN5": "Btn5",
+    "MS_UP": "Ms↑", "MS_DOWN": "Ms↓", "MS_LEFT": "Ms←", "MS_RGHT": "Ms→", "MS_WHLU": "Whl↑",
+    "MS_WHLD": "Whl↓", "MS_WHLL": "Whl←", "MS_WHLR": "Whl→", "MS_ACL0": "Accel0", "MS_ACL1": "Accel1",
+    "MS_ACL2": "Accel2", "KC_NUM_LOCK": "NumLk", "KC_KP_SLASH": "P/", "KC_KP_ASTERISK": "P*",
+    "KC_KP_MINUS": "P-", "KC_KP_PLUS": "P+", "KC_KP_ENTER": "PEnt", "KC_KP_DOT": "P.", "KC_KP_EQUAL": "P=",
+    "UG_TOGG": "RGB on/off", "UG_NEXT": "RGB mode+", "UG_PREV": "RGB mode-", "UG_HUEU": "Hue+",
+    "UG_HUED": "Hue-", "UG_SATU": "Sat+", "UG_SATD": "Sat-", "UG_VALU": "Bright+", "UG_VALD": "Bright-",
+    "UG_SPDU": "Speed+", "UG_SPDD": "Speed-", "CW_TOGG": "CapsWord", "QK_BOOT": "Bootloader",
+    "CONFIG_MODE": "Config mode", "CYCLE": "Cycle base", "DRAG_SCROLL": "Drag scroll",
+}
+for i in range(10):
+    LABELS[f"KC_KP_{i}"] = f"P{i}"
+
+LAYER_NAMES = ["QWERTY", "Colemak", "Lower", "Raise", "Mouse", "Layer 5"]
+
+# Effect ids sent by the firmware (config_mode.c led_effect enum), in order.
+LED_EFFECTS = ["Static", "Breathing", "Rainbow mood", "Rainbow swirl", "Snake", "Knight",
+               "Christmas", "Gradient", "RGB test", "Alternating", "Twinkle"]
+
+LED_IDLE_LABELS = ["Never", "1 min", "2 min", "5 min", "10 min", "30 min"]
+
+
+def parse_keycodes():
+    """Name -> value from quantum/keycodes.h (enum entries and aliases)."""
+    text = (QMK_ROOT / "quantum" / "keycodes.h").read_text(encoding="utf-8")
+    values = {}
+    for name, val in re.findall(r"^\s*([A-Z][A-Z0-9_]*)\s*=\s*([A-Za-z0-9_]+)\s*,", text, re.M):
+        if val.startswith("0x"):
+            values[name] = int(val, 16)
+        elif val in values:
+            values[name] = values[val]
+    return values
+
+
+def parse_us_shifted():
+    """Value of S(KC_x) -> symbol, from keymap_us.h comments."""
+    text = (QMK_ROOT / "quantum" / "keymap_extras" / "keymap_us.h").read_text(encoding="utf-8")
+    return re.findall(r"#define\s+KC_[A-Z]+\s+S\((KC_[A-Z0-9_]+)\)\s*//\s*(\S+)", text)
+
+
+def main():
+    kc = parse_keycodes()
+    vial = json.loads((KEYMAP_DIR / "vial.json").read_text(encoding="utf-8"))
+    custom = vial.get("customKeycodes", [])
+    c_custom_names = ["CYCLE", "DRAG_SCROLL", "CONFIG_MODE"]
+    for i, name in enumerate(c_custom_names):
+        kc[name] = kc["QK_KB_0"] + i if "QK_KB_0" in kc else 0x7E00 + i
+
+    fn = {
+        "S": lambda v: 0x0200 | v, "MO": lambda n: kc["QK_MOMENTARY"] | n, "TG": lambda n: kc["QK_TOGGLE_LAYER"] | n,
+        "TO": lambda n: kc["QK_TO"] | n, "OSL": lambda n: kc["QK_ONE_SHOT_LAYER"] | n,
+        "TT": lambda n: kc["QK_LAYER_TAP_TOGGLE"] | n, "PDF": lambda n: kc["QK_PERSISTENT_DEF_LAYER"] | n,
+    }
+
+    def evaluate(expr):
+        m = re.fullmatch(r"(\w+)\((\w+)\)", expr)
+        if m:
+            arg = m.group(2)
+            return fn[m.group(1)](int(arg) if arg.isdigit() else kc[arg])
+        return kc[expr]
+
+    shifted = {kc[base] | 0x0200: sym for base, sym in parse_us_shifted() if base in kc}
+
+    picker, cats, cat_starts = [], [], []
+    for cat, exprs in PICKER:
+        cat_starts.append(len(picker))
+        cats.append(cat)
+        for e in exprs:
+            v = evaluate(e)
+            if e.startswith("S("):
+                label = shifted.get(v, e)
+            elif e in LABELS:
+                label = LABELS[e]
+            else:
+                label = re.sub(r"^KC_", "", e)
+            picker.append((e, v, label))
+
+    # Names for every basic/quantum keycode the page may need to display.
+    names = {}
+    for name, v in sorted(kc.items(), key=lambda x: (len(x[0]), x[0])):
+        if v not in names and not name.endswith("_MAX") and not re.match(r"QK_(BASIC|MODS|KB_|USER_)", name):
+            names[v] = LABELS.get(name, re.sub(r"^(KC_|QK_)", "", name))
+    for e, v, label in picker:
+        names[v] = label
+    for i, ck in enumerate(custom):
+        names[kc["QK_KB_0"] + i] = ck.get("shortName", f"KB{i}")
+    names.update(shifted)
+
+    def crc16(data):
+        crc = 0xFFFF
+        for b in data:
+            crc ^= b << 8
+            for _ in range(8):
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+        return crc
+
+    raw = b"".join(v.to_bytes(2, "little") for _, v, _ in picker) + b"".join(s.to_bytes(2, "little") for s in cat_starts)
+    phash = crc16(raw)
+
+    # --- C header ---------------------------------------------------------
+    lines = [
+        "// Generated by config_page/gen_config.py - do not edit.",
+        "#pragma once",
+        "",
+        f"#define CFG_PICKER_HASH 0x{phash:04X}",
+        f"#define CFG_PICKER_COUNT {len(picker)}",
+        f"#define CFG_PICKER_CATS {len(cats)}",
+        "",
+        "static const uint16_t PROGMEM cfg_picker[CFG_PICKER_COUNT] = {",
+    ]
+    for n, (cat, start) in enumerate(zip(cats, cat_starts)):
+        end = cat_starts[n + 1] if n + 1 < len(cat_starts) else len(picker)
+        lines.append(f"    // {cat} ({start})")
+        group = [e for e, _, _ in picker[start:end]]
+        for i in range(0, len(group), 8):
+            lines.append("    " + ", ".join(group[i:i + 8]) + ",")
+    lines += ["};", "", "static const uint16_t PROGMEM cfg_picker_cat_start[CFG_PICKER_CATS] = {" + ", ".join(map(str, cat_starts)) + "};", ""]
+    (KEYMAP_DIR / "config_picker.h").write_text("\n".join(lines), encoding="utf-8", newline="\n")
+
+    # --- Layout from keyboard.json ---------------------------------------
+    kb = json.loads((QMK_ROOT / "keyboards" / "sofle" / "keyhive" / "keyboard.json").read_text(encoding="utf-8"))
+    layout = [{"r": k["matrix"][0], "c": k["matrix"][1], "x": k["x"], "y": k["y"], "h": k.get("h", 1)}
+              for k in kb["layouts"]["LAYOUT"]["layout"]]
+
+    data = {
+        "pickerHash": phash,
+        "picker": [[v, label] for _, v, label in picker],
+        "cats": cats,
+        "catStarts": cat_starts,
+        "names": {str(k): v for k, v in sorted(names.items())},
+        "layout": layout,
+        "layerNames": LAYER_NAMES,
+        "ledEffects": LED_EFFECTS,
+        "ledIdle": LED_IDLE_LABELS,
+        "ranges": {k: kc[k] for k in ["QK_MODS", "QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO",
+                                      "QK_MOMENTARY", "QK_DEF_LAYER", "QK_TOGGLE_LAYER", "QK_ONE_SHOT_LAYER",
+                                      "QK_ONE_SHOT_MOD", "QK_LAYER_TAP_TOGGLE", "QK_PERSISTENT_DEF_LAYER",
+                                      "QK_TAP_DANCE", "QK_MACRO", "QK_KB", "QK_USER"]},
+    }
+    template = (HERE / "page.html").read_text(encoding="utf-8")
+    page = template.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+    (HERE / "sofle-config.html").write_text(page, encoding="utf-8", newline="\n")
+    print(f"picker: {len(picker)} keycodes, {len(cats)} categories, hash 0x{phash:04X}; page {len(page.encode())} bytes")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,458 @@
+<!doctype html>
+<!-- Copyright 2026 Brett-D. SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Generated from config_page/page.html by gen_config.py. Open from disk; works offline. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sofle config</title>
+<style>
+  :root { --bg:#15171c; --panel:#1f232b; --line:#323844; --text:#e6e8ec; --dim:#8a93a3; --acc:#4fa3ff; --ok:#3fcf7f; --warn:#ffb648; --bad:#ff5d6c; --key:#2a2f3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:12px; padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  .pill { padding:2px 10px; border-radius:99px; font-size:12px; font-weight:600; background:var(--line); }
+  .pill.ok { background:#1d4630; color:#9ff0c2; } .pill.wait { background:#4a3a17; color:#ffd58f; } .pill.bad { background:#4c1d23; color:#ffb3bb; }
+  .spacer { flex:1; } .dim { color:var(--dim); } .small { font-size:12px; }
+  #focusWarn { display:none; background:var(--bad); color:#fff; padding:8px 18px; font-weight:600; }
+  body.blurred #focusWarn { display:block; }
+  main { padding:16px 18px; display:grid; grid-template-columns: minmax(0,1fr) 330px; gap:16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; }
+  #connect ol { margin:6px 0 0 20px; padding:0; } #connect li { margin:6px 0; }
+  .code { font:700 44px/1 ui-monospace, Consolas, monospace; letter-spacing:.3em; color:var(--acc); margin:12px 0; }
+  kbd { background:var(--key); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:12px; }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .tab { padding:6px 14px; border-radius:8px; background:var(--key); color:var(--dim); font-weight:600; }
+  .tab.on { background:var(--acc); color:#06121f; }
+  .layers { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .layer { padding:3px 10px; border-radius:6px; background:var(--key); color:var(--dim); font-size:12px; }
+  .layer.on { outline:2px solid var(--acc); color:var(--text); }
+  #kb { position:relative; height:330px; }
+  .k { position:absolute; border-radius:6px; background:var(--key); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; padding:2px; overflow:hidden; word-break:break-word; }
+  .k.trns { color:var(--dim); } .k.none { opacity:.45; }
+  .k.sel { outline:3px solid var(--acc); z-index:1; } .k.held { background:#203a5a; }
+  .k.knob { border-radius:50%; background:#262b35; font-size:10px; flex-direction:column; }
+  .k.knob.sel { outline:3px solid var(--acc); }
+  .k .new { color:var(--warn); font-weight:700; }
+  .knobs { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px; }
+  .knobbox { background:var(--key); border-radius:8px; padding:8px 10px; }
+  .slot { display:flex; justify-content:space-between; padding:3px 6px; border-radius:5px; }
+  .slot.on { outline:2px solid var(--acc); }
+  #picker .cats { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+  #picker .cat { font-size:11px; padding:1px 7px; border-radius:5px; background:var(--key); color:var(--dim); }
+  #picker .cat.on { background:var(--acc); color:#06121f; }
+  #picker .list div { padding:3px 8px; border-radius:5px; font-family: ui-monospace, Consolas, monospace; }
+  #picker .list div.on { background:var(--acc); color:#06121f; font-weight:700; }
+  .big { font-size:22px; font-weight:700; } .arrow { color:var(--dim); margin:0 6px; }
+  .rows .row { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-radius:6px; }
+  .rows .row.on { outline:2px solid var(--acc); background:#1c2a3d; }
+  .swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:99px; background:#4a3a17; color:#ffd58f; display:none; }
+  .badge.show { display:inline-block; }
+  canvas { width:100%; background:#11141a; border-radius:8px; display:block; }
+  .help dt { font-weight:600; margin-top:6px; } .help dd { margin:0 0 0 0; color:var(--dim); }
+  details { margin-top:16px; } pre { white-space:pre-wrap; font-size:11px; color:var(--dim); max-height:240px; overflow:auto; }
+  .hidden { display:none !important; }
+  .peaks span { display:inline-block; margin:2px; padding:1px 6px; border-radius:5px; background:var(--key); font-family:ui-monospace,monospace; }
+  .peaks span.click { background:#1d4630; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sofle config</h1>
+  <span id="status" class="pill">Not connected</span>
+  <span id="stats" class="dim small"></span>
+  <span class="spacer"></span>
+  <span class="dim small">Works offline. Nothing is sent to the keyboard by this page.</span>
+</header>
+<div id="focusWarn">This page isn't focused. Click here before using the keyboard, or its messages will be typed into another window.</div>
+<main>
+  <section>
+    <div id="connect" class="panel">
+      <h2>Connect</h2>
+      <div id="connectSteps">
+        <ol>
+          <li>Turn on config mode: <kbd>Raise</kbd> + the top-right key (<b>Config</b>), or hold the <b>right</b> knob button, then the <b>left</b> one, for 2 seconds. The right screen shows <b>CONFG</b>.</li>
+          <li>Click this page so it has focus.</li>
+          <li>Press <kbd>Space</kbd> on the keyboard.</li>
+        </ol>
+      </div>
+      <div id="challenge" class="hidden">
+        Type these letters on the keyboard:
+        <div class="code" id="code"></div>
+        <span class="dim small">This proves the page is receiving. Press <kbd>Space</kbd> to get new letters.</span>
+      </div>
+      <div id="closed" class="hidden">Config mode is off. Your saved changes stay on the keyboard. Turn it on again to reconnect.</div>
+      <div id="mismatch" class="hidden" style="color:var(--bad);margin-top:8px">This page and the keyboard firmware come from different builds; keycode picking may be wrong. Use the sofle-config.html from the same build.</div>
+    </div>
+
+    <div id="editor" class="hidden">
+      <div class="tabs" id="tabs"></div>
+      <div id="keysView" class="panel">
+        <div class="layers" id="layers"></div>
+        <div id="kb"></div>
+        <div class="knobs" id="knobs"></div>
+      </div>
+      <div id="ledView" class="panel hidden">
+        <h2>Underglow <span id="ledUnsaved" class="badge">unsaved — right knob press to save</span></h2>
+        <div class="rows" id="ledRows"></div>
+      </div>
+      <div id="padView" class="panel hidden">
+        <h2>Trackpad press-to-click <span id="tpUnsaved" class="badge">unsaved — right knob press to save</span></h2>
+        <div class="rows" id="tpRows"></div>
+        <h2 style="margin-top:14px">Live Z</h2>
+        <canvas id="zbar" width="600" height="70"></canvas>
+        <canvas id="zhist" width="600" height="140" style="margin-top:8px"></canvas>
+        <p class="small dim">Z is the trackpad's signal strength (0–63). A press clicks when Z reaches the <span style="color:var(--warn)">threshold</span> and lets go below the <span style="color:var(--acc)">release Z</span> (or when you lift). Set the threshold between your light-touch peaks and your firm-press peaks.</p>
+        <div class="small">Recent touch peaks (green = would click at the threshold shown):</div>
+        <div class="peaks" id="peaks"></div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div id="picker" class="panel hidden">
+      <h2 id="pickTitle">Keycode</h2>
+      <div><span id="curName" class="big"></span><span class="arrow">→</span><span id="newName" class="big" style="color:var(--warn)"></span></div>
+      <div class="small dim" id="pickHint" style="margin:4px 0 10px"></div>
+      <div class="cats" id="cats"></div>
+      <div class="list" id="list"></div>
+    </div>
+    <div class="panel help" style="margin-top:16px">
+      <h2>Controls</h2>
+      <dl id="help"></dl>
+      <p class="small dim">Exit: <kbd>Raise</kbd> + <b>Config</b>, hold both knob buttons 2 s, hold <kbd>Esc</kbd> 2 s, or 5 min without input. Unsaved LED/trackpad changes are dropped on exit.</p>
+    </div>
+    <details>
+      <summary class="dim small">Received frames</summary>
+      <pre id="log"></pre>
+    </details>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const DATA = {"pickerHash":54882,"picker":[[0,""],[1,"▽"],[4,"A"],[5,"B"],[6,"C"],[7,"D"],[8,"E"],[9,"F"],[10,"G"],[11,"H"],[12,"I"],[13,"J"],[14,"K"],[15,"L"],[16,"M"],[17,"N"],[18,"O"],[19,"P"],[20,"Q"],[21,"R"],[22,"S"],[23,"T"],[24,"U"],[25,"V"],[26,"W"],[27,"X"],[28,"Y"],[29,"Z"],[30,"1"],[31,"2"],[32,"3"],[33,"4"],[34,"5"],[35,"6"],[36,"7"],[37,"8"],[38,"9"],[39,"0"],[40,"Enter"],[41,"Esc"],[42,"Bksp"],[43,"Tab"],[44,"Space"],[45,"-"],[46,"="],[47,"["],[48,"]"],[49,"\\"],[51,";"],[52,"'"],[53,"`"],[54,","],[55,"."],[56,"/"],[57,"Caps"],[565,"~"],[542,"!"],[543,"@"],[544,"#"],[545,"$"],[546,"%"],[547,"^"],[548,"&"],[549,"*"],[550,"("],[551,")"],[557,"_"],[558,"+"],[559,"{"],[560,"}"],[561,"|"],[563,":"],[564,"\""],[566,"<"],[567,">"],[568,"?"],[80,"←"],[81,"↓"],[82,"↑"],[79,"→"],[74,"Home"],[77,"End"],[75,"PgUp"],[78,"PgDn"],[73,"Ins"],[76,"Del"],[70,"PrtSc"],[71,"ScrLk"],[72,"Pause"],[101,"Menu"],[224,"LCtrl"],[225,"LShift"],[226,"LAlt"],[227,"LGui"],[228,"RCtrl"],[229,"RShift"],[230,"RAlt"],[231,"RGui"],[58,"F1"],[59,"F2"],[60,"F3"],[61,"F4"],[62,"F5"],[63,"F6"],[64,"F7"],[65,"F8"],[66,"F9"],[67,"F10"],[68,"F11"],[69,"F12"],[104,"F13"],[105,"F14"],[106,"F15"],[107,"F16"],[108,"F17"],[109,"F18"],[110,"F19"],[111,"F20"],[112,"F21"],[113,"F22"],[114,"F23"],[115,"F24"],[168,"Mute"],[169,"Vol+"],[170,"Vol-"],[174,"Play"],[171,"Next"],[172,"Prev"],[173,"Stop"],[189,"Bri+"],[190,"Bri-"],[178,"Calc"],[179,"MyPC"],[180,"Search"],[182,"Back"],[183,"Fwd"],[185,"Refresh"],[209,"Click L"],[210,"Click R"],[211,"Click M"],[212,"Btn4"],[213,"Btn5"],[205,"Ms↑"],[206,"Ms↓"],[207,"Ms←"],[208,"Ms→"],[217,"Whl↑"],[218,"Whl↓"],[219,"Whl←"],[220,"Whl→"],[221,"Accel0"],[222,"Accel1"],[223,"Accel2"],[21025,"MO(1)"],[21026,"MO(2)"],[21027,"MO(3)"],[21028,"MO(4)"],[21029,"MO(5)"],[21089,"TG(1)"],[21090,"TG(2)"],[21091,"TG(3)"],[21092,"TG(4)"],[21093,"TG(5)"],[20992,"TO(0)"],[20993,"TO(1)"],[20994,"TO(2)"],[20995,"TO(3)"],[20996,"TO(4)"],[20997,"TO(5)"],[21121,"OSL(1)"],[21122,"OSL(2)"],[21123,"OSL(3)"],[21124,"OSL(4)"],[21125,"OSL(5)"],[21185,"TT(1)"],[21186,"TT(2)"],[21187,"TT(3)"],[21188,"TT(4)"],[21189,"TT(5)"],[21216,"PDF(0)"],[21217,"PDF(1)"],[83,"NumLk"],[84,"P/"],[85,"P*"],[86,"P-"],[87,"P+"],[88,"PEnt"],[89,"P1"],[90,"P2"],[91,"P3"],[92,"P4"],[93,"P5"],[94,"P6"],[95,"P7"],[96,"P8"],[97,"P9"],[98,"P0"],[99,"P."],[103,"P="],[30752,"RGB on/off"],[30753,"RGB mode+"],[30754,"RGB mode-"],[30755,"Hue+"],[30756,"Hue-"],[30757,"Sat+"],[30758,"Sat-"],[30759,"Bright+"],[30760,"Bright-"],[30761,"Speed+"],[30762,"Speed-"],[32258,"Config mode"],[32256,"Cycle base"],[32257,"Drag scroll"],[31859,"CapsWord"],[31744,"Bootloader"]],"cats":["Basic","Symbols","Navigation","Modifiers","Function","Media","Mouse","Layers","Numpad","Lighting","Special"],"catStarts":[0,55,76,90,98,122,137,153,181,199,210],"names":{"0":"","1":"▽","4":"A","5":"B","6":"C","7":"D","8":"E","9":"F","10":"G","11":"H","12":"I","13":"J","14":"K","15":"L","16":"M","17":"N","18":"O","19":"P","20":"Q","21":"R","22":"S","23":"T","24":"U","25":"V","26":"W","27":"X","28":"Y","29":"Z","30":"1","31":"2","32":"3","33":"4","34":"5","35":"6","36":"7","37":"8","38":"9","39":"0","40":"Enter","41":"Esc","42":"Bksp","43":"Tab","44":"Space","45":"-","46":"=","47":"[","48":"]","49":"\\","50":"NUHS","51":";","52":"'","53":"`","54":",","55":".","56":"/","57":"Caps","58":"F1","59":"F2","60":"F3","61":"F4","62":"F5","63":"F6","64":"F7","65":"F8","66":"F9","67":"F10","68":"F11","69":"F12","70":"PrtSc","71":"ScrLk","72":"Pause","73":"Ins","74":"Home","75":"PgUp","76":"Del","77":"End","78":"PgDn","79":"→","80":"←","81":"↓","82":"↑","83":"NumLk","84":"P/","85":"P*","86":"P-","87":"P+","88":"PEnt","89":"P1","90":"P2","91":"P3","92":"P4","93":"P5","94":"P6","95":"P7","96":"P8","97":"P9","98":"P0","99":"P.","100":"NUBS","101":"Menu","102":"KB_POWER","103":"P=","104":"F13","105":"F14","106":"F15","107":"F16","108":"F17","109":"F18","110":"F19","111":"F20","112":"F21","113":"F22","114":"F23","115":"F24","116":"EXEC","117":"HELP","118":"MENU","119":"SLCT","120":"STOP","121":"AGIN","122":"UNDO","123":"CUT","124":"COPY","125":"PSTE","126":"FIND","127":"KB_MUTE","128":"KB_VOLUME_UP","129":"KB_VOLUME_DOWN","130":"LCAP","131":"LNUM","132":"LSCR","133":"PCMM","134":"KP_EQUAL_AS400","135":"INT1","136":"INT2","137":"INT3","138":"INT4","139":"INT5","140":"INT6","141":"INT7","142":"INT8","143":"INT9","144":"LNG1","145":"LNG2","146":"LNG3","147":"LNG4","148":"LNG5","149":"LNG6","150":"LNG7","151":"LNG8","152":"LNG9","153":"ERAS","154":"SYRQ","155":"CNCL","156":"CLR","157":"PRIR","158":"RETN","159":"SEPR","160":"OUT","161":"OPER","162":"CLAG","163":"CRSL","164":"EXSL","165":"PWR","166":"SLEP","167":"WAKE","168":"Mute","169":"Vol+","170":"Vol-","171":"Next","172":"Prev","173":"Stop","174":"Play","175":"MSEL","176":"EJCT","177":"MAIL","178":"Calc","179":"MyPC","180":"Search","181":"WHOM","182":"Back","183":"Fwd","184":"WSTP","185":"Refresh","186":"WFAV","187":"MFFD","188":"MRWD","189":"Bri+","190":"Bri-","191":"CPNL","192":"ASST","193":"MCTL","194":"LPAD","205":"Ms↑","206":"Ms↓","207":"Ms←","208":"Ms→","209":"Click L","210":"Click R","211":"Click M","212":"Btn4","213":"Btn5","214":"MS_BTN6","215":"MS_BTN7","216":"MS_BTN8","217":"Whl↑","218":"Whl↓","219":"Whl←","220":"Whl→","221":"Accel0","222":"Accel1","223":"Accel2","224":"LCtrl","225":"LShift","226":"LAlt","227":"LGui","228":"RCtrl","229":"RShift","230":"RAlt","231":"RGui","542":"!","543":"@","544":"#","545":"$","546":"%","547":"^","548":"&","549":"*","550":"(","551":")","557":"_","558":"+","559":"{","560":"}","561":"|","563":":","564":"\"","565":"~","566":"<","567":">","568":"?","8192":"MOD_TAP","16384":"LAYER_TAP","20480":"LAYER_MOD","20992":"TO(0)","20993":"TO(1)","20994":"TO(2)","20995":"TO(3)","20996":"TO(4)","20997":"TO(5)","21024":"MOMENTARY","21025":"MO(1)","21026":"MO(2)","21027":"MO(3)","21028":"MO(4)","21029":"MO(5)","21056":"DEF_LAYER","21088":"TOGGLE_LAYER","21089":"TG(1)","21090":"TG(2)","21091":"TG(3)","21092":"TG(4)","21093":"TG(5)","21120":"ONE_SHOT_LAYER","21121":"OSL(1)","21122":"OSL(2)","21123":"OSL(3)","21124":"OSL(4)","21125":"OSL(5)","21152":"ONE_SHOT_MOD","21184":"LAYER_TAP_TOGGLE","21185":"TT(1)","21186":"TT(2)","21187":"TT(3)","21188":"TT(4)","21189":"TT(5)","21216":"PDF(0)","21217":"PDF(1)","22016":"SWAP_HANDS","22256":"SH_TOGG","22257":"SH_TT","22258":"SH_MON","22259":"SH_MOFF","22260":"SH_OFF","22261":"SH_ON","22262":"SH_OS","22272":"TAP_DANCE","28672":"CL_SWAP","28673":"CL_NORM","28674":"CL_TOGG","28675":"CL_CAPS","28676":"CL_CTRL","28677":"AG_LSWP","28678":"AG_LNRM","28679":"AG_RSWP","28680":"AG_RNRM","28681":"GU_ON","28682":"GU_OFF","28683":"GU_TOGG","28684":"GE_SWAP","28685":"GE_NORM","28686":"BS_SWAP","28687":"BS_NORM","28688":"BS_TOGG","28689":"NK_ON","28690":"NK_OFF","28691":"NK_TOGG","28692":"AG_SWAP","28693":"AG_NORM","28694":"AG_TOGG","28695":"CG_LSWP","28696":"CG_LNRM","28697":"CG_RSWP","28698":"CG_RNRM","28699":"CG_SWAP","28700":"CG_NORM","28701":"CG_TOGG","28702":"EH_LEFT","28703":"EH_RGHT","28704":"EC_SWAP","28705":"EC_NORM","28706":"EC_TOGG","28928":"MI_ON","28929":"MI_OFF","28930":"MI_TOGG","28931":"MI_C","28932":"MIDI_NOTE_C_SHARP_0","28933":"MI_D","28934":"MIDI_NOTE_D_SHARP_0","28935":"MI_E","28936":"MI_F","28937":"MIDI_NOTE_F_SHARP_0","28938":"MI_G","28939":"MIDI_NOTE_G_SHARP_0","28940":"MI_A","28941":"MIDI_NOTE_A_SHARP_0","28942":"MI_B","28943":"MI_C1","28944":"MIDI_NOTE_C_SHARP_1","28945":"MI_D1","28946":"MIDI_NOTE_D_SHARP_1","28947":"MI_E1","28948":"MI_F1","28949":"MIDI_NOTE_F_SHARP_1","28950":"MI_G1","28951":"MIDI_NOTE_G_SHARP_1","28952":"MI_A1","28953":"MIDI_NOTE_A_SHARP_1","28954":"MI_B1","28955":"MI_C2","28956":"MIDI_NOTE_C_SHARP_2","28957":"MI_D2","28958":"MIDI_NOTE_D_SHARP_2","28959":"MI_E2","28960":"MI_F2","28961":"MIDI_NOTE_F_SHARP_2","28962":"MI_G2","28963":"MIDI_NOTE_G_SHARP_2","28964":"MI_A2","28965":"MIDI_NOTE_A_SHARP_2","28966":"MI_B2","28967":"MI_C3","28968":"MIDI_NOTE_C_SHARP_3","28969":"MI_D3","28970":"MIDI_NOTE_D_SHARP_3","28971":"MI_E3","28972":"MI_F3","28973":"MIDI_NOTE_F_SHARP_3","28974":"MI_G3","28975":"MIDI_NOTE_G_SHARP_3","28976":"MI_A3","28977":"MIDI_NOTE_A_SHARP_3","28978":"MI_B3","28979":"MI_C4","28980":"MIDI_NOTE_C_SHARP_4","28981":"MI_D4","28982":"MIDI_NOTE_D_SHARP_4","28983":"MI_E4","28984":"MI_F4","28985":"MIDI_NOTE_F_SHARP_4","28986":"MI_G4","28987":"MIDI_NOTE_G_SHARP_4","28988":"MI_A4","28989":"MIDI_NOTE_A_SHARP_4","28990":"MI_B4","28991":"MI_C5","28992":"MIDI_NOTE_C_SHARP_5","28993":"MI_D5","28994":"MIDI_NOTE_D_SHARP_5","28995":"MI_E5","28996":"MI_F5","28997":"MIDI_NOTE_F_SHARP_5","28998":"MI_G5","28999":"MIDI_NOTE_G_SHARP_5","29000":"MI_A5","29001":"MIDI_NOTE_A_SHARP_5","29002":"MI_B5","29003":"MI_OCN2","29004":"MI_OCN1","29005":"MI_OC0","29006":"MI_OC1","29007":"MI_OC2","29008":"MI_OC3","29009":"MI_OC4","29010":"MI_OC5","29011":"MI_OC6","29012":"MI_OC7","29013":"MI_OCTD","29014":"MI_OCTU","29015":"MI_TRN6","29016":"MI_TRN5","29017":"MI_TRN4","29018":"MI_TRN3","29019":"MI_TRN2","29020":"MI_TRN1","29021":"MI_TR0","29022":"MI_TR1","29023":"MI_TR2","29024":"MI_TR3","29025":"MI_TR4","29026":"MI_TR5","29027":"MI_TR6","29028":"MI_TRSD","29029":"MI_TRSU","29030":"MI_VL0","29031":"MI_VL1","29032":"MI_VL2","29033":"MI_VL3","29034":"MI_VL4","29035":"MI_VL5","29036":"MI_VL6","29037":"MI_VL7","29038":"MI_VL8","29039":"MI_VL9","29040":"MI_VL10","29041":"MI_VELD","29042":"MI_VELU","29043":"MI_CH1","29044":"MI_CH2","29045":"MI_CH3","29046":"MI_CH4","29047":"MI_CH5","29048":"MI_CH6","29049":"MI_CH7","29050":"MI_CH8","29051":"MI_CH9","29052":"MI_CH10","29053":"MI_CH11","29054":"MI_CH12","29055":"MI_CH13","29056":"MI_CH14","29057":"MI_CH15","29058":"MI_CH16","29059":"MI_CHND","29060":"MI_CHNU","29061":"MI_AOFF","29062":"MI_SUST","29063":"MI_PORT","29064":"MI_SOST","29065":"MI_SOFT","29066":"MI_LEG","29067":"MI_MOD","29068":"MI_MODD","29069":"MI_MODU","29070":"MI_BNDD","29071":"MI_BNDU","29184":"SQ_ON","29185":"SQ_OFF","29186":"SQ_TOGG","29187":"SQ_TMPD","29188":"SQ_TMPU","29189":"SQ_RESD","29190":"SQ_RESU","29191":"SQ_SALL","29192":"SQ_SCLR","29696":"JS_0","29697":"JS_1","29698":"JS_2","29699":"JS_3","29700":"JS_4","29701":"JS_5","29702":"JS_6","29703":"JS_7","29704":"JS_8","29705":"JS_9","29706":"JS_10","29707":"JS_11","29708":"JS_12","29709":"JS_13","29710":"JS_14","29711":"JS_15","29712":"JS_16","29713":"JS_17","29714":"JS_18","29715":"JS_19","29716":"JS_20","29717":"JS_21","29718":"JS_22","29719":"JS_23","29720":"JS_24","29721":"JS_25","29722":"JS_26","29723":"JS_27","29724":"JS_28","29725":"JS_29","29726":"JS_30","29727":"JS_31","29760":"PB_1","29761":"PB_2","29762":"PB_3","29763":"PB_4","29764":"PB_5","29765":"PB_6","29766":"PB_7","29767":"PB_8","29768":"PB_9","29769":"PB_10","29770":"PB_11","29771":"PB_12","29772":"PB_13","29773":"PB_14","29774":"PB_15","29775":"PB_16","29776":"PB_17","29777":"PB_18","29778":"PB_19","29779":"PB_20","29780":"PB_21","29781":"PB_22","29782":"PB_23","29783":"PB_24","29784":"PB_25","29785":"PB_26","29786":"PB_27","29787":"PB_28","29788":"PB_29","29789":"PB_30","29790":"PB_31","29791":"PB_32","29824":"AU_ON","29825":"AU_OFF","29826":"AU_TOGG","29834":"CK_TOGG","29835":"CK_ON","29836":"CK_OFF","29837":"CK_UP","29838":"CK_DOWN","29839":"CK_RST","29840":"MU_ON","29841":"MU_OFF","29842":"MU_TOGG","29843":"MU_NEXT","29844":"AU_NEXT","29845":"AU_PREV","29888":"STENO","29936":"STENO_BOLT","29937":"STENO_GEMINI","29938":"STENO_COMB","30464":"MC_0","30465":"MC_1","30466":"MC_2","30467":"MC_3","30468":"MC_4","30469":"MC_5","30470":"MC_6","30471":"MC_7","30472":"MC_8","30473":"MC_9","30474":"MC_10","30475":"MC_11","30476":"MC_12","30477":"MC_13","30478":"MC_14","30479":"MC_15","30480":"MC_16","30481":"MC_17","30482":"MC_18","30483":"MC_19","30484":"MC_20","30485":"MC_21","30486":"MC_22","30487":"MC_23","30488":"MC_24","30489":"MC_25","30490":"MC_26","30491":"MC_27","30492":"MC_28","30493":"MC_29","30494":"MC_30","30495":"MC_31","30592":"OU_AUTO","30593":"OU_NEXT","30594":"OU_PREV","30595":"OU_NONE","30596":"OU_USB","30597":"OU_2P4G","30598":"OU_BT","30608":"BT_NEXT","30609":"BT_PREV","30610":"BT_UNPR","30611":"BT_PRF1","30612":"BT_PRF2","30613":"BT_PRF3","30614":"BT_PRF4","30615":"BT_PRF5","30656":"COMMUNITY_MODULE","30720":"BL_ON","30721":"BL_OFF","30722":"BL_TOGG","30723":"BL_DOWN","30724":"BL_UP","30725":"BL_STEP","30726":"BL_BRTG","30736":"LM_ON","30737":"LM_OFF","30738":"LM_TOGG","30739":"LM_NEXT","30740":"LM_PREV","30741":"LM_BRIU","30742":"LM_BRID","30743":"LM_SPDU","30744":"LM_SPDD","30752":"RGB on/off","30753":"RGB mode+","30754":"RGB mode-","30755":"Hue+","30756":"Hue-","30757":"Sat+","30758":"Sat-","30759":"Bright+","30760":"Bright-","30761":"Speed+","30762":"Speed-","30763":"RGB_M_P","30764":"RGB_M_B","30765":"RGB_M_R","30766":"RGB_M_SW","30767":"RGB_M_SN","30768":"RGB_M_K","30769":"RGB_M_X","30770":"RGB_M_G","30771":"RGB_M_T","30772":"RGB_M_TW","30784":"RM_ON","30785":"RM_OFF","30786":"RM_TOGG","30787":"RM_NEXT","30788":"RM_PREV","30789":"RM_HUEU","30790":"RM_HUED","30791":"RM_SATU","30792":"RM_SATD","30793":"RM_VALU","30794":"RM_VALD","30795":"RM_SPDU","30796":"RM_SPDD","31744":"Bootloader","31745":"RBT","31746":"DB_TOGG","31747":"EE_CLR","31748":"MAKE","31760":"AS_DOWN","31761":"AS_UP","31762":"AS_RPT","31763":"AS_ON","31764":"AS_OFF","31765":"AS_TOGG","31766":"GESC","31767":"VK_TOGG","31768":"SC_LCPO","31769":"SC_RCPC","31770":"SC_LSPO","31771":"SC_RSPC","31772":"SC_LAPO","31773":"SC_RAPC","31774":"SC_SENT","31792":"UC_NEXT","31793":"UC_PREV","31794":"UC_MAC","31795":"UC_LINX","31796":"UC_WIN","31797":"UC_BSD","31798":"UC_WINC","31799":"UC_EMAC","31808":"HF_ON","31809":"HF_OFF","31810":"HF_TOGG","31811":"HF_RST","31812":"HF_FDBK","31813":"HF_BUZZ","31814":"HF_NEXT","31815":"HF_PREV","31816":"HF_CONT","31817":"HF_CONU","31818":"HF_COND","31819":"HF_DWLU","31820":"HF_DWLD","31824":"CM_ON","31825":"CM_OFF","31826":"CM_TOGG","31827":"DM_REC1","31828":"DM_REC2","31829":"DM_RSTP","31830":"DM_PLY1","31831":"DM_PLY2","31832":"LEAD","31833":"LOCK","31834":"OS_ON","31835":"OS_OFF","31836":"OS_TOGG","31837":"KO_TOGG","31838":"KO_ON","31839":"KO_OFF","31840":"SE_LOCK","31841":"SE_UNLK","31842":"SE_TOGG","31843":"SE_REQ","31856":"DT_PRNT","31857":"DT_UP","31858":"DT_DOWN","31859":"CapsWord","31860":"AC_ON","31861":"AC_OFF","31862":"AC_TOGG","31863":"TL_LOWR","31864":"TL_UPPR","31865":"REP","31866":"AREP","31867":"LLCK","32256":"CYCLE","32257":"DRG_SCR","32258":"CONFIG","32320":"USER","32768":"UNICODE","49152":"UNICODEMAP_PAIR"},"layout":[{"r":0,"c":0,"x":0,"y":0.5,"h":1},{"r":0,"c":1,"x":1,"y":0.375,"h":1},{"r":0,"c":2,"x":2,"y":0.125,"h":1},{"r":0,"c":3,"x":3,"y":0,"h":1},{"r":0,"c":4,"x":4,"y":0.125,"h":1},{"r":0,"c":5,"x":5,"y":0.25,"h":1},{"r":5,"c":5,"x":10.5,"y":0.25,"h":1},{"r":5,"c":4,"x":11.5,"y":0.125,"h":1},{"r":5,"c":3,"x":12.5,"y":0,"h":1},{"r":5,"c":2,"x":13.5,"y":0.125,"h":1},{"r":5,"c":1,"x":14.5,"y":0.375,"h":1},{"r":5,"c":0,"x":15.5,"y":0.5,"h":1},{"r":1,"c":0,"x":0,"y":1.5,"h":1},{"r":1,"c":1,"x":1,"y":1.375,"h":1},{"r":1,"c":2,"x":2,"y":1.125,"h":1},{"r":1,"c":3,"x":3,"y":1,"h":1},{"r":1,"c":4,"x":4,"y":1.125,"h":1},{"r":1,"c":5,"x":5,"y":1.25,"h":1},{"r":6,"c":5,"x":10.5,"y":1.25,"h":1},{"r":6,"c":4,"x":11.5,"y":1.125,"h":1},{"r":6,"c":3,"x":12.5,"y":1,"h":1},{"r":6,"c":2,"x":13.5,"y":1.125,"h":1},{"r":6,"c":1,"x":14.5,"y":1.375,"h":1},{"r":6,"c":0,"x":15.5,"y":1.5,"h":1},{"r":2,"c":0,"x":0,"y":2.5,"h":1},{"r":2,"c":1,"x":1,"y":2.375,"h":1},{"r":2,"c":2,"x":2,"y":2.125,"h":1},{"r":2,"c":3,"x":3,"y":2,"h":1},{"r":2,"c":4,"x":4,"y":2.125,"h":1},{"r":2,"c":5,"x":5,"y":2.25,"h":1},{"r":7,"c":5,"x":10.5,"y":2.25,"h":1},{"r":7,"c":4,"x":11.5,"y":2.125,"h":1},{"r":7,"c":3,"x":12.5,"y":2,"h":1},{"r":7,"c":2,"x":13.5,"y":2.125,"h":1},{"r":7,"c":1,"x":14.5,"y":2.375,"h":1},{"r":7,"c":0,"x":15.5,"y":2.5,"h":1},{"r":3,"c":0,"x":0,"y":3.5,"h":1},{"r":3,"c":1,"x":1,"y":3.375,"h":1},{"r":3,"c":2,"x":2,"y":3.125,"h":1},{"r":3,"c":3,"x":3,"y":3,"h":1},{"r":3,"c":4,"x":4,"y":3.125,"h":1},{"r":3,"c":5,"x":5,"y":3.25,"h":1},{"r":4,"c":0,"x":6,"y":2.75,"h":1},{"r":9,"c":5,"x":9.5,"y":2.75,"h":1},{"r":8,"c":5,"x":10.5,"y":3.25,"h":1},{"r":8,"c":4,"x":11.5,"y":3.125,"h":1},{"r":8,"c":3,"x":12.5,"y":3,"h":1},{"r":8,"c":2,"x":13.5,"y":3.125,"h":1},{"r":8,"c":1,"x":14.5,"y":3.375,"h":1},{"r":8,"c":0,"x":15.5,"y":3.5,"h":1},{"r":4,"c":1,"x":1.5,"y":4.375,"h":1},{"r":4,"c":2,"x":2.5,"y":4.125,"h":1},{"r":4,"c":3,"x":3.5,"y":4.15,"h":1},{"r":4,"c":4,"x":4.5,"y":4.25,"h":1},{"r":4,"c":5,"x":6,"y":4.25,"h":1.5},{"r":9,"c":4,"x":9.5,"y":4.25,"h":1.5},{"r":9,"c":3,"x":11,"y":4.25,"h":1},{"r":9,"c":2,"x":12,"y":4.15,"h":1},{"r":9,"c":1,"x":13,"y":4.125,"h":1},{"r":9,"c":0,"x":14,"y":4.375,"h":1}],"layerNames":["QWERTY","Colemak","Lower","Raise","Mouse","Layer 5"],"ledEffects":["Static","Breathing","Rainbow mood","Rainbow swirl","Snake","Knight","Christmas","Gradient","RGB test","Alternating","Twinkle"],"ledIdle":["Never","1 min","2 min","5 min","10 min","30 min"],"ranges":{"QK_MODS":256,"QK_MOD_TAP":8192,"QK_LAYER_TAP":16384,"QK_LAYER_MOD":20480,"QK_TO":20992,"QK_MOMENTARY":21024,"QK_DEF_LAYER":21056,"QK_TOGGLE_LAYER":21088,"QK_ONE_SHOT_LAYER":21120,"QK_ONE_SHOT_MOD":21152,"QK_LAYER_TAP_TOGGLE":21184,"QK_PERSISTENT_DEF_LAYER":21216,"QK_TAP_DANCE":22272,"QK_MACRO":30464,"QK_KB":32256,"QK_USER":32320}};
+
+const F = { HELLO:0x01, READY:0x02, BYE:0x03, UI:0x04, ROW:0x10, ENC:0x11, LED:0x20, TP:0x21, TPZ:0x22 };
+const TABS = ["Keys", "Knobs", "LEDs", "Trackpad"];
+const CHALLENGE = "ACDEFHJKLMNPRSTUWXY";
+const KNOB_L = [4, 0], KNOB_R = [9, 5];
+const SLOT_NAMES = ["Turn left", "Turn right", "Press"];
+
+const S = {
+  state: "idle", nonce: 0, ready: null, ui: null, keymap: [], enc: [], led: null, tp: null, tpz: null,
+  frames: 0, missed: 0, lastSeq: null, lastFrameAt: 0, zHist: [], peaks: [], wasTouching: false,
+};
+
+// ---------------------------------------------------------------- decoding
+const SYM = {};
+"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((c, i) => (SYM["Key" + c] = i));
+for (let d = 2; d <= 7; d++) SYM["Digit" + d] = 24 + d;
+
+function crc8(bytes) {
+  let crc = 0;
+  for (const b of bytes) {
+    crc ^= b;
+    for (let i = 0; i < 8; i++) crc = crc & 0x80 ? ((crc << 1) ^ 0x07) & 0xff : (crc << 1) & 0xff;
+  }
+  return crc;
+}
+
+function base32ToBytes(symbols) {
+  const out = [];
+  let acc = 0, bits = 0;
+  for (const s of symbols) {
+    acc = (acc << 5) | s; bits += 5;
+    if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); acc &= (1 << bits) - 1; }
+  }
+  return out;
+}
+
+let rx = null;
+function feedCode(code) {
+  if (code === "Comma") { rx = []; return true; }
+  if (code === "Period") { if (rx) handleSymbols(rx); rx = null; return true; }
+  if (code in SYM) { if (rx) { rx.push(SYM[code]); if (rx.length > 120) rx = null; } return true; }
+  return false;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey) return; // the keyboard never sends modifiers
+  if (feedCode(e.code)) e.preventDefault();
+}, true);
+window.addEventListener("blur", () => document.body.classList.add("blurred"));
+window.addEventListener("focus", () => document.body.classList.remove("blurred"));
+document.getElementById("focusWarn").addEventListener("click", () => window.focus());
+
+function handleSymbols(symbols) {
+  const bytes = base32ToBytes(symbols);
+  if (bytes.length < 3 || crc8(bytes.slice(0, -1)) !== bytes[bytes.length - 1]) {
+    log("bad frame (" + symbols.length + " symbols)");
+    S.missed++;
+    return;
+  }
+  const type = bytes[0], seq = bytes[1], p = bytes.slice(2, -1);
+  if (type !== F.HELLO && S.lastSeq !== null && seq !== ((S.lastSeq + 1) & 0xff)) S.missed++;
+  S.lastSeq = seq;
+  S.frames++;
+  S.lastFrameAt = Date.now();
+  handleFrame(type, p);
+  scheduleRender();
+}
+
+const u16 = (p, i) => p[i] | (p[i + 1] << 8);
+
+function handleFrame(type, p) {
+  switch (type) {
+    case F.HELLO:
+      S.state = "challenge"; S.nonce = u16(p, 1); S.missed = 0;
+      log("HELLO protocol " + p[0]);
+      break;
+    case F.READY: {
+      const [proto, layers, rows, cols, encoders, defLayer] = p;
+      S.ready = { proto, layers, rows, cols, encoders, defLayer, hash: u16(p, 6), count: u16(p, 8) };
+      S.state = "ready";
+      S.keymap = Array.from({ length: layers }, () => Array.from({ length: rows }, () => Array(cols).fill(null)));
+      S.enc = Array.from({ length: layers }, () => null);
+      log("READY " + JSON.stringify(S.ready));
+      break;
+    }
+    case F.BYE: S.state = "closed"; log("BYE"); break;
+    case F.UI:
+      S.ui = { tab: p[0], layer: p[1], row: p[2], col: p[3], pick: (u16(p, 4) << 16) >> 16, pending: u16(p, 6),
+               slot: p[8], ledField: p[9], tpField: p[10], ledDirty: !!(p[11] & 1), tpDirty: !!(p[11] & 2), held: !!(p[11] & 4) };
+      break;
+    case F.ROW: {
+      if (!S.ready) return;
+      const [layer, row] = p;
+      for (let c = 0; c < S.ready.cols; c++) S.keymap[layer][row][c] = u16(p, 2 + c * 2);
+      break;
+    }
+    case F.ENC:
+      if (!S.ready) return;
+      S.enc[p[0]] = [[u16(p, 1), u16(p, 3)], [u16(p, 5), u16(p, 7)]];
+      break;
+    case F.LED:
+      S.led = { enable: p[0], mode: p[1], effect: p[2], variant: p[3], hue: p[4], sat: p[5], val: p[6], speed: p[7], idle: p[8], max: p[9], dirty: p[10] };
+      break;
+    case F.TP: S.tp = { enable: p[0], threshold: p[1], release: p[2], dirty: p[3] }; break;
+    case F.TPZ: {
+      const z = { z: p[0], peak: p[1], lastPeak: p[2], touching: p[3], pressed: p[4] };
+      if (S.wasTouching && !z.touching) { S.peaks.unshift(z.lastPeak); S.peaks.length = Math.min(S.peaks.length, 16); }
+      S.wasTouching = !!z.touching;
+      S.tpz = z;
+      S.zHist.push(z.touching ? z.z : 0);
+      if (S.zHist.length > 150) S.zHist.shift();
+      break;
+    }
+    default: log("unknown frame type " + type);
+  }
+  if (type !== F.TPZ && type !== F.ROW) log(Object.keys(F).find((k) => F[k] === type) + " " + p.join(","));
+}
+
+// ---------------------------------------------------------------- names
+const R = DATA.ranges;
+function modsStr(m) {
+  const parts = [];
+  if (m & 1) parts.push("Ctl"); if (m & 2) parts.push("Sft"); if (m & 4) parts.push("Alt"); if (m & 8) parts.push("Gui");
+  return (m & 0x10 ? "R" : "L") + parts.join("+");
+}
+function kcName(v) {
+  if (v === null || v === undefined) return "…";
+  const n = DATA.names[v];
+  if (n !== undefined) return n;
+  if (v >= R.QK_MODS && v < R.QK_MOD_TAP) return modsStr((v >> 8) & 0x1f) + "(" + kcName(v & 0xff) + ")";
+  if (v >= R.QK_MOD_TAP && v < R.QK_LAYER_TAP) return "MT(" + modsStr((v >> 8) & 0x1f) + "," + kcName(v & 0xff) + ")";
+  if (v >= R.QK_LAYER_TAP && v < R.QK_LAYER_MOD) return "LT" + ((v >> 8) & 0xf) + "(" + kcName(v & 0xff) + ")";
+  if (v >= R.QK_LAYER_MOD && v < R.QK_TO) return "LM(" + ((v >> 5) & 0xf) + "," + modsStr(v & 0x1f) + ")";
+  const layerOps = [["QK_TO", "TO"], ["QK_MOMENTARY", "MO"], ["QK_DEF_LAYER", "DF"], ["QK_TOGGLE_LAYER", "TG"], ["QK_ONE_SHOT_LAYER", "OSL"],
+                    ["QK_ONE_SHOT_MOD", null], ["QK_LAYER_TAP_TOGGLE", "TT"], ["QK_PERSISTENT_DEF_LAYER", "PDF"]];
+  for (const [k, name] of layerOps) if (v >= R[k] && v < R[k] + 0x20) return name ? name + "(" + (v & 0x1f) + ")" : "OSM(" + modsStr(v & 0x1f) + ")";
+  if (v >= R.QK_TAP_DANCE && v < R.QK_TAP_DANCE + 0x100) return "TD(" + (v & 0xff) + ")";
+  if (v >= R.QK_MACRO && v < R.QK_MACRO + 0x80) return "M" + (v - R.QK_MACRO);
+  if (v >= R.QK_KB && v < R.QK_KB + 0x40) return "KB" + (v - R.QK_KB);
+  if (v >= R.QK_USER && v < R.QK_USER + 0x1c0) return "USER" + (v - R.QK_USER);
+  return "0x" + v.toString(16).padStart(4, "0");
+}
+function keyText(v) {
+  if (v === 0) return "";
+  return kcName(v);
+}
+function hsvToCss(h, s, v, max) {
+  h = (h / 256) * 360; s /= 255; v = Math.min(1, v / 255 * (255 / Math.max(max || 255, 1)));
+  const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return `rgb(${Math.round(f(5) * 255)},${Math.round(f(3) * 255)},${Math.round(f(1) * 255)})`;
+}
+
+// ---------------------------------------------------------------- rendering
+const $ = (id) => document.getElementById(id);
+let renderQueued = false;
+function scheduleRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(render); } }
+
+function render() {
+  renderQueued = false;
+  const st = S.state;
+  const pill = $("status");
+  pill.className = "pill " + (st === "ready" ? "ok" : st === "challenge" ? "wait" : st === "closed" ? "" : "");
+  pill.textContent = { idle: "Not connected", challenge: "Type the code", ready: "Connected", closed: "Config mode off" }[st];
+  $("stats").textContent = S.frames ? `${S.frames} frames` + (S.missed ? ` · ${S.missed} missed — hold the left knob 1 s to resend` : "") : "";
+  $("connect").classList.toggle("hidden", st === "ready");
+  $("connectSteps").classList.toggle("hidden", st === "challenge");
+  $("challenge").classList.toggle("hidden", st !== "challenge");
+  $("closed").classList.toggle("hidden", st !== "closed");
+  $("mismatch").classList.toggle("hidden", !(S.ready && S.ready.hash !== DATA.pickerHash));
+  if (st === "challenge") $("code").textContent = [0, 1, 2].map((i) => CHALLENGE[(S.nonce >> (i * 5)) % CHALLENGE.length]).join("");
+  const ready = st === "ready" && S.ui;
+  $("editor").classList.toggle("hidden", !ready);
+  $("picker").classList.toggle("hidden", !(ready && S.ui.tab <= 1));
+  renderHelp();
+  if (!ready) return;
+
+  const ui = S.ui;
+  $("tabs").innerHTML = TABS.map((t, i) => `<span class="tab ${i === ui.tab ? "on" : ""}">${t}</span>`).join("");
+  $("keysView").classList.toggle("hidden", ui.tab > 1);
+  $("ledView").classList.toggle("hidden", ui.tab !== 2);
+  $("padView").classList.toggle("hidden", ui.tab !== 3);
+  if (ui.tab <= 1) { renderKeys(ui); renderPicker(ui); }
+  if (ui.tab === 2) renderLeds(ui);
+  if (ui.tab === 3) renderPad(ui);
+}
+
+function renderKeys(ui) {
+  const names = DATA.layerNames;
+  $("layers").innerHTML = names.slice(0, S.ready.layers).map((n, i) =>
+    `<span class="layer ${i === ui.layer ? "on" : ""}">${i} ${n}${i === S.ready.defLayer ? " (default)" : ""}</span>`).join("");
+  const U = 52, km = S.keymap[ui.layer];
+  let html = "";
+  for (const k of DATA.layout) {
+    const isKnob = (k.r === KNOB_L[0] && k.c === KNOB_L[1]) || (k.r === KNOB_R[0] && k.c === KNOB_R[1]);
+    const v = km[k.r][k.c];
+    const selKey = ui.tab === 0 && k.r === ui.row && k.c === ui.col;
+    const knobSlot = isKnob && ui.tab === 1 && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
+    const cls = ["k", isKnob ? "knob" : "", v === 1 ? "trns" : "", v === 0 ? "none" : "", selKey || knobSlot ? "sel" : "", selKey && ui.held ? "held" : ""].join(" ");
+    let text = escapeHtml(v === null ? "…" : keyText(v));
+    if ((selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
+    html += `<div class="${cls}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${text}</div>`;
+  }
+  $("kb").innerHTML = html;
+  $("kb").style.height = (5.9 * U) + "px";
+  const enc = S.enc[ui.layer];
+  $("knobs").innerHTML = ["Left knob", "Right knob"].map((title, knob) => {
+    const pressKc = km[knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
+    const vals = enc ? [enc[knob][0], enc[knob][1], pressKc] : [null, null, pressKc];
+    return `<div class="knobbox"><b>${title}</b>` + vals.map((v, i) => {
+      const slot = knob * 3 + i, on = ui.tab === 1 && ui.slot === slot;
+      return `<div class="slot ${on ? "on" : ""}"><span>${SLOT_NAMES[i]}</span><span>${escapeHtml(kcName(v))}${on && ui.pending !== v ? ` <span class="new" style="color:var(--warn)">→ ${escapeHtml(kcName(ui.pending))}</span>` : ""}</span></div>`;
+    }).join("") + "</div>";
+  }).join("");
+}
+
+function currentValue(ui) {
+  if (ui.tab === 0) return ui.row === 0xff ? null : S.keymap[ui.layer][ui.row][ui.col];
+  const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
+  if (i === 2) return S.keymap[ui.layer][knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
+  return S.enc[ui.layer] ? S.enc[ui.layer][knob][i] : null;
+}
+
+function renderPicker(ui) {
+  const what = ui.tab === 0
+    ? (ui.row === 0xff ? "Press a key to select it" : `Key ${ui.row},${ui.col} on layer ${ui.layer}`)
+    : `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`;
+  $("pickTitle").textContent = what;
+  const cur = currentValue(ui);
+  $("curName").textContent = cur === null ? "–" : kcName(cur) || "(none)";
+  $("newName").textContent = kcName(ui.pending) || "(none)";
+  $("pickHint").textContent = ui.pending === cur ? "Turn the right knob to choose a keycode." : "Press the right knob to apply.";
+  let cat = 0;
+  DATA.catStarts.forEach((s, i) => { if (ui.pick >= s) cat = i; });
+  $("cats").innerHTML = DATA.cats.map((c, i) => `<span class="cat ${ui.pick >= 0 && i === cat ? "on" : ""}">${c}</span>`).join("");
+  const n = DATA.picker.length;
+  let rows = "";
+  if (ui.pick < 0) rows = `<div class="on">${escapeHtml(kcName(ui.pending))} (copied, not in the list)</div>`;
+  else for (let d = -6; d <= 6; d++) {
+    const i = (ui.pick + d + n) % n, [, label] = DATA.picker[i];
+    rows += `<div class="${d === 0 ? "on" : ""}">${escapeHtml(label || "(none)")}</div>`;
+  }
+  $("list").innerHTML = rows;
+}
+
+function renderLeds(ui) {
+  const l = S.led;
+  $("ledUnsaved").classList.toggle("show", !!(l && l.dirty));
+  if (!l) { $("ledRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
+  const effect = DATA.ledEffects[l.effect] || "Effect " + l.effect;
+  const rows = [
+    ["Lights", l.enable ? "On" : "Off"],
+    ["Effect", `${effect}${l.variant ? " " + (l.variant + 1) : ""} <span class="dim small">(mode ${l.mode})</span>`],
+    ["Hue", `${Math.round(l.hue / 256 * 360)}°<span class="swatch" style="background:${hsvToCss(l.hue, l.sat, 255, 255)}"></span>`],
+    ["Saturation", Math.round(l.sat / 255 * 100) + "%"],
+    ["Brightness", `${Math.round(l.val / Math.max(l.max, 1) * 100)}% <span class="dim small">(${l.val}/${l.max})</span>`],
+    ["Speed", `${l.speed} <span class="dim small">(0–3)</span>`],
+    ["Turn off after no use", DATA.ledIdle[l.idle] || l.idle],
+  ];
+  $("ledRows").innerHTML = rows.map(([k, v], i) => `<div class="row ${i === ui.ledField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+}
+
+function renderPad(ui) {
+  const t = S.tp;
+  $("tpUnsaved").classList.toggle("show", !!(t && t.dirty));
+  if (!t) { $("tpRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
+  const rows = [["Press-to-click", t.enable ? "On" : "Off"], ["Threshold (press)", t.threshold], ["Release Z", t.release]];
+  $("tpRows").innerHTML = rows.map(([k, v], i) => `<div class="row ${i === ui.tpField ? "on" : ""}"><span>${k}</span><span>${v}</span></div>`).join("");
+  drawZ(t);
+  $("peaks").innerHTML = S.peaks.map((p) => `<span class="${p >= t.threshold ? "click" : ""}">${p}</span>`).join("") || "<span class='dim'>touch the trackpad…</span>";
+}
+
+function drawZ(t) {
+  const z = S.tpz || { z: 0, peak: 0, lastPeak: 0, touching: 0, pressed: 0 };
+  const c = $("zbar"), g = c.getContext("2d"), W = c.width, H = c.height, x = (v) => 10 + (W - 20) * v / 63;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = "#2a2f3a"; g.fillRect(10, 20, W - 20, 26);
+  g.fillStyle = z.pressed ? "#3fcf7f" : "#4fa3ff"; g.fillRect(10, 20, x(z.touching ? z.z : 0) - 10, 26);
+  const line = (v, color, label) => { g.fillStyle = color; g.fillRect(x(v) - 1, 12, 3, 42); g.font = "11px system-ui"; g.fillText(label + " " + v, Math.min(x(v) + 4, W - 70), 64); };
+  line(t.release, "#4fa3ff", "release"); line(t.threshold, "#ffb648", "threshold");
+  if (z.peak) { g.fillStyle = "#e6e8ec"; g.fillRect(x(z.peak) - 1, 16, 2, 34); }
+  g.fillStyle = "#e6e8ec"; g.font = "12px system-ui";
+  g.fillText(`Z ${z.touching ? z.z : "–"}   peak ${z.peak}   last ${z.lastPeak}   ${z.pressed ? "CLICK HELD" : ""}`, 10, 13);
+
+  const h = $("zhist"), hg = h.getContext("2d"), HW = h.width, HH = h.height, y = (v) => HH - 6 - (HH - 12) * v / 63;
+  hg.clearRect(0, 0, HW, HH);
+  hg.strokeStyle = "#ffb648"; hg.beginPath(); hg.moveTo(0, y(t.threshold)); hg.lineTo(HW, y(t.threshold)); hg.stroke();
+  hg.strokeStyle = "#4fa3ff"; hg.beginPath(); hg.moveTo(0, y(t.release)); hg.lineTo(HW, y(t.release)); hg.stroke();
+  hg.strokeStyle = "#e6e8ec"; hg.beginPath();
+  S.zHist.forEach((v, i) => { const px = HW - (S.zHist.length - i) * (HW / 150); i ? hg.lineTo(px, y(v)) : hg.moveTo(px, y(v)); });
+  hg.stroke();
+}
+
+function renderHelp() {
+  const tab = S.state === "ready" && S.ui ? S.ui.tab : -1;
+  const common = [["Left knob press", "Next tab (hold ~1 s: resend everything)"]];
+  const per = {
+    0: [["Any key", "Select it"], ["Hold a key + tap another", "Copy the other key's default-layer keycode"],
+        ["Left knob turn", "Change layer"], ["Right knob turn", "Choose keycode (turn fast to skip)"],
+        ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selected key"]],
+    1: [["Left knob turn", "Choose knob action (turn / press); change layer on the Keys tab"],
+        ["Right knob turn", "Choose keycode"], ["Hold right knob + turn", "Jump between categories"],
+        ["Any key", "Copy its default-layer keycode"], ["Right knob press", "Apply"]],
+    2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
+    3: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
+  };
+  const items = tab < 0 ? [["Space", "Connect (in config mode)"]] : per[tab].concat(common);
+  $("help").innerHTML = items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+const logLines = [];
+function log(s) { logLines.unshift(new Date().toLocaleTimeString() + "  " + s); logLines.length = Math.min(logLines.length, 200); $("log").textContent = logLines.join("\n"); }
+
+// Test hook: feed a string of KeyboardEvent.code values separated by spaces.
+window.sofleFeed = (codes) => codes.split(/\s+/).filter(Boolean).forEach(feedCode);
+if (!document.hasFocus()) document.body.classList.add("blurred");
+render();
+setInterval(() => { if (S.state === "ready") scheduleRender(); }, 1000);
+</script>
+</body>
+</html>
