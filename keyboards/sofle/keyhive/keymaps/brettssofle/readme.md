@@ -88,22 +88,29 @@ The I2C bus runs at QMK's 100 kHz default, like the original firmware.
 
 ### LED layout and calibration
 
-The Keyhive Sofle v2 has 37 LEDs per half: 30 under the keys (29 keys plus the
-encoder/key slot) and 7 underglow. Which physical LED sits under which key is
-board-specific, so **measure it once** with the config page (mouse mode):
+The Keyhive Sofle v2 has 37 LEDs per half: 30 under the keys and 7 underglow.
+Which physical LED sits under which key is board-specific, so **measure it
+once** with the config page (mouse mode):
 
-1. Connect, open the **LEDs** tab and click **Calibrate LED positions…**.
-2. One LED lights up white at a time. Click the key it is under, or
-   **Underglow / not under a key**, or **Nothing lit** (Back / Skip available).
-3. After the left half's 37 LEDs, choose **Mirror the left half** — the page
-   lights 4 right-half LEDs to confirm the mirror (same or reversed chain
-   order) — or measure all 37 right LEDs. If the check fails it measures them
-   all automatically.
-4. **Save to keyboard**. Effects (splash, reactive, …) use the measured map
-   right away; it is kept in EEPROM on the left half and sent to the right
-   half (`led_map.c`). **Use built-in LED map** forgets it. **Copy result**
-   gives a JSON you can bake in as the built-in map:
-   `python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_rgb_layout.py --map led.json`
+1. Connect, open the **LEDs** tab and click **Calibrate LED positions…**, then
+   **Start**.
+2. One LED lights up white at a time (all 74, left half first). **Press the
+   key on top of it** — the page moves on by itself. If the LED is not under
+   a key (it glows from under the board), **hold any key for 1 second** (or
+   click **Underglow**). **Nothing lit** and **Back** are page buttons; a key
+   you can't press can be clicked on the picture instead. While calibrating,
+   key presses go only to the page (`led_cal.c`), nothing is typed.
+3. **Save to keyboard**. The page reads the map back, waits for the right
+   half to confirm it runs the same map (it reports a CRC of its map), and
+   switches to **Test**: each key you press lights the LED the saved map gives
+   it, green, on its own half (the same `g_led_config` lookup reactive effects
+   use); key LEDs glow dim white, underglow dim blue. **Test LED map** runs the
+   test any time.
+
+The map is kept in EEPROM on the left half and sent to the right half
+(`led_map.c`). **Use built-in LED map** forgets it. **Copy result** gives a
+JSON you can bake in as the built-in map:
+`python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_rgb_layout.py --map led.json`
 
 The built-in map in `rgb_layout.c` is derived from keyhive's rgblight
 `led_map` + the Sofle RGB chain order and does not match every board.
@@ -152,14 +159,15 @@ knobs to drive the editor and *types* short coded messages (only A–Z, 2–7,
 decodes them. The page only displays; clicking does nothing in this mode.
 Keys don't type normally while it is on.
 
-| Control | Keys tab | Knobs tab | LEDs / Trackpad tabs |
-| --- | --- | --- | --- |
-| Left knob turn | Change layer | Choose knob action (turn left / right / press) | Choose setting |
-| Left knob press | Next tab (hold ~1 s: resend everything to the page) | ← | ← |
-| Right knob turn | Choose keycode (turn fast to skip ahead) | ← | Change value (LEDs preview live) |
-| Hold right knob + turn | Jump to the next/previous keycode category | ← | – |
-| Right knob press | Apply to the selected key | Apply to the knob action | Save |
-| Any key | Select it. Hold it and tap another key to copy that key's default-layer keycode | Copy its default-layer keycode | – |
+| Control | Layout tab (keys and knobs) | LEDs / Trackpad tabs |
+| --- | --- | --- |
+| Left knob turn | Change layer | Choose setting |
+| Hold left knob + turn | Select a knob action (left/right knob: turn left, turn right, press) | – |
+| Left knob press | Next tab (hold ~1 s: resend everything to the page) | ← |
+| Right knob turn | Choose keycode (turn fast to skip ahead) | Change value (LEDs preview live) |
+| Hold right knob + turn | Jump to the next/previous keycode category | – |
+| Right knob press | Apply to the selected key or knob action | Save |
+| Any key | Select it. Hold it and tap another key to copy that key's default-layer keycode. With a knob action selected, hold the left knob and tap a key to copy its keycode | – |
 
 Exit with **Raise + `CONFIG`**, holding both knob buttons for 2 s, holding
 **Esc** for 2 s, or 5 minutes without input. Unsaved LED/trackpad changes are

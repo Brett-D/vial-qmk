@@ -87,7 +87,14 @@
   #calKb .k { cursor:pointer; } #calKb .k:hover { outline:2px solid var(--acc); }
   #calKb .k.done { background:#1d4630; } #calKb .k.other { opacity:.35; }
   .calBtns { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .calStep { font-size:18px; font-weight:700; margin:6px 0; }
+  .calStep { font-size:15px; font-weight:600; margin:6px 0; color:var(--dim); }
+  .calBig { font-size:26px; font-weight:800; margin:8px 0 12px; min-height:1.2em; }
+  .calNote { margin:6px 0; min-height:1.2em; }
+  .calProg { height:8px; background:var(--key); border-radius:4px; overflow:hidden; margin-bottom:8px; }
+  #calBar { height:100%; width:0; background:var(--acc); transition:width .2s; }
+  .calSteps li { margin:4px 0; } .warnText { color:var(--warn); }
+  .calBig:empty, .calNote:empty, #calText:empty, .calBtns:empty { display:none; }
+  #calClickBox { margin-top:14px; } #calClickBox summary { cursor:pointer; color:var(--dim); }
   #calJson { width:100%; height:120px; font:11px ui-monospace,monospace; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:6px; }
   .adv { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
   .adv .line { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
@@ -163,17 +170,20 @@
           <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
           <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
           <div class="btns" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
-            <button id="calStart">Calibrate LED positions…</button><button id="mapReset">Use built-in LED map</button>
+            <button id="calStart">Calibrate LED positions…</button><button id="calTest">Test LED map</button><button id="mapReset">Use built-in LED map</button>
             <span class="dim small" id="mapState"></span>
           </div>
         </div>
         <div id="calView" class="hidden">
+          <div id="calProg" class="calProg hidden"><div id="calBar"></div></div>
           <div class="calStep" id="calTitle"></div>
+          <div class="calBig" id="calBig"></div>
           <div id="calText"></div>
+          <div class="calNote" id="calNote"></div>
           <div class="calBtns" id="calBtns"></div>
-          <div id="calKb"></div>
+          <details id="calClickBox"><summary>Can't press that key? Click it on the picture instead</summary><div id="calKb"></div></details>
           <div id="calDone" class="hidden">
-            <p>Result (LED index → key). <b>Save to keyboard</b> makes effects like splash use it right away; it is kept across power-offs.</p>
+            <p><b>Save to keyboard</b> makes effects like splash use the new map right away (it is kept across power-offs), then lets you test it. <b>Copy result</b> gives the map as text (LED number → key) if you want it built into the firmware.</p>
             <textarea id="calJson" readonly></textarea>
             <div class="calBtns"><button id="calSave" class="primary">Save to keyboard</button><button id="calCopy">Copy result</button><button id="calRestart">Start over</button><button id="calClose">Close</button></div>
           </div>
@@ -245,7 +255,9 @@
 const DATA = {"pickerHash":52325,"rows":10,"cols":7,"usb":{"vid":64562,"pid":4743},"picker":[[0,""],[1,"▽"],[4,"A"],[5,"B"],[6,"C"],[7,"D"],[8,"E"],[9,"F"],[10,"G"],[11,"H"],[12,"I"],[13,"J"],[14,"K"],[15,"L"],[16,"M"],[17,"N"],[18,"O"],[19,"P"],[20,"Q"],[21,"R"],[22,"S"],[23,"T"],[24,"U"],[25,"V"],[26,"W"],[27,"X"],[28,"Y"],[29,"Z"],[30,"1"],[31,"2"],[32,"3"],[33,"4"],[34,"5"],[35,"6"],[36,"7"],[37,"8"],[38,"9"],[39,"0"],[40,"Enter"],[41,"Esc"],[42,"Bksp"],[43,"Tab"],[44,"Space"],[45,"-"],[46,"="],[47,"["],[48,"]"],[49,"\\"],[51,";"],[52,"'"],[53,"`"],[54,","],[55,"."],[56,"/"],[57,"Caps"],[565,"~"],[542,"!"],[543,"@"],[544,"#"],[545,"$"],[546,"%"],[547,"^"],[548,"&"],[549,"*"],[550,"("],[551,")"],[557,"_"],[558,"+"],[559,"{"],[560,"}"],[561,"|"],[563,":"],[564,"\""],[566,"<"],[567,">"],[568,"?"],[80,"←"],[81,"↓"],[82,"↑"],[79,"→"],[74,"Home"],[77,"End"],[75,"PgUp"],[78,"PgDn"],[73,"Ins"],[76,"Del"],[70,"PrtSc"],[71,"ScrLk"],[72,"Pause"],[101,"Menu"],[224,"LCtrl"],[225,"LShift"],[226,"LAlt"],[227,"LGui"],[228,"RCtrl"],[229,"RShift"],[230,"RAlt"],[231,"RGui"],[58,"F1"],[59,"F2"],[60,"F3"],[61,"F4"],[62,"F5"],[63,"F6"],[64,"F7"],[65,"F8"],[66,"F9"],[67,"F10"],[68,"F11"],[69,"F12"],[104,"F13"],[105,"F14"],[106,"F15"],[107,"F16"],[108,"F17"],[109,"F18"],[110,"F19"],[111,"F20"],[112,"F21"],[113,"F22"],[114,"F23"],[115,"F24"],[168,"Mute"],[169,"Vol+"],[170,"Vol-"],[174,"Play"],[171,"Next"],[172,"Prev"],[173,"Stop"],[189,"Bri+"],[190,"Bri-"],[178,"Calc"],[179,"MyPC"],[180,"Search"],[182,"Back"],[183,"Fwd"],[185,"Refresh"],[209,"Click L"],[210,"Click R"],[211,"Click M"],[212,"Btn4"],[213,"Btn5"],[205,"Ms↑"],[206,"Ms↓"],[207,"Ms←"],[208,"Ms→"],[217,"Whl↑"],[218,"Whl↓"],[219,"Whl←"],[220,"Whl→"],[221,"Accel0"],[222,"Accel1"],[223,"Accel2"],[21025,"MO(1)"],[21026,"MO(2)"],[21027,"MO(3)"],[21028,"MO(4)"],[21029,"MO(5)"],[21089,"TG(1)"],[21090,"TG(2)"],[21091,"TG(3)"],[21092,"TG(4)"],[21093,"TG(5)"],[20992,"TO(0)"],[20993,"TO(1)"],[20994,"TO(2)"],[20995,"TO(3)"],[20996,"TO(4)"],[20997,"TO(5)"],[21121,"OSL(1)"],[21122,"OSL(2)"],[21123,"OSL(3)"],[21124,"OSL(4)"],[21125,"OSL(5)"],[21185,"TT(1)"],[21186,"TT(2)"],[21187,"TT(3)"],[21188,"TT(4)"],[21189,"TT(5)"],[21216,"PDF(0)"],[21217,"PDF(1)"],[83,"NumLk"],[84,"P/"],[85,"P*"],[86,"P-"],[87,"P+"],[88,"PEnt"],[89,"P1"],[90,"P2"],[91,"P3"],[92,"P4"],[93,"P5"],[94,"P6"],[95,"P7"],[96,"P8"],[97,"P9"],[98,"P0"],[99,"P."],[103,"P="],[30786,"RGB on/off"],[30787,"RGB mode+"],[30788,"RGB mode-"],[30789,"Hue+"],[30790,"Hue-"],[30791,"Sat+"],[30792,"Sat-"],[30793,"Bright+"],[30794,"Bright-"],[30795,"Speed+"],[30796,"Speed-"],[32258,"Config mode"],[32256,"Cycle base"],[32257,"Drag scroll"],[31859,"CapsWord"],[31744,"Bootloader"]],"cats":["Basic","Symbols","Navigation","Modifiers","Function","Media","Mouse","Layers","Numpad","Lighting","Special"],"catStarts":[0,55,76,90,98,122,137,153,181,199,210],"names":{"0":"","1":"▽","4":"A","5":"B","6":"C","7":"D","8":"E","9":"F","10":"G","11":"H","12":"I","13":"J","14":"K","15":"L","16":"M","17":"N","18":"O","19":"P","20":"Q","21":"R","22":"S","23":"T","24":"U","25":"V","26":"W","27":"X","28":"Y","29":"Z","30":"1","31":"2","32":"3","33":"4","34":"5","35":"6","36":"7","37":"8","38":"9","39":"0","40":"Enter","41":"Esc","42":"Bksp","43":"Tab","44":"Space","45":"-","46":"=","47":"[","48":"]","49":"\\","50":"NUHS","51":";","52":"'","53":"`","54":",","55":".","56":"/","57":"Caps","58":"F1","59":"F2","60":"F3","61":"F4","62":"F5","63":"F6","64":"F7","65":"F8","66":"F9","67":"F10","68":"F11","69":"F12","70":"PrtSc","71":"ScrLk","72":"Pause","73":"Ins","74":"Home","75":"PgUp","76":"Del","77":"End","78":"PgDn","79":"→","80":"←","81":"↓","82":"↑","83":"NumLk","84":"P/","85":"P*","86":"P-","87":"P+","88":"PEnt","89":"P1","90":"P2","91":"P3","92":"P4","93":"P5","94":"P6","95":"P7","96":"P8","97":"P9","98":"P0","99":"P.","100":"NUBS","101":"Menu","102":"KB_POWER","103":"P=","104":"F13","105":"F14","106":"F15","107":"F16","108":"F17","109":"F18","110":"F19","111":"F20","112":"F21","113":"F22","114":"F23","115":"F24","116":"EXEC","117":"HELP","118":"MENU","119":"SLCT","120":"STOP","121":"AGIN","122":"UNDO","123":"CUT","124":"COPY","125":"PSTE","126":"FIND","127":"KB_MUTE","128":"KB_VOLUME_UP","129":"KB_VOLUME_DOWN","130":"LCAP","131":"LNUM","132":"LSCR","133":"PCMM","134":"KP_EQUAL_AS400","135":"INT1","136":"INT2","137":"INT3","138":"INT4","139":"INT5","140":"INT6","141":"INT7","142":"INT8","143":"INT9","144":"LNG1","145":"LNG2","146":"LNG3","147":"LNG4","148":"LNG5","149":"LNG6","150":"LNG7","151":"LNG8","152":"LNG9","153":"ERAS","154":"SYRQ","155":"CNCL","156":"CLR","157":"PRIR","158":"RETN","159":"SEPR","160":"OUT","161":"OPER","162":"CLAG","163":"CRSL","164":"EXSL","165":"PWR","166":"SLEP","167":"WAKE","168":"Mute","169":"Vol+","170":"Vol-","171":"Next","172":"Prev","173":"Stop","174":"Play","175":"MSEL","176":"EJCT","177":"MAIL","178":"Calc","179":"MyPC","180":"Search","181":"WHOM","182":"Back","183":"Fwd","184":"WSTP","185":"Refresh","186":"WFAV","187":"MFFD","188":"MRWD","189":"Bri+","190":"Bri-","191":"CPNL","192":"ASST","193":"MCTL","194":"LPAD","205":"Ms↑","206":"Ms↓","207":"Ms←","208":"Ms→","209":"Click L","210":"Click R","211":"Click M","212":"Btn4","213":"Btn5","214":"MS_BTN6","215":"MS_BTN7","216":"MS_BTN8","217":"Whl↑","218":"Whl↓","219":"Whl←","220":"Whl→","221":"Accel0","222":"Accel1","223":"Accel2","224":"LCtrl","225":"LShift","226":"LAlt","227":"LGui","228":"RCtrl","229":"RShift","230":"RAlt","231":"RGui","542":"!","543":"@","544":"#","545":"$","546":"%","547":"^","548":"&","549":"*","550":"(","551":")","557":"_","558":"+","559":"{","560":"}","561":"|","563":":","564":"\"","565":"~","566":"<","567":">","568":"?","8192":"MOD_TAP","16384":"LAYER_TAP","20480":"LAYER_MOD","20992":"TO(0)","20993":"TO(1)","20994":"TO(2)","20995":"TO(3)","20996":"TO(4)","20997":"TO(5)","21024":"MOMENTARY","21025":"MO(1)","21026":"MO(2)","21027":"MO(3)","21028":"MO(4)","21029":"MO(5)","21056":"DEF_LAYER","21088":"TOGGLE_LAYER","21089":"TG(1)","21090":"TG(2)","21091":"TG(3)","21092":"TG(4)","21093":"TG(5)","21120":"ONE_SHOT_LAYER","21121":"OSL(1)","21122":"OSL(2)","21123":"OSL(3)","21124":"OSL(4)","21125":"OSL(5)","21152":"ONE_SHOT_MOD","21184":"LAYER_TAP_TOGGLE","21185":"TT(1)","21186":"TT(2)","21187":"TT(3)","21188":"TT(4)","21189":"TT(5)","21216":"PDF(0)","21217":"PDF(1)","22016":"SWAP_HANDS","22256":"SH_TOGG","22257":"SH_TT","22258":"SH_MON","22259":"SH_MOFF","22260":"SH_OFF","22261":"SH_ON","22262":"SH_OS","22272":"TAP_DANCE","28672":"CL_SWAP","28673":"CL_NORM","28674":"CL_TOGG","28675":"CL_CAPS","28676":"CL_CTRL","28677":"AG_LSWP","28678":"AG_LNRM","28679":"AG_RSWP","28680":"AG_RNRM","28681":"GU_ON","28682":"GU_OFF","28683":"GU_TOGG","28684":"GE_SWAP","28685":"GE_NORM","28686":"BS_SWAP","28687":"BS_NORM","28688":"BS_TOGG","28689":"NK_ON","28690":"NK_OFF","28691":"NK_TOGG","28692":"AG_SWAP","28693":"AG_NORM","28694":"AG_TOGG","28695":"CG_LSWP","28696":"CG_LNRM","28697":"CG_RSWP","28698":"CG_RNRM","28699":"CG_SWAP","28700":"CG_NORM","28701":"CG_TOGG","28702":"EH_LEFT","28703":"EH_RGHT","28704":"EC_SWAP","28705":"EC_NORM","28706":"EC_TOGG","28928":"MI_ON","28929":"MI_OFF","28930":"MI_TOGG","28931":"MI_C","28932":"MIDI_NOTE_C_SHARP_0","28933":"MI_D","28934":"MIDI_NOTE_D_SHARP_0","28935":"MI_E","28936":"MI_F","28937":"MIDI_NOTE_F_SHARP_0","28938":"MI_G","28939":"MIDI_NOTE_G_SHARP_0","28940":"MI_A","28941":"MIDI_NOTE_A_SHARP_0","28942":"MI_B","28943":"MI_C1","28944":"MIDI_NOTE_C_SHARP_1","28945":"MI_D1","28946":"MIDI_NOTE_D_SHARP_1","28947":"MI_E1","28948":"MI_F1","28949":"MIDI_NOTE_F_SHARP_1","28950":"MI_G1","28951":"MIDI_NOTE_G_SHARP_1","28952":"MI_A1","28953":"MIDI_NOTE_A_SHARP_1","28954":"MI_B1","28955":"MI_C2","28956":"MIDI_NOTE_C_SHARP_2","28957":"MI_D2","28958":"MIDI_NOTE_D_SHARP_2","28959":"MI_E2","28960":"MI_F2","28961":"MIDI_NOTE_F_SHARP_2","28962":"MI_G2","28963":"MIDI_NOTE_G_SHARP_2","28964":"MI_A2","28965":"MIDI_NOTE_A_SHARP_2","28966":"MI_B2","28967":"MI_C3","28968":"MIDI_NOTE_C_SHARP_3","28969":"MI_D3","28970":"MIDI_NOTE_D_SHARP_3","28971":"MI_E3","28972":"MI_F3","28973":"MIDI_NOTE_F_SHARP_3","28974":"MI_G3","28975":"MIDI_NOTE_G_SHARP_3","28976":"MI_A3","28977":"MIDI_NOTE_A_SHARP_3","28978":"MI_B3","28979":"MI_C4","28980":"MIDI_NOTE_C_SHARP_4","28981":"MI_D4","28982":"MIDI_NOTE_D_SHARP_4","28983":"MI_E4","28984":"MI_F4","28985":"MIDI_NOTE_F_SHARP_4","28986":"MI_G4","28987":"MIDI_NOTE_G_SHARP_4","28988":"MI_A4","28989":"MIDI_NOTE_A_SHARP_4","28990":"MI_B4","28991":"MI_C5","28992":"MIDI_NOTE_C_SHARP_5","28993":"MI_D5","28994":"MIDI_NOTE_D_SHARP_5","28995":"MI_E5","28996":"MI_F5","28997":"MIDI_NOTE_F_SHARP_5","28998":"MI_G5","28999":"MIDI_NOTE_G_SHARP_5","29000":"MI_A5","29001":"MIDI_NOTE_A_SHARP_5","29002":"MI_B5","29003":"MI_OCN2","29004":"MI_OCN1","29005":"MI_OC0","29006":"MI_OC1","29007":"MI_OC2","29008":"MI_OC3","29009":"MI_OC4","29010":"MI_OC5","29011":"MI_OC6","29012":"MI_OC7","29013":"MI_OCTD","29014":"MI_OCTU","29015":"MI_TRN6","29016":"MI_TRN5","29017":"MI_TRN4","29018":"MI_TRN3","29019":"MI_TRN2","29020":"MI_TRN1","29021":"MI_TR0","29022":"MI_TR1","29023":"MI_TR2","29024":"MI_TR3","29025":"MI_TR4","29026":"MI_TR5","29027":"MI_TR6","29028":"MI_TRSD","29029":"MI_TRSU","29030":"MI_VL0","29031":"MI_VL1","29032":"MI_VL2","29033":"MI_VL3","29034":"MI_VL4","29035":"MI_VL5","29036":"MI_VL6","29037":"MI_VL7","29038":"MI_VL8","29039":"MI_VL9","29040":"MI_VL10","29041":"MI_VELD","29042":"MI_VELU","29043":"MI_CH1","29044":"MI_CH2","29045":"MI_CH3","29046":"MI_CH4","29047":"MI_CH5","29048":"MI_CH6","29049":"MI_CH7","29050":"MI_CH8","29051":"MI_CH9","29052":"MI_CH10","29053":"MI_CH11","29054":"MI_CH12","29055":"MI_CH13","29056":"MI_CH14","29057":"MI_CH15","29058":"MI_CH16","29059":"MI_CHND","29060":"MI_CHNU","29061":"MI_AOFF","29062":"MI_SUST","29063":"MI_PORT","29064":"MI_SOST","29065":"MI_SOFT","29066":"MI_LEG","29067":"MI_MOD","29068":"MI_MODD","29069":"MI_MODU","29070":"MI_BNDD","29071":"MI_BNDU","29184":"SQ_ON","29185":"SQ_OFF","29186":"SQ_TOGG","29187":"SQ_TMPD","29188":"SQ_TMPU","29189":"SQ_RESD","29190":"SQ_RESU","29191":"SQ_SALL","29192":"SQ_SCLR","29696":"JS_0","29697":"JS_1","29698":"JS_2","29699":"JS_3","29700":"JS_4","29701":"JS_5","29702":"JS_6","29703":"JS_7","29704":"JS_8","29705":"JS_9","29706":"JS_10","29707":"JS_11","29708":"JS_12","29709":"JS_13","29710":"JS_14","29711":"JS_15","29712":"JS_16","29713":"JS_17","29714":"JS_18","29715":"JS_19","29716":"JS_20","29717":"JS_21","29718":"JS_22","29719":"JS_23","29720":"JS_24","29721":"JS_25","29722":"JS_26","29723":"JS_27","29724":"JS_28","29725":"JS_29","29726":"JS_30","29727":"JS_31","29760":"PB_1","29761":"PB_2","29762":"PB_3","29763":"PB_4","29764":"PB_5","29765":"PB_6","29766":"PB_7","29767":"PB_8","29768":"PB_9","29769":"PB_10","29770":"PB_11","29771":"PB_12","29772":"PB_13","29773":"PB_14","29774":"PB_15","29775":"PB_16","29776":"PB_17","29777":"PB_18","29778":"PB_19","29779":"PB_20","29780":"PB_21","29781":"PB_22","29782":"PB_23","29783":"PB_24","29784":"PB_25","29785":"PB_26","29786":"PB_27","29787":"PB_28","29788":"PB_29","29789":"PB_30","29790":"PB_31","29791":"PB_32","29824":"AU_ON","29825":"AU_OFF","29826":"AU_TOGG","29834":"CK_TOGG","29835":"CK_ON","29836":"CK_OFF","29837":"CK_UP","29838":"CK_DOWN","29839":"CK_RST","29840":"MU_ON","29841":"MU_OFF","29842":"MU_TOGG","29843":"MU_NEXT","29844":"AU_NEXT","29845":"AU_PREV","29888":"STENO","29936":"STENO_BOLT","29937":"STENO_GEMINI","29938":"STENO_COMB","30464":"MC_0","30465":"MC_1","30466":"MC_2","30467":"MC_3","30468":"MC_4","30469":"MC_5","30470":"MC_6","30471":"MC_7","30472":"MC_8","30473":"MC_9","30474":"MC_10","30475":"MC_11","30476":"MC_12","30477":"MC_13","30478":"MC_14","30479":"MC_15","30480":"MC_16","30481":"MC_17","30482":"MC_18","30483":"MC_19","30484":"MC_20","30485":"MC_21","30486":"MC_22","30487":"MC_23","30488":"MC_24","30489":"MC_25","30490":"MC_26","30491":"MC_27","30492":"MC_28","30493":"MC_29","30494":"MC_30","30495":"MC_31","30592":"OU_AUTO","30593":"OU_NEXT","30594":"OU_PREV","30595":"OU_NONE","30596":"OU_USB","30597":"OU_2P4G","30598":"OU_BT","30608":"BT_NEXT","30609":"BT_PREV","30610":"BT_UNPR","30611":"BT_PRF1","30612":"BT_PRF2","30613":"BT_PRF3","30614":"BT_PRF4","30615":"BT_PRF5","30656":"COMMUNITY_MODULE","30720":"BL_ON","30721":"BL_OFF","30722":"BL_TOGG","30723":"BL_DOWN","30724":"BL_UP","30725":"BL_STEP","30726":"BL_BRTG","30736":"LM_ON","30737":"LM_OFF","30738":"LM_TOGG","30739":"LM_NEXT","30740":"LM_PREV","30741":"LM_BRIU","30742":"LM_BRID","30743":"LM_SPDU","30744":"LM_SPDD","30752":"UG_TOGG","30753":"UG_NEXT","30754":"UG_PREV","30755":"UG_HUEU","30756":"UG_HUED","30757":"UG_SATU","30758":"UG_SATD","30759":"UG_VALU","30760":"UG_VALD","30761":"UG_SPDU","30762":"UG_SPDD","30763":"RGB_M_P","30764":"RGB_M_B","30765":"RGB_M_R","30766":"RGB_M_SW","30767":"RGB_M_SN","30768":"RGB_M_K","30769":"RGB_M_X","30770":"RGB_M_G","30771":"RGB_M_T","30772":"RGB_M_TW","30784":"RM_ON","30785":"RM_OFF","30786":"RGB on/off","30787":"RGB mode+","30788":"RGB mode-","30789":"Hue+","30790":"Hue-","30791":"Sat+","30792":"Sat-","30793":"Bright+","30794":"Bright-","30795":"Speed+","30796":"Speed-","31744":"Bootloader","31745":"RBT","31746":"DB_TOGG","31747":"EE_CLR","31748":"MAKE","31760":"AS_DOWN","31761":"AS_UP","31762":"AS_RPT","31763":"AS_ON","31764":"AS_OFF","31765":"AS_TOGG","31766":"GESC","31767":"VK_TOGG","31768":"SC_LCPO","31769":"SC_RCPC","31770":"SC_LSPO","31771":"SC_RSPC","31772":"SC_LAPO","31773":"SC_RAPC","31774":"SC_SENT","31792":"UC_NEXT","31793":"UC_PREV","31794":"UC_MAC","31795":"UC_LINX","31796":"UC_WIN","31797":"UC_BSD","31798":"UC_WINC","31799":"UC_EMAC","31808":"HF_ON","31809":"HF_OFF","31810":"HF_TOGG","31811":"HF_RST","31812":"HF_FDBK","31813":"HF_BUZZ","31814":"HF_NEXT","31815":"HF_PREV","31816":"HF_CONT","31817":"HF_CONU","31818":"HF_COND","31819":"HF_DWLU","31820":"HF_DWLD","31824":"CM_ON","31825":"CM_OFF","31826":"CM_TOGG","31827":"DM_REC1","31828":"DM_REC2","31829":"DM_RSTP","31830":"DM_PLY1","31831":"DM_PLY2","31832":"LEAD","31833":"LOCK","31834":"OS_ON","31835":"OS_OFF","31836":"OS_TOGG","31837":"KO_TOGG","31838":"KO_ON","31839":"KO_OFF","31840":"SE_LOCK","31841":"SE_UNLK","31842":"SE_TOGG","31843":"SE_REQ","31856":"DT_PRNT","31857":"DT_UP","31858":"DT_DOWN","31859":"CapsWord","31860":"AC_ON","31861":"AC_OFF","31862":"AC_TOGG","31863":"TL_LOWR","31864":"TL_UPPR","31865":"REP","31866":"AREP","31867":"LLCK","32256":"CYCLE","32257":"DRG_SCR","32258":"CONFIG","32320":"USER","32768":"UNICODE","49152":"UNICODEMAP_PAIR"},"layout":[{"r":0,"c":0,"x":0,"y":0.5,"h":1},{"r":0,"c":1,"x":1,"y":0.375,"h":1},{"r":0,"c":2,"x":2,"y":0.125,"h":1},{"r":0,"c":3,"x":3,"y":0,"h":1},{"r":0,"c":4,"x":4,"y":0.125,"h":1},{"r":0,"c":5,"x":5,"y":0.25,"h":1},{"r":5,"c":5,"x":10.5,"y":0.25,"h":1},{"r":5,"c":4,"x":11.5,"y":0.125,"h":1},{"r":5,"c":3,"x":12.5,"y":0,"h":1},{"r":5,"c":2,"x":13.5,"y":0.125,"h":1},{"r":5,"c":1,"x":14.5,"y":0.375,"h":1},{"r":5,"c":0,"x":15.5,"y":0.5,"h":1},{"r":1,"c":0,"x":0,"y":1.5,"h":1},{"r":1,"c":1,"x":1,"y":1.375,"h":1},{"r":1,"c":2,"x":2,"y":1.125,"h":1},{"r":1,"c":3,"x":3,"y":1,"h":1},{"r":1,"c":4,"x":4,"y":1.125,"h":1},{"r":1,"c":5,"x":5,"y":1.25,"h":1},{"r":6,"c":5,"x":10.5,"y":1.25,"h":1},{"r":6,"c":4,"x":11.5,"y":1.125,"h":1},{"r":6,"c":3,"x":12.5,"y":1,"h":1},{"r":6,"c":2,"x":13.5,"y":1.125,"h":1},{"r":6,"c":1,"x":14.5,"y":1.375,"h":1},{"r":6,"c":0,"x":15.5,"y":1.5,"h":1},{"r":2,"c":0,"x":0,"y":2.5,"h":1},{"r":2,"c":1,"x":1,"y":2.375,"h":1},{"r":2,"c":2,"x":2,"y":2.125,"h":1},{"r":2,"c":3,"x":3,"y":2,"h":1},{"r":2,"c":4,"x":4,"y":2.125,"h":1},{"r":2,"c":5,"x":5,"y":2.25,"h":1},{"r":7,"c":5,"x":10.5,"y":2.25,"h":1},{"r":7,"c":4,"x":11.5,"y":2.125,"h":1},{"r":7,"c":3,"x":12.5,"y":2,"h":1},{"r":7,"c":2,"x":13.5,"y":2.125,"h":1},{"r":7,"c":1,"x":14.5,"y":2.375,"h":1},{"r":7,"c":0,"x":15.5,"y":2.5,"h":1},{"r":3,"c":0,"x":0,"y":3.5,"h":1},{"r":3,"c":1,"x":1,"y":3.375,"h":1},{"r":3,"c":2,"x":2,"y":3.125,"h":1},{"r":3,"c":3,"x":3,"y":3,"h":1},{"r":3,"c":4,"x":4,"y":3.125,"h":1},{"r":3,"c":5,"x":5,"y":3.25,"h":1},{"r":4,"c":0,"x":6,"y":2.75,"h":1},{"r":9,"c":5,"x":9.5,"y":2.75,"h":1},{"r":8,"c":5,"x":10.5,"y":3.25,"h":1},{"r":8,"c":4,"x":11.5,"y":3.125,"h":1},{"r":8,"c":3,"x":12.5,"y":3,"h":1},{"r":8,"c":2,"x":13.5,"y":3.125,"h":1},{"r":8,"c":1,"x":14.5,"y":3.375,"h":1},{"r":8,"c":0,"x":15.5,"y":3.5,"h":1},{"r":4,"c":1,"x":1.5,"y":4.375,"h":1},{"r":4,"c":2,"x":2.5,"y":4.125,"h":1},{"r":4,"c":3,"x":3.5,"y":4.15,"h":1},{"r":4,"c":4,"x":4.5,"y":4.25,"h":1},{"r":4,"c":5,"x":6,"y":4.25,"h":1.5},{"r":9,"c":4,"x":9.5,"y":4.25,"h":1.5},{"r":9,"c":3,"x":11,"y":4.25,"h":1},{"r":9,"c":2,"x":12,"y":4.15,"h":1},{"r":9,"c":1,"x":13,"y":4.125,"h":1},{"r":9,"c":0,"x":14,"y":4.375,"h":1}],"layerNames":["QWERTY","Colemak","Lower","Raise","Mouse","Layer 5"],"ledEffects":["Off","Direct","Solid colour","Letters / mods two-tone","Gradient up down","Gradient left right","Breathing","Band sat","Band val","Band pinwheel sat","Band pinwheel val","Band spiral sat","Band spiral val","Rainbow (all keys)","Rainbow sweep (left-right)","Cycle up down","Rainbow chevron","Rainbow (outside in)","Cycle out in dual","Cycle pinwheel","Cycle spiral","Dual beacon","Rainbow beacon","Rainbow pinwheels","Raindrops","Jellybean raindrops","Hue breathing","Hue pendulum","Hue wave","Typing heatmap","Digital rain","Reactive: pressed key lights","Reactive: pressed key hue shift","Reactive: glow around key","Reactive: glow around keys (multi)","Reactive: cross from key","Reactive: cross from keys (multi)","Reactive: nexus lines","Reactive: nexus lines (multi)","Splash: rainbow burst from key","Splash: rainbow bursts (multi)","Splash: colour burst from key","Splash: colour bursts (multi)","Pixel rain","Pixel fractal"],"ledZones":["Effect on keys + underglow","Effect on keys, solid underglow","Keys only (underglow off)"],"ledIdle":["Never","1 min","2 min","5 min","10 min","30 min"],"ranges":{"QK_MODS":256,"QK_MOD_TAP":8192,"QK_LAYER_TAP":16384,"QK_LAYER_MOD":20480,"QK_TO":20992,"QK_MOMENTARY":21024,"QK_DEF_LAYER":21056,"QK_TOGGLE_LAYER":21088,"QK_ONE_SHOT_LAYER":21120,"QK_ONE_SHOT_MOD":21152,"QK_LAYER_TAP_TOGGLE":21184,"QK_PERSISTENT_DEF_LAYER":21216,"QK_TAP_DANCE":22272,"QK_MACRO":30464,"QK_KB":32256,"QK_USER":32320}};
 
 const F = { HELLO:0x01, READY:0x02, BYE:0x03, UI:0x04, ROW:0x10, ENC:0x11, LED:0x20, TP:0x21, TPZ:0x22 };
-const TABS = ["Keys", "Knobs", "LEDs", "Trackpad"];
+const TABS = ["Layout", "LEDs", "Trackpad"];
+// Layout tab selection: a key (row/col) or a knob action (slot 0-5; 0xFF/-1 = none).
+const knobSel = (ui) => ui.slot >= 0 && ui.slot < 6;
 const CHALLENGE = "ACDEFHJKLMNPRSTUWXY";
 const KNOB_L = [4, 0], KNOB_R = [9, 5];
 const SLOT_NAMES = ["Turn left", "Turn right", "Press"];
@@ -462,12 +474,14 @@ function readStatus(st) {
   S.hidState = st[3]; S.bridgeOn = st[4] !== 0; S.vialUnlocked = !!st[9];
   S.ledInfo = { idle: st[5], max: st[6], modes: st[7], enabled: st[8] };
   S.mapMeasured = !!(st[16] & 1);
+  S.rightMap = st[21];
+  calCapture(st);
 }
 
 async function pollStatus() {
   if (S.mode !== "hid") return;
   try {
-    const st = await cmd([0xf6, 0x00, S.ui && S.ui.tab === 2 ? 1 : 0]);
+    const st = await cmd([0xf6, 0x00, S.ui && S.ui.tab === 1 ? 1 : 0]);
     readStatus(st);
     if (st[3] !== HS.ACTIVE) { S.sessionLost = true; }
     renderNote();
@@ -558,14 +572,14 @@ async function setEnc(layer, knob, cw, kc) {
   S.enc[layer][knob][cw ? 1 : 0] = kc;
 }
 function targetLabel(ui) {
-  if (ui.tab === 1 && ui.slot >= 0) return `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()}`;
+  if (knobSel(ui)) return `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()}`;
   return ui.row === 0xff ? null : `Key ${ui.row},${ui.col}`;
 }
 async function assign(kc) {
   const ui = S.ui;
   if (!ui || targetLabel(ui) === null) { toast("Click a key or a knob action first", true); return; }
   try {
-    if (ui.tab === 1 && ui.slot >= 0) {
+    if (knobSel(ui)) {
       const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
       if (i === 2) { const [r, c] = knob ? KNOB_R : KNOB_L; await setKey(ui.layer, r, c, kc); }
       else await setEnc(ui.layer, knob, i === 1, kc);
@@ -644,25 +658,67 @@ $("ledSave").addEventListener("click", ledSave);
 $("ledRevert").addEventListener("click", ledRevert);
 
 // ---------------------------------------------------------------- LED calibration wizard
-// Lights one physical LED at a time (0-36 left chain, 37-73 right chain) and
-// asks which key it is under. The result can be saved on the keyboard.
-const HALF = 37;
-const CAL = { on: false, phase: "", idx: 0, res: [], verify: [], vi: 0, hyp: null };
+// The keyboard lights one physical LED at a time (0-36 left chain, 37-73 right
+// chain, independent of the current map) and reports key presses instead of
+// typing them (status bytes 17-20), so you just press the key on top of the lit
+// LED. Releasing a key held for 1 s means "not under a key" (underglow). The
+// result is saved on the keyboard, read back, checked on the right half (status
+// byte 21), then tested: each pressed key lights the LED the saved map gives it.
+const HALF = 37, NLED = 2 * HALF;
+const CAL = { on: false, phase: "", idx: 0, res: [], fix: [], seq: -1, down: null, dupe: null, last: "", map: null, busy: false, looping: false };
 const keyAt = {};
 DATA.layout.forEach((k) => (keyAt[k.r + "," + k.c] = k));
-// Left key -> right key at the mirrored position.
-const mirrorOf = {};
-DATA.layout.forEach((k) => {
-  const m = DATA.layout.find((o) => o.x === 15.5 - k.x && o.y === k.y);
-  if (m && k.r < 5) mirrorOf[k.r + "," + k.c] = m.r + "," + m.c;
-});
-const calLabel = (v) => v === undefined || v === null ? "skipped" : v;
+function keyName(key) {
+  const [r, c] = key.split(",").map(Number);
+  const kc = S.keymap && S.keymap[0] && S.keymap[0][r] ? S.keymap[0][r][c] : null;
+  const n = kc ? kcName(kc) : "";
+  return n ? `${n} [${key}]` : `[${key}]`;
+}
+const ansText = (v) => v === "underglow" ? "underglow" : v === "none" ? "nothing lit" : v ? keyName(v) : "not answered";
+const calBtn = (id, label, cls = "", disabled = false) => `<button id="${id}" class="${cls}"${disabled ? " disabled" : ""}>${label}</button>`;
+const calCurrent = () => CAL.idx < NLED ? CAL.idx : CAL.fix[0];
 
-async function calLight(i) { await cmd([0xf6, 0x08, i]); }
+async function calLight(i) {
+  CAL.busy = true;
+  try { const st = await cmd([0xf6, 0x08, i]); CAL.seq = st[17]; CAL.down = null; return st; }
+  finally { CAL.busy = false; }
+}
+async function calLoop() {
+  if (CAL.looping) return;
+  CAL.looping = true;
+  while (CAL.on && S.mode === "hid") {
+    try { readStatus(await cmd([0xf6, 0x00, 1])); } catch (e) { log("cal poll: " + e.message); }
+    await sleep(60);
+  }
+  CAL.looping = false;
+}
+// Called with every status reply (readStatus).
+function calCapture(st) {
+  if (!CAL.on) return;
+  if (CAL.phase === "test") $("calRight").innerHTML = calRightText(st[21]);
+  if (CAL.busy || st[17] === CAL.seq) return;
+  CAL.seq = st[17];
+  const key = st[18] + "," + st[19], down = !!(st[20] & 1), long = !!(st[20] & 2);
+  if (CAL.phase === "test") { if (down) calTestKey(key); return; }
+  if (CAL.phase !== "measure") return;
+  if (down) {
+    CAL.down = key;
+    $("calBig").textContent = `${keyName(key)} — release to confirm (hold 1 s = underglow)`;
+    return;
+  }
+  CAL.down = null;
+  if (long) { calAnswer("underglow"); return; }
+  if (!keyAt[key]) { $("calNote").textContent = `That key [${key}] isn't in the layout. Press the key on top of the lit LED.`; calHeadline(); return; }
+  calAnswer(key);
+}
+function calHeadline() { $("calBig").textContent = "Press the key on top of the lit LED"; }
+
 async function calStart() {
-  CAL.on = true; CAL.phase = "left"; CAL.idx = 0; CAL.res = Array(2 * HALF).fill(undefined); CAL.hyp = null;
-  $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden"); $("calDone").classList.add("hidden");
-  await calShow();
+  Object.assign(CAL, { on: true, phase: "intro", idx: 0, res: Array(NLED).fill(undefined), fix: [], dupe: null, last: "" });
+  $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden");
+  await calLight(0xff);
+  calShow();
+  calLoop();
 }
 async function calStop() {
   if (!CAL.on) return;
@@ -670,41 +726,87 @@ async function calStop() {
   try { await cmd([0xf6, 0x09]); } catch (e) { /* gone */ }
   $("calView").classList.add("hidden"); $("ledCtl").classList.remove("hidden");
 }
-function calCurrent() { return CAL.phase === "verify" ? HALF + CAL.verify[CAL.vi] : CAL.idx; }
+async function calStartTest(map) {
+  if (!CAL.on) {
+    CAL.on = true;
+    $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden");
+  }
+  CAL.map = map || await calReadMap();
+  CAL.phase = "test";
+  CAL.busy = true;
+  try { const st = await cmd([0xf6, 0x0e]); CAL.seq = st[17]; } finally { CAL.busy = false; }
+  calShow();
+  calLoop();
+}
 
-async function calShow() {
-  const btn = (id, label, cls = "") => `<button id="${id}" class="${cls}">${label}</button>`;
-  $("calDone").classList.add("hidden");
-  $("calKb").classList.remove("hidden");
-  if (CAL.phase === "choice") {
-    await calLight(0xff);
-    $("calTitle").textContent = "Left half done";
-    $("calText").innerHTML = "The right half is usually wired as a mirror image of the left. Check that with 4 LEDs, or measure all 37.";
-    $("calBtns").innerHTML = btn("calMirror", "Mirror the left half (check 4 LEDs)", "primary") + btn("calAllRight", "Measure all 37 right LEDs") + btn("calCancel", "Cancel");
-    $("calKb").classList.add("hidden");
-    $("calMirror").onclick = calStartVerify;
-    $("calAllRight").onclick = () => { CAL.phase = "right"; CAL.idx = HALF; calShow(); };
+function calSet(title, big, html, buttons) {
+  $("calTitle").textContent = title;
+  $("calBig").textContent = big;
+  $("calText").innerHTML = html;
+  $("calNote").innerHTML = "";
+  $("calBtns").innerHTML = buttons;
+}
+function calShow() {
+  const p = CAL.phase;
+  $("calDone").classList.toggle("hidden", p !== "done");
+  $("calClickBox").classList.toggle("hidden", p !== "measure");
+  $("calProg").classList.toggle("hidden", p !== "measure");
+  if (p === "intro") {
+    calSet("Calibrate LED positions", "",
+      `<ol class="calSteps"><li>One LED at a time lights up white (${NLED} in all, left half first).</li>` +
+      `<li><b>Press the key that sits on top of the lit LED.</b> The page moves on to the next LED by itself.</li>` +
+      `<li>If the lit LED isn't under a key (it glows from under the board), <b>hold any key for 1 second</b>, or click <b>Underglow</b>.</li>` +
+      `<li>If nothing lights up, click <b>Nothing lit</b>. Made a mistake? Click <b>Back</b>.</li></ol>` +
+      `<p class="dim">While this runs, key presses only go to this page; they don't type anything. The mouse and trackpad work as usual.</p>`,
+      calBtn("calGo", "Start", "primary") + calBtn("calCancel", "Cancel"));
+    $("calGo").onclick = async () => { CAL.phase = "measure"; await calLight(calCurrent()); calShow(); };
     $("calCancel").onclick = calStop;
     return;
   }
-  if (CAL.phase === "done") { await calLight(0xff); calFinish(); return; }
-  const i = calCurrent(), half = i < HALF ? "left" : "right";
-  await calLight(i);
-  $("calTitle").textContent = CAL.phase === "verify"
-    ? `Checking the mirror: ${CAL.vi + 1} of ${CAL.verify.length} (LED ${i})`
-    : `LED ${i} — ${half} half, ${i % HALF + 1} of ${HALF}`;
-  $("calText").innerHTML = `One LED on the <b>${half}</b> half is lit white; the rest are off. Click the key it is under. If it glows from under the board (not under a key), click <b>Underglow</b>. If you see nothing, click <b>Nothing lit</b>.`;
-  $("calBtns").innerHTML = btn("calUg", "Underglow / not under a key") + btn("calNone", "Nothing lit") +
-    (CAL.phase === "verify" ? "" : btn("calBack", "Back") + btn("calSkip", "Skip")) + btn("calCancel", "Cancel");
-  $("calUg").onclick = () => calAnswer("underglow");
-  $("calNone").onclick = () => calAnswer("none");
-  if ($("calBack")) $("calBack").onclick = calBack;
-  if ($("calSkip")) $("calSkip").onclick = () => calAnswer(undefined);
-  $("calCancel").onclick = calStop;
-  calDrawKb(i);
+  if (p === "measure") {
+    const i = calCurrent(), half = i < HALF ? "left" : "right";
+    $("calBar").style.width = (100 * Math.min(CAL.idx, NLED) / NLED) + "%";
+    let html = "";
+    if (CAL.dupe) html += `<p class="warnText"><b>${escapeHtml(keyName(CAL.dupe.key))}</b> is already set for LED ${CAL.dupe.prev + 1}. Press it again to move it to this LED (LED ${CAL.dupe.prev + 1} will be asked again at the end), or press the right key.</p>`;
+    if (CAL.res[i] !== undefined) html += `<p class="dim">This LED is currently set to: ${escapeHtml(ansText(CAL.res[i]))}</p>`;
+    if (CAL.last) html += `<p class="dim">${escapeHtml(CAL.last)}</p>`;
+    calSet(CAL.idx >= NLED ? `Again: LED ${i + 1} (${half} half)` : `LED ${i + 1} of ${NLED} · ${half} half`,
+      "Press the key on top of the lit LED", html,
+      calBtn("calUg", "Underglow / not under a key") + calBtn("calNone", "Nothing lit") + calBtn("calBack", "Back", "", CAL.idx === 0) + calBtn("calCancel", "Cancel"));
+    $("calUg").onclick = () => calAnswer("underglow");
+    $("calNone").onclick = () => calAnswer("none");
+    $("calBack").onclick = calBack;
+    $("calCancel").onclick = calStop;
+    calDrawKb(i);
+    return;
+  }
+  if (p === "done") {
+    const keys = CAL.res.filter((v) => v && v.includes(",")).length, ug = CAL.res.filter((v) => v === "underglow").length;
+    const used = new Set(CAL.res), missing = DATA.layout.filter((k) => !used.has(k.r + "," + k.c)).map((k) => keyName(k.r + "," + k.c));
+    calSet("All LEDs done", "",
+      `<p>${keys} key LEDs, ${ug} underglow, ${NLED - keys - ug} not lit.</p>` +
+      (missing.length ? `<p class="dim">Keys without an LED: ${escapeHtml(missing.join(", "))}</p>` : ""),
+      "");
+    $("calJson").value = calResultJson();
+    return;
+  }
+  if (p === "test") {
+    calSet("Test the LED map", "Press keys: the LED under each one should turn green",
+      `<p class="dim">Key LEDs glow dim white and underglow LEDs dim blue. Key presses still go only to this page.</p>` +
+      `<p id="calRight">${calRightText(S.rightMap)}</p>`,
+      calBtn("calOk", "Looks right — done", "primary") + calBtn("calAgain", "Something's wrong — calibrate again"));
+    $("calOk").onclick = async () => { await calStop(); toast("LED map checked"); render(); };
+    $("calAgain").onclick = calStart;
+  }
+}
+function calRightText(state) {
+  return state === 1 ? "Right half: running the same map ✓"
+    : state === 2 ? `<span class="warnText">The right half is running a different map. Unplug the keyboard, plug it back in and test again.</span>`
+    : "Right half: checking… (if this stays, check the cable between the halves)";
 }
 
 function calDrawKb(cur) {
+  if (!$("calClickBox").open) return;
   const U = Math.min(50, Math.floor(($("calKb").clientWidth || 800) / 16.6)), leftHalf = cur < HALF;
   const owner = {};
   CAL.res.forEach((v, i) => { if (v && v.includes(",")) owner[v] = i; });
@@ -712,107 +814,112 @@ function calDrawKb(cur) {
   for (const k of DATA.layout) {
     const key = k.r + "," + k.c, o = owner[key];
     const other = (k.r < 5) !== leftHalf;
-    html += `<div class="k ${o !== undefined ? "done" : ""} ${other ? "other" : ""}" data-key="${key}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${o !== undefined ? "#" + o : ""}</div>`;
+    html += `<div class="k ${o !== undefined ? "done" : ""} ${other ? "other" : ""}" data-key="${key}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${o !== undefined ? "#" + (o + 1) : ""}</div>`;
   }
   $("calKb").innerHTML = html;
   $("calKb").style.height = (5.9 * U) + "px";
 }
+$("calClickBox").addEventListener("toggle", () => { if (CAL.on && CAL.phase === "measure") calDrawKb(calCurrent()); });
 $("calKb").addEventListener("click", (e) => { const t = e.target.closest("[data-key]"); if (t && CAL.on) calAnswer(t.dataset.key); });
 
 async function calAnswer(v) {
+  if (CAL.phase !== "measure" || CAL.busy) return;
   const i = calCurrent();
-  if (CAL.phase === "verify") {
-    CAL.verifyAns[CAL.vi] = v;
-    if (++CAL.vi >= CAL.verify.length) return calDecideMirror();
-    return calShow();
-  }
   if (v && v.includes(",")) {
     const prev = CAL.res.findIndex((x, j) => x === v && j !== i);
     if (prev >= 0) {
-      if (!confirm(`That key is already set for LED ${prev}. Move it to LED ${i}?`)) return;
+      if (!CAL.dupe || CAL.dupe.key !== v || CAL.dupe.led !== i) {
+        CAL.dupe = { key: v, led: i, prev };
+        calShow();
+        return;
+      }
       CAL.res[prev] = undefined;
+      if (!CAL.fix.includes(prev)) CAL.fix.push(prev);
     }
   }
+  CAL.dupe = null;
   CAL.res[i] = v;
-  CAL.idx++;
-  if (CAL.phase === "left" && CAL.idx >= HALF) CAL.phase = "choice";
-  else if (CAL.phase === "right" && CAL.idx >= 2 * HALF) CAL.phase = "done";
+  CAL.last = `Last: LED ${i + 1} → ${ansText(v)} ✓`;
+  if (CAL.idx < NLED) CAL.idx++;
+  CAL.fix = CAL.fix.filter((j) => CAL.res[j] === undefined);
+  if (CAL.idx >= NLED && !CAL.fix.length) {
+    CAL.phase = "done";
+    await calLight(0xff);
+  } else {
+    await calLight(calCurrent());
+  }
   calShow();
 }
-function calBack() {
-  if (CAL.idx === 0 || (CAL.phase === "right" && CAL.idx === HALF)) return;
-  CAL.idx--; calShow();
+async function calBack() {
+  if (CAL.busy) return;
+  if (CAL.idx >= NLED) CAL.idx = NLED - 1;
+  else if (CAL.idx > 0) CAL.idx--;
+  else return;
+  CAL.dupe = null; CAL.last = "";
+  await calLight(calCurrent());
+  calShow();
 }
 
-// Two common wirings: the right chain runs the same way as the left (j <-> j)
-// or reversed (j <-> 36 - j). Predict, check 4 LEDs, keep the one that fits.
-function mirrorPrediction(reversed) {
+function calCodes() {
+  return CAL.res.map((v) => v === "underglow" ? 0xfe : v && v.includes(",") ? (([r, c]) => r * DATA.cols + c)(v.split(",").map(Number)) : 0xff);
+}
+function calResultJson() {
+  return JSON.stringify({ leds: CAL.res.map((v) => (v === undefined || v === null ? "none" : v)), note: "measured by key press" });
+}
+async function calReadMap() {
   const out = [];
-  for (let j = 0; j < HALF; j++) {
-    const v = CAL.res[reversed ? HALF - 1 - j : j];
-    out.push(v && v.includes(",") ? mirrorOf[v] || null : v);
+  for (let off = 0; off < NLED; off += 26) {
+    const d = await cmd([0xf6, 0x0a, off]);
+    out.push(...Array.from(d.slice(4, 4 + Math.min(26, NLED - off))));
   }
   return out;
 }
-function calStartVerify() {
-  const a = mirrorPrediction(false), b = mirrorPrediction(true);
-  const keyed = [...Array(HALF).keys()].filter((j) => (a[j] && a[j].includes(",")) || (b[j] && b[j].includes(",")));
-  const differ = keyed.filter((j) => a[j] !== b[j]);
-  const pool = differ.length >= 4 ? differ : keyed;
-  CAL.verify = [0, 1, 2, 3].map((n) => pool[Math.floor(n * pool.length / 4)]).filter((j, n, arr) => j !== undefined && arr.indexOf(j) === n);
-  CAL.verifyAns = []; CAL.vi = 0; CAL.pred = { a, b }; CAL.phase = "verify";
-  calShow();
-}
-function calDecideMirror() {
-  const fits = (pred) => CAL.verify.every((j, n) => (pred[j] ?? undefined) === CAL.verifyAns[n]);
-  const pick = fits(CAL.pred.a) ? CAL.pred.a : fits(CAL.pred.b) ? CAL.pred.b : null;
-  if (!pick) {
-    toast("The right half doesn't mirror the left — measuring all 37 right LEDs", true);
-    CAL.phase = "right"; CAL.idx = HALF;
-    return calShow();
-  }
-  pick.forEach((v, j) => (CAL.res[HALF + j] = v === null ? "none" : v));
-  CAL.hyp = pick === CAL.pred.a ? "same order" : "reversed";
-  CAL.phase = "done";
-  calShow();
-}
-function calResultJson() {
-  return JSON.stringify({ leds: CAL.res.map((v) => (v === undefined || v === null ? "none" : v)),
-                          note: CAL.hyp ? `right half mirrored (${CAL.hyp}), 4 LEDs checked` : "all measured" });
-}
-function calFinish() {
-  const skipped = CAL.res.filter((v) => v === undefined).length;
-  $("calTitle").textContent = "LED map measured";
-  $("calText").innerHTML = skipped ? `<span style="color:var(--warn)">${skipped} LED(s) were skipped and will stay dark.</span>` : "";
-  $("calBtns").innerHTML = "";
-  calDrawKb(-1);
-  $("calJson").value = calResultJson();
-  $("calDone").classList.remove("hidden");
-}
 async function calSave() {
-  const codes = CAL.res.map((v) => v === "underglow" ? 0xfe : v && v.includes(",") ? (([r, c]) => r * DATA.cols + c)(v.split(",").map(Number)) : 0xff);
+  const codes = calCodes();
+  $("calDone").classList.add("hidden");
+  calSet("Saving…", "", "", "");
   try {
     for (let off = 0; off < codes.length; off += 26) {
       const part = codes.slice(off, off + 26);
-      const d = await cmd([0xf6, 0x0b, off, part.length, ...part]);
-      if (d[0] === 0xff) throw new Error("refused — reconnect");
+      await cmd([0xf6, 0x0b, off, part.length, ...part]);
     }
     const st = await cmd([0xf6, 0x0c]);
-    if (!(st[16] & 2)) throw new Error("the keyboard rejected the map (a key used twice?)");
     readStatus(st);
-    toast("LED map saved on the keyboard");
-    await calStop();
-    render();
-  } catch (e) { toast("Not saved: " + e.message, true); }
+    if (!(st[16] & 2)) throw new Error("the keyboard rejected the map (a key used twice?)");
+    const back = await calReadMap();
+    const bad = back.findIndex((v, i) => v !== codes[i]);
+    if (bad >= 0) throw new Error(`read-back differs at LED ${bad + 1}`);
+    $("calText").textContent = "Saved. Checking the right half…";
+    let right = 0;
+    for (let t = 0; t < 40 && right !== 1; t++) {
+      await sleep(100);
+      const s2 = await cmd([0xf6, 0x00, 1]);
+      readStatus(s2);
+      right = s2[21];
+    }
+    toast(right === 1 ? "LED map saved on both halves" : "Saved, but the right half didn't confirm it", right !== 1);
+    await calStartTest(back);
+  } catch (e) {
+    toast("Not saved: " + e.message, true);
+    CAL.phase = "done";
+    calShow();
+  }
+}
+function calTestKey(key) {
+  const [r, c] = key.split(",").map(Number), led = CAL.map ? CAL.map.indexOf(r * DATA.cols + c) : -1;
+  $("calNote").innerHTML = led >= 0
+    ? `<b>${escapeHtml(keyName(key))}</b> → LED ${led + 1} (${led < HALF ? "left" : "right"} half) should be green now`
+    : `<b>${escapeHtml(keyName(key))}</b> has no LED in the map`;
 }
 $("calStart").addEventListener("click", calStart);
+$("calTest").addEventListener("click", () => calStartTest());
 $("calSave").addEventListener("click", calSave);
 $("calCopy").addEventListener("click", async () => { $("calJson").select(); try { await navigator.clipboard.writeText($("calJson").value); toast("Copied"); } catch (e) { document.execCommand("copy"); toast("Copied"); } });
 $("calRestart").addEventListener("click", calStart);
 $("calClose").addEventListener("click", calStop);
 $("mapReset").addEventListener("click", async () => {
   if (!confirm("Go back to the built-in LED map (forget the measured one)?")) return;
-  try { const d = await cmd([0xf6, 0x0d]); if (d[0] === 0xff) throw new Error("refused"); readStatus(await cmd([0xf6, 0x00, 1])); toast("Using the built-in LED map"); render(); }
+  try { await cmd([0xf6, 0x0d]); readStatus(await cmd([0xf6, 0x00, 1])); toast("Using the built-in LED map"); render(); }
   catch (e) { toast("Failed: " + e.message, true); }
 });
 
@@ -842,7 +949,7 @@ $("tpRevert").addEventListener("click", tpRevert);
 function startZPoll() {
   if (HID.zpoll) return;
   HID.zpoll = setInterval(async () => {
-    if (S.mode !== "hid" || !S.ui || S.ui.tab !== 3) return stopZPoll();
+    if (S.mode !== "hid" || !S.ui || S.ui.tab !== 2) return stopZPoll();
     if (HID.zbusy) return;
     HID.zbusy = true;
     try { const d = await cmd([0xf5, 0x00]); addZ({ z: d[1], peak: d[2], lastPeak: d[3], touching: d[4], pressed: d[10] }); scheduleRender(); }
@@ -854,24 +961,26 @@ function stopZPoll() { clearInterval(HID.zpoll); HID.zpoll = null; }
 
 async function setTab(tab) {
   if (S.mode !== "hid" || !S.ui || tab === S.ui.tab) return;
-  if (S.ui.tab === 2) { await calStop(); await ledRevert(); }
-  if (S.ui.tab === 3 && S.tp && S.tp.dirty) await hidLoadTp();
+  if (S.ui.tab === 1) { await calStop(); await ledRevert(); }
+  if (S.ui.tab === 2 && S.tp && S.tp.dirty) await hidLoadTp();
   S.ui.tab = tab;
-  if (tab === 2) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
-  if (tab === 3) startZPoll();
+  if (tab === 1) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
+  if (tab === 2) startZPoll();
   render();
 }
 
 // Clicks (WebHID mode only).
 $("tabs").addEventListener("click", (e) => { const t = e.target.closest("[data-tab]"); if (t) setTab(+t.dataset.tab); });
 $("layers").addEventListener("click", (e) => { const t = e.target.closest("[data-layer]"); if (t && S.mode === "hid") { S.ui.layer = +t.dataset.layer; render(); } });
-$("kb").addEventListener("click", (e) => {
+$("kb").addEventListener("click", async (e) => {
   const t = e.target.closest("[data-r]"); if (!t || S.mode !== "hid") return;
-  S.ui.row = +t.dataset.r; S.ui.col = +t.dataset.c; S.ui.tab = 0; S.ui.slot = -1; render(); scrollToCurrent();
+  if (S.ui.tab !== 0) await setTab(0);
+  S.ui.row = +t.dataset.r; S.ui.col = +t.dataset.c; S.ui.slot = -1; render(); scrollToCurrent();
 });
-$("knobs").addEventListener("click", (e) => {
+$("knobs").addEventListener("click", async (e) => {
   const t = e.target.closest("[data-slot]"); if (!t || S.mode !== "hid") return;
-  S.ui.slot = +t.dataset.slot; S.ui.tab = 1; render(); scrollToCurrent();
+  if (S.ui.tab !== 0) await setTab(0);
+  S.ui.slot = +t.dataset.slot; S.ui.row = S.ui.col = 0xff; render(); scrollToCurrent();
 });
 let hidCat = -1;
 $("hidCats").addEventListener("click", (e) => { const t = e.target.closest("[data-cat]"); if (t) { hidCat = +t.dataset.cat; renderHidList(); } });
@@ -958,19 +1067,19 @@ function render() {
   $("mismatch").classList.toggle("hidden", !(bridge && S.ready && S.ready.hash !== DATA.pickerHash));
   if (bridge && S.state === "challenge") $("code").textContent = CHALLENGE[S.nonce % CHALLENGE.length];
   $("editor").classList.toggle("hidden", !ready);
-  $("picker").classList.toggle("hidden", !(ready && S.ui.tab <= 1));
+  $("picker").classList.toggle("hidden", !(ready && S.ui.tab === 0));
   renderHelp();
   if (!ready) return;
 
   const ui = S.ui;
   renderNote();
   setHtml($("tabs"), TABS.map((t, i) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
-  $("keysView").classList.toggle("hidden", ui.tab > 1);
-  $("ledView").classList.toggle("hidden", ui.tab !== 2);
-  $("padView").classList.toggle("hidden", ui.tab !== 3);
-  if (ui.tab <= 1) { renderKeys(ui); renderPicker(ui); }
-  if (ui.tab === 2) renderLeds(ui);
-  if (ui.tab === 3) renderPad(ui);
+  $("keysView").classList.toggle("hidden", ui.tab !== 0);
+  $("ledView").classList.toggle("hidden", ui.tab !== 1);
+  $("padView").classList.toggle("hidden", ui.tab !== 2);
+  if (ui.tab === 0) { renderKeys(ui); renderPicker(ui); }
+  if (ui.tab === 1) renderLeds(ui);
+  if (ui.tab === 2) renderPad(ui);
 }
 
 function renderNote() {
@@ -996,8 +1105,8 @@ function renderKeys(ui) {
   for (const k of DATA.layout) {
     const isKnob = (k.r === KNOB_L[0] && k.c === KNOB_L[1]) || (k.r === KNOB_R[0] && k.c === KNOB_R[1]);
     const v = km[k.r][k.c];
-    const selKey = ui.tab === 0 && k.r === ui.row && k.c === ui.col;
-    const knobSlot = isKnob && ui.tab === 1 && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
+    const selKey = !knobSel(ui) && k.r === ui.row && k.c === ui.col;
+    const knobSlot = isKnob && knobSel(ui) && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
     const cls = ["k", isKnob ? "knob" : "", v === 1 ? "trns" : "", v === 0 ? "none" : "", selKey || knobSlot ? "sel" : "", selKey && ui.held ? "held" : ""].join(" ");
     let text = escapeHtml(v === null ? "…" : keyText(v));
     if (!hid && (selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
@@ -1010,7 +1119,7 @@ function renderKeys(ui) {
     const pressKc = km[knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
     const vals = enc ? [enc[knob][0], enc[knob][1], pressKc] : [null, null, pressKc];
     return `<div class="knobbox"><b>${title}</b>` + vals.map((v, i) => {
-      const slot = knob * 3 + i, on = ui.tab === 1 && ui.slot === slot;
+      const slot = knob * 3 + i, on = knobSel(ui) && ui.slot === slot;
       const pend = !hid && on && ui.pending !== v ? ` <span class="new" style="color:var(--warn)">→ ${escapeHtml(kcName(ui.pending))}</span>` : "";
       return `<div class="slot ${on ? "on" : ""}" data-slot="${slot}"><span>${SLOT_NAMES[i]}</span><span>${escapeHtml(kcName(v))}${pend}</span></div>`;
     }).join("") + "</div>";
@@ -1018,8 +1127,7 @@ function renderKeys(ui) {
 }
 
 function currentValue(ui) {
-  if (ui.tab === 0) return ui.row === 0xff ? null : S.keymap[ui.layer][ui.row][ui.col];
-  if (ui.slot < 0) return null;
+  if (!knobSel(ui)) return ui.row === 0xff ? null : S.keymap[ui.layer][ui.row][ui.col];
   const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
   if (i === 2) return S.keymap[ui.layer][knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
   return S.enc[ui.layer] ? S.enc[ui.layer][knob][i] : null;
@@ -1030,9 +1138,9 @@ function renderPicker(ui) {
   $("pickBridge").classList.toggle("hidden", hid);
   $("pickHid").classList.toggle("hidden", !hid);
   const cur = currentValue(ui);
-  const target = ui.tab === 0
-    ? (ui.row === 0xff ? null : `Key ${ui.row},${ui.col} on layer ${ui.layer}`)
-    : (ui.slot < 0 ? null : `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`);
+  const target = knobSel(ui)
+    ? `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`
+    : (ui.row === 0xff ? null : `Key ${ui.row},${ui.col} on layer ${ui.layer}`);
   $("pickTitle").textContent = target || (hid ? "Click a key or a knob action" : "Press a key to select it");
   $("curName").textContent = cur === null ? "–" : kcName(cur) || "(none)";
   $("pickArrow").classList.toggle("hidden", hid);
@@ -1171,21 +1279,20 @@ function drawZ(t) {
 function renderHelp() {
   let items, foot = "";
   if (S.mode === "hid") {
-    items = [["Keys / Knobs", "Click a key (or a knob action), then click a keycode in the list. It's saved right away."],
+    items = [["Layout", "Click a key, or a knob action (turn left / turn right / press), then click a keycode in the list. It's saved right away."],
              ["Layers", "Click a layer name above the keyboard."], ["Hold/tap keys", "Use the box under the keycode list."],
-             ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them."],
+             ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them. Effects light the wrong keys? Click Calibrate LED positions and press the key on top of each lit LED."],
              ["Trackpad", "Touch the pad to see Z live. Click Save to keep settings."]];
     foot = "The keyboard keeps typing normally while connected. Disconnect (or close the page) to end the session.";
   } else if (S.mode === "bridge" && S.state === "ready" && S.ui) {
     const per = {
       0: [["Any key", "Select it"], ["Hold a key + tap another", "Copy the other key's default-layer keycode"],
-          ["Left knob turn", "Change layer"], ["Right knob turn", "Choose keycode (turn fast to skip)"],
-          ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selected key"]],
-      1: [["Left knob turn", "Choose knob action (turn / press); change layer on the Keys tab"],
-          ["Right knob turn", "Choose keycode"], ["Hold right knob + turn", "Jump between categories"],
-          ["Any key", "Copy its default-layer keycode"], ["Right knob press", "Apply"]],
-      2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
-      3: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
+          ["Left knob turn", "Change layer"], ["Hold left knob + turn", "Select a knob action (turn left / turn right / press)"],
+          ["Hold left knob + tap a key", "Copy that key's keycode to the knob action"],
+          ["Right knob turn", "Choose keycode (turn fast to skip)"],
+          ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selection"]],
+      1: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
+      2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
     };
     items = per[S.ui.tab].concat([["Left knob press", "Next tab (hold ~1 s: resend everything)"]]);
     foot = "Exit: Raise + Config, hold both knob buttons 2 s, hold Esc 2 s, or 5 min without input. Unsaved LED/trackpad changes are dropped on exit.";

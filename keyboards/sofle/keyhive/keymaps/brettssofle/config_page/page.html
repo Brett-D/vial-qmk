@@ -87,7 +87,14 @@
   #calKb .k { cursor:pointer; } #calKb .k:hover { outline:2px solid var(--acc); }
   #calKb .k.done { background:#1d4630; } #calKb .k.other { opacity:.35; }
   .calBtns { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .calStep { font-size:18px; font-weight:700; margin:6px 0; }
+  .calStep { font-size:15px; font-weight:600; margin:6px 0; color:var(--dim); }
+  .calBig { font-size:26px; font-weight:800; margin:8px 0 12px; min-height:1.2em; }
+  .calNote { margin:6px 0; min-height:1.2em; }
+  .calProg { height:8px; background:var(--key); border-radius:4px; overflow:hidden; margin-bottom:8px; }
+  #calBar { height:100%; width:0; background:var(--acc); transition:width .2s; }
+  .calSteps li { margin:4px 0; } .warnText { color:var(--warn); }
+  .calBig:empty, .calNote:empty, #calText:empty, .calBtns:empty { display:none; }
+  #calClickBox { margin-top:14px; } #calClickBox summary { cursor:pointer; color:var(--dim); }
   #calJson { width:100%; height:120px; font:11px ui-monospace,monospace; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:6px; }
   .adv { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
   .adv .line { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
@@ -163,17 +170,20 @@
           <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
           <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
           <div class="btns" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
-            <button id="calStart">Calibrate LED positions…</button><button id="mapReset">Use built-in LED map</button>
+            <button id="calStart">Calibrate LED positions…</button><button id="calTest">Test LED map</button><button id="mapReset">Use built-in LED map</button>
             <span class="dim small" id="mapState"></span>
           </div>
         </div>
         <div id="calView" class="hidden">
+          <div id="calProg" class="calProg hidden"><div id="calBar"></div></div>
           <div class="calStep" id="calTitle"></div>
+          <div class="calBig" id="calBig"></div>
           <div id="calText"></div>
+          <div class="calNote" id="calNote"></div>
           <div class="calBtns" id="calBtns"></div>
-          <div id="calKb"></div>
+          <details id="calClickBox"><summary>Can't press that key? Click it on the picture instead</summary><div id="calKb"></div></details>
           <div id="calDone" class="hidden">
-            <p>Result (LED index → key). <b>Save to keyboard</b> makes effects like splash use it right away; it is kept across power-offs.</p>
+            <p><b>Save to keyboard</b> makes effects like splash use the new map right away (it is kept across power-offs), then lets you test it. <b>Copy result</b> gives the map as text (LED number → key) if you want it built into the firmware.</p>
             <textarea id="calJson" readonly></textarea>
             <div class="calBtns"><button id="calSave" class="primary">Save to keyboard</button><button id="calCopy">Copy result</button><button id="calRestart">Start over</button><button id="calClose">Close</button></div>
           </div>
@@ -245,7 +255,9 @@
 const DATA = /*__DATA__*/null;
 
 const F = { HELLO:0x01, READY:0x02, BYE:0x03, UI:0x04, ROW:0x10, ENC:0x11, LED:0x20, TP:0x21, TPZ:0x22 };
-const TABS = ["Keys", "Knobs", "LEDs", "Trackpad"];
+const TABS = ["Layout", "LEDs", "Trackpad"];
+// Layout tab selection: a key (row/col) or a knob action (slot 0-5; 0xFF/-1 = none).
+const knobSel = (ui) => ui.slot >= 0 && ui.slot < 6;
 const CHALLENGE = "ACDEFHJKLMNPRSTUWXY";
 const KNOB_L = [4, 0], KNOB_R = [9, 5];
 const SLOT_NAMES = ["Turn left", "Turn right", "Press"];
@@ -462,12 +474,14 @@ function readStatus(st) {
   S.hidState = st[3]; S.bridgeOn = st[4] !== 0; S.vialUnlocked = !!st[9];
   S.ledInfo = { idle: st[5], max: st[6], modes: st[7], enabled: st[8] };
   S.mapMeasured = !!(st[16] & 1);
+  S.rightMap = st[21];
+  calCapture(st);
 }
 
 async function pollStatus() {
   if (S.mode !== "hid") return;
   try {
-    const st = await cmd([0xf6, 0x00, S.ui && S.ui.tab === 2 ? 1 : 0]);
+    const st = await cmd([0xf6, 0x00, S.ui && S.ui.tab === 1 ? 1 : 0]);
     readStatus(st);
     if (st[3] !== HS.ACTIVE) { S.sessionLost = true; }
     renderNote();
@@ -558,14 +572,14 @@ async function setEnc(layer, knob, cw, kc) {
   S.enc[layer][knob][cw ? 1 : 0] = kc;
 }
 function targetLabel(ui) {
-  if (ui.tab === 1 && ui.slot >= 0) return `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()}`;
+  if (knobSel(ui)) return `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()}`;
   return ui.row === 0xff ? null : `Key ${ui.row},${ui.col}`;
 }
 async function assign(kc) {
   const ui = S.ui;
   if (!ui || targetLabel(ui) === null) { toast("Click a key or a knob action first", true); return; }
   try {
-    if (ui.tab === 1 && ui.slot >= 0) {
+    if (knobSel(ui)) {
       const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
       if (i === 2) { const [r, c] = knob ? KNOB_R : KNOB_L; await setKey(ui.layer, r, c, kc); }
       else await setEnc(ui.layer, knob, i === 1, kc);
@@ -644,25 +658,67 @@ $("ledSave").addEventListener("click", ledSave);
 $("ledRevert").addEventListener("click", ledRevert);
 
 // ---------------------------------------------------------------- LED calibration wizard
-// Lights one physical LED at a time (0-36 left chain, 37-73 right chain) and
-// asks which key it is under. The result can be saved on the keyboard.
-const HALF = 37;
-const CAL = { on: false, phase: "", idx: 0, res: [], verify: [], vi: 0, hyp: null };
+// The keyboard lights one physical LED at a time (0-36 left chain, 37-73 right
+// chain, independent of the current map) and reports key presses instead of
+// typing them (status bytes 17-20), so you just press the key on top of the lit
+// LED. Releasing a key held for 1 s means "not under a key" (underglow). The
+// result is saved on the keyboard, read back, checked on the right half (status
+// byte 21), then tested: each pressed key lights the LED the saved map gives it.
+const HALF = 37, NLED = 2 * HALF;
+const CAL = { on: false, phase: "", idx: 0, res: [], fix: [], seq: -1, down: null, dupe: null, last: "", map: null, busy: false, looping: false };
 const keyAt = {};
 DATA.layout.forEach((k) => (keyAt[k.r + "," + k.c] = k));
-// Left key -> right key at the mirrored position.
-const mirrorOf = {};
-DATA.layout.forEach((k) => {
-  const m = DATA.layout.find((o) => o.x === 15.5 - k.x && o.y === k.y);
-  if (m && k.r < 5) mirrorOf[k.r + "," + k.c] = m.r + "," + m.c;
-});
-const calLabel = (v) => v === undefined || v === null ? "skipped" : v;
+function keyName(key) {
+  const [r, c] = key.split(",").map(Number);
+  const kc = S.keymap && S.keymap[0] && S.keymap[0][r] ? S.keymap[0][r][c] : null;
+  const n = kc ? kcName(kc) : "";
+  return n ? `${n} [${key}]` : `[${key}]`;
+}
+const ansText = (v) => v === "underglow" ? "underglow" : v === "none" ? "nothing lit" : v ? keyName(v) : "not answered";
+const calBtn = (id, label, cls = "", disabled = false) => `<button id="${id}" class="${cls}"${disabled ? " disabled" : ""}>${label}</button>`;
+const calCurrent = () => CAL.idx < NLED ? CAL.idx : CAL.fix[0];
 
-async function calLight(i) { await cmd([0xf6, 0x08, i]); }
+async function calLight(i) {
+  CAL.busy = true;
+  try { const st = await cmd([0xf6, 0x08, i]); CAL.seq = st[17]; CAL.down = null; return st; }
+  finally { CAL.busy = false; }
+}
+async function calLoop() {
+  if (CAL.looping) return;
+  CAL.looping = true;
+  while (CAL.on && S.mode === "hid") {
+    try { readStatus(await cmd([0xf6, 0x00, 1])); } catch (e) { log("cal poll: " + e.message); }
+    await sleep(60);
+  }
+  CAL.looping = false;
+}
+// Called with every status reply (readStatus).
+function calCapture(st) {
+  if (!CAL.on) return;
+  if (CAL.phase === "test") $("calRight").innerHTML = calRightText(st[21]);
+  if (CAL.busy || st[17] === CAL.seq) return;
+  CAL.seq = st[17];
+  const key = st[18] + "," + st[19], down = !!(st[20] & 1), long = !!(st[20] & 2);
+  if (CAL.phase === "test") { if (down) calTestKey(key); return; }
+  if (CAL.phase !== "measure") return;
+  if (down) {
+    CAL.down = key;
+    $("calBig").textContent = `${keyName(key)} — release to confirm (hold 1 s = underglow)`;
+    return;
+  }
+  CAL.down = null;
+  if (long) { calAnswer("underglow"); return; }
+  if (!keyAt[key]) { $("calNote").textContent = `That key [${key}] isn't in the layout. Press the key on top of the lit LED.`; calHeadline(); return; }
+  calAnswer(key);
+}
+function calHeadline() { $("calBig").textContent = "Press the key on top of the lit LED"; }
+
 async function calStart() {
-  CAL.on = true; CAL.phase = "left"; CAL.idx = 0; CAL.res = Array(2 * HALF).fill(undefined); CAL.hyp = null;
-  $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden"); $("calDone").classList.add("hidden");
-  await calShow();
+  Object.assign(CAL, { on: true, phase: "intro", idx: 0, res: Array(NLED).fill(undefined), fix: [], dupe: null, last: "" });
+  $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden");
+  await calLight(0xff);
+  calShow();
+  calLoop();
 }
 async function calStop() {
   if (!CAL.on) return;
@@ -670,41 +726,87 @@ async function calStop() {
   try { await cmd([0xf6, 0x09]); } catch (e) { /* gone */ }
   $("calView").classList.add("hidden"); $("ledCtl").classList.remove("hidden");
 }
-function calCurrent() { return CAL.phase === "verify" ? HALF + CAL.verify[CAL.vi] : CAL.idx; }
+async function calStartTest(map) {
+  if (!CAL.on) {
+    CAL.on = true;
+    $("ledCtl").classList.add("hidden"); $("calView").classList.remove("hidden");
+  }
+  CAL.map = map || await calReadMap();
+  CAL.phase = "test";
+  CAL.busy = true;
+  try { const st = await cmd([0xf6, 0x0e]); CAL.seq = st[17]; } finally { CAL.busy = false; }
+  calShow();
+  calLoop();
+}
 
-async function calShow() {
-  const btn = (id, label, cls = "") => `<button id="${id}" class="${cls}">${label}</button>`;
-  $("calDone").classList.add("hidden");
-  $("calKb").classList.remove("hidden");
-  if (CAL.phase === "choice") {
-    await calLight(0xff);
-    $("calTitle").textContent = "Left half done";
-    $("calText").innerHTML = "The right half is usually wired as a mirror image of the left. Check that with 4 LEDs, or measure all 37.";
-    $("calBtns").innerHTML = btn("calMirror", "Mirror the left half (check 4 LEDs)", "primary") + btn("calAllRight", "Measure all 37 right LEDs") + btn("calCancel", "Cancel");
-    $("calKb").classList.add("hidden");
-    $("calMirror").onclick = calStartVerify;
-    $("calAllRight").onclick = () => { CAL.phase = "right"; CAL.idx = HALF; calShow(); };
+function calSet(title, big, html, buttons) {
+  $("calTitle").textContent = title;
+  $("calBig").textContent = big;
+  $("calText").innerHTML = html;
+  $("calNote").innerHTML = "";
+  $("calBtns").innerHTML = buttons;
+}
+function calShow() {
+  const p = CAL.phase;
+  $("calDone").classList.toggle("hidden", p !== "done");
+  $("calClickBox").classList.toggle("hidden", p !== "measure");
+  $("calProg").classList.toggle("hidden", p !== "measure");
+  if (p === "intro") {
+    calSet("Calibrate LED positions", "",
+      `<ol class="calSteps"><li>One LED at a time lights up white (${NLED} in all, left half first).</li>` +
+      `<li><b>Press the key that sits on top of the lit LED.</b> The page moves on to the next LED by itself.</li>` +
+      `<li>If the lit LED isn't under a key (it glows from under the board), <b>hold any key for 1 second</b>, or click <b>Underglow</b>.</li>` +
+      `<li>If nothing lights up, click <b>Nothing lit</b>. Made a mistake? Click <b>Back</b>.</li></ol>` +
+      `<p class="dim">While this runs, key presses only go to this page; they don't type anything. The mouse and trackpad work as usual.</p>`,
+      calBtn("calGo", "Start", "primary") + calBtn("calCancel", "Cancel"));
+    $("calGo").onclick = async () => { CAL.phase = "measure"; await calLight(calCurrent()); calShow(); };
     $("calCancel").onclick = calStop;
     return;
   }
-  if (CAL.phase === "done") { await calLight(0xff); calFinish(); return; }
-  const i = calCurrent(), half = i < HALF ? "left" : "right";
-  await calLight(i);
-  $("calTitle").textContent = CAL.phase === "verify"
-    ? `Checking the mirror: ${CAL.vi + 1} of ${CAL.verify.length} (LED ${i})`
-    : `LED ${i} — ${half} half, ${i % HALF + 1} of ${HALF}`;
-  $("calText").innerHTML = `One LED on the <b>${half}</b> half is lit white; the rest are off. Click the key it is under. If it glows from under the board (not under a key), click <b>Underglow</b>. If you see nothing, click <b>Nothing lit</b>.`;
-  $("calBtns").innerHTML = btn("calUg", "Underglow / not under a key") + btn("calNone", "Nothing lit") +
-    (CAL.phase === "verify" ? "" : btn("calBack", "Back") + btn("calSkip", "Skip")) + btn("calCancel", "Cancel");
-  $("calUg").onclick = () => calAnswer("underglow");
-  $("calNone").onclick = () => calAnswer("none");
-  if ($("calBack")) $("calBack").onclick = calBack;
-  if ($("calSkip")) $("calSkip").onclick = () => calAnswer(undefined);
-  $("calCancel").onclick = calStop;
-  calDrawKb(i);
+  if (p === "measure") {
+    const i = calCurrent(), half = i < HALF ? "left" : "right";
+    $("calBar").style.width = (100 * Math.min(CAL.idx, NLED) / NLED) + "%";
+    let html = "";
+    if (CAL.dupe) html += `<p class="warnText"><b>${escapeHtml(keyName(CAL.dupe.key))}</b> is already set for LED ${CAL.dupe.prev + 1}. Press it again to move it to this LED (LED ${CAL.dupe.prev + 1} will be asked again at the end), or press the right key.</p>`;
+    if (CAL.res[i] !== undefined) html += `<p class="dim">This LED is currently set to: ${escapeHtml(ansText(CAL.res[i]))}</p>`;
+    if (CAL.last) html += `<p class="dim">${escapeHtml(CAL.last)}</p>`;
+    calSet(CAL.idx >= NLED ? `Again: LED ${i + 1} (${half} half)` : `LED ${i + 1} of ${NLED} · ${half} half`,
+      "Press the key on top of the lit LED", html,
+      calBtn("calUg", "Underglow / not under a key") + calBtn("calNone", "Nothing lit") + calBtn("calBack", "Back", "", CAL.idx === 0) + calBtn("calCancel", "Cancel"));
+    $("calUg").onclick = () => calAnswer("underglow");
+    $("calNone").onclick = () => calAnswer("none");
+    $("calBack").onclick = calBack;
+    $("calCancel").onclick = calStop;
+    calDrawKb(i);
+    return;
+  }
+  if (p === "done") {
+    const keys = CAL.res.filter((v) => v && v.includes(",")).length, ug = CAL.res.filter((v) => v === "underglow").length;
+    const used = new Set(CAL.res), missing = DATA.layout.filter((k) => !used.has(k.r + "," + k.c)).map((k) => keyName(k.r + "," + k.c));
+    calSet("All LEDs done", "",
+      `<p>${keys} key LEDs, ${ug} underglow, ${NLED - keys - ug} not lit.</p>` +
+      (missing.length ? `<p class="dim">Keys without an LED: ${escapeHtml(missing.join(", "))}</p>` : ""),
+      "");
+    $("calJson").value = calResultJson();
+    return;
+  }
+  if (p === "test") {
+    calSet("Test the LED map", "Press keys: the LED under each one should turn green",
+      `<p class="dim">Key LEDs glow dim white and underglow LEDs dim blue. Key presses still go only to this page.</p>` +
+      `<p id="calRight">${calRightText(S.rightMap)}</p>`,
+      calBtn("calOk", "Looks right — done", "primary") + calBtn("calAgain", "Something's wrong — calibrate again"));
+    $("calOk").onclick = async () => { await calStop(); toast("LED map checked"); render(); };
+    $("calAgain").onclick = calStart;
+  }
+}
+function calRightText(state) {
+  return state === 1 ? "Right half: running the same map ✓"
+    : state === 2 ? `<span class="warnText">The right half is running a different map. Unplug the keyboard, plug it back in and test again.</span>`
+    : "Right half: checking… (if this stays, check the cable between the halves)";
 }
 
 function calDrawKb(cur) {
+  if (!$("calClickBox").open) return;
   const U = Math.min(50, Math.floor(($("calKb").clientWidth || 800) / 16.6)), leftHalf = cur < HALF;
   const owner = {};
   CAL.res.forEach((v, i) => { if (v && v.includes(",")) owner[v] = i; });
@@ -712,107 +814,112 @@ function calDrawKb(cur) {
   for (const k of DATA.layout) {
     const key = k.r + "," + k.c, o = owner[key];
     const other = (k.r < 5) !== leftHalf;
-    html += `<div class="k ${o !== undefined ? "done" : ""} ${other ? "other" : ""}" data-key="${key}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${o !== undefined ? "#" + o : ""}</div>`;
+    html += `<div class="k ${o !== undefined ? "done" : ""} ${other ? "other" : ""}" data-key="${key}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${o !== undefined ? "#" + (o + 1) : ""}</div>`;
   }
   $("calKb").innerHTML = html;
   $("calKb").style.height = (5.9 * U) + "px";
 }
+$("calClickBox").addEventListener("toggle", () => { if (CAL.on && CAL.phase === "measure") calDrawKb(calCurrent()); });
 $("calKb").addEventListener("click", (e) => { const t = e.target.closest("[data-key]"); if (t && CAL.on) calAnswer(t.dataset.key); });
 
 async function calAnswer(v) {
+  if (CAL.phase !== "measure" || CAL.busy) return;
   const i = calCurrent();
-  if (CAL.phase === "verify") {
-    CAL.verifyAns[CAL.vi] = v;
-    if (++CAL.vi >= CAL.verify.length) return calDecideMirror();
-    return calShow();
-  }
   if (v && v.includes(",")) {
     const prev = CAL.res.findIndex((x, j) => x === v && j !== i);
     if (prev >= 0) {
-      if (!confirm(`That key is already set for LED ${prev}. Move it to LED ${i}?`)) return;
+      if (!CAL.dupe || CAL.dupe.key !== v || CAL.dupe.led !== i) {
+        CAL.dupe = { key: v, led: i, prev };
+        calShow();
+        return;
+      }
       CAL.res[prev] = undefined;
+      if (!CAL.fix.includes(prev)) CAL.fix.push(prev);
     }
   }
+  CAL.dupe = null;
   CAL.res[i] = v;
-  CAL.idx++;
-  if (CAL.phase === "left" && CAL.idx >= HALF) CAL.phase = "choice";
-  else if (CAL.phase === "right" && CAL.idx >= 2 * HALF) CAL.phase = "done";
+  CAL.last = `Last: LED ${i + 1} → ${ansText(v)} ✓`;
+  if (CAL.idx < NLED) CAL.idx++;
+  CAL.fix = CAL.fix.filter((j) => CAL.res[j] === undefined);
+  if (CAL.idx >= NLED && !CAL.fix.length) {
+    CAL.phase = "done";
+    await calLight(0xff);
+  } else {
+    await calLight(calCurrent());
+  }
   calShow();
 }
-function calBack() {
-  if (CAL.idx === 0 || (CAL.phase === "right" && CAL.idx === HALF)) return;
-  CAL.idx--; calShow();
+async function calBack() {
+  if (CAL.busy) return;
+  if (CAL.idx >= NLED) CAL.idx = NLED - 1;
+  else if (CAL.idx > 0) CAL.idx--;
+  else return;
+  CAL.dupe = null; CAL.last = "";
+  await calLight(calCurrent());
+  calShow();
 }
 
-// Two common wirings: the right chain runs the same way as the left (j <-> j)
-// or reversed (j <-> 36 - j). Predict, check 4 LEDs, keep the one that fits.
-function mirrorPrediction(reversed) {
+function calCodes() {
+  return CAL.res.map((v) => v === "underglow" ? 0xfe : v && v.includes(",") ? (([r, c]) => r * DATA.cols + c)(v.split(",").map(Number)) : 0xff);
+}
+function calResultJson() {
+  return JSON.stringify({ leds: CAL.res.map((v) => (v === undefined || v === null ? "none" : v)), note: "measured by key press" });
+}
+async function calReadMap() {
   const out = [];
-  for (let j = 0; j < HALF; j++) {
-    const v = CAL.res[reversed ? HALF - 1 - j : j];
-    out.push(v && v.includes(",") ? mirrorOf[v] || null : v);
+  for (let off = 0; off < NLED; off += 26) {
+    const d = await cmd([0xf6, 0x0a, off]);
+    out.push(...Array.from(d.slice(4, 4 + Math.min(26, NLED - off))));
   }
   return out;
 }
-function calStartVerify() {
-  const a = mirrorPrediction(false), b = mirrorPrediction(true);
-  const keyed = [...Array(HALF).keys()].filter((j) => (a[j] && a[j].includes(",")) || (b[j] && b[j].includes(",")));
-  const differ = keyed.filter((j) => a[j] !== b[j]);
-  const pool = differ.length >= 4 ? differ : keyed;
-  CAL.verify = [0, 1, 2, 3].map((n) => pool[Math.floor(n * pool.length / 4)]).filter((j, n, arr) => j !== undefined && arr.indexOf(j) === n);
-  CAL.verifyAns = []; CAL.vi = 0; CAL.pred = { a, b }; CAL.phase = "verify";
-  calShow();
-}
-function calDecideMirror() {
-  const fits = (pred) => CAL.verify.every((j, n) => (pred[j] ?? undefined) === CAL.verifyAns[n]);
-  const pick = fits(CAL.pred.a) ? CAL.pred.a : fits(CAL.pred.b) ? CAL.pred.b : null;
-  if (!pick) {
-    toast("The right half doesn't mirror the left — measuring all 37 right LEDs", true);
-    CAL.phase = "right"; CAL.idx = HALF;
-    return calShow();
-  }
-  pick.forEach((v, j) => (CAL.res[HALF + j] = v === null ? "none" : v));
-  CAL.hyp = pick === CAL.pred.a ? "same order" : "reversed";
-  CAL.phase = "done";
-  calShow();
-}
-function calResultJson() {
-  return JSON.stringify({ leds: CAL.res.map((v) => (v === undefined || v === null ? "none" : v)),
-                          note: CAL.hyp ? `right half mirrored (${CAL.hyp}), 4 LEDs checked` : "all measured" });
-}
-function calFinish() {
-  const skipped = CAL.res.filter((v) => v === undefined).length;
-  $("calTitle").textContent = "LED map measured";
-  $("calText").innerHTML = skipped ? `<span style="color:var(--warn)">${skipped} LED(s) were skipped and will stay dark.</span>` : "";
-  $("calBtns").innerHTML = "";
-  calDrawKb(-1);
-  $("calJson").value = calResultJson();
-  $("calDone").classList.remove("hidden");
-}
 async function calSave() {
-  const codes = CAL.res.map((v) => v === "underglow" ? 0xfe : v && v.includes(",") ? (([r, c]) => r * DATA.cols + c)(v.split(",").map(Number)) : 0xff);
+  const codes = calCodes();
+  $("calDone").classList.add("hidden");
+  calSet("Saving…", "", "", "");
   try {
     for (let off = 0; off < codes.length; off += 26) {
       const part = codes.slice(off, off + 26);
-      const d = await cmd([0xf6, 0x0b, off, part.length, ...part]);
-      if (d[0] === 0xff) throw new Error("refused — reconnect");
+      await cmd([0xf6, 0x0b, off, part.length, ...part]);
     }
     const st = await cmd([0xf6, 0x0c]);
-    if (!(st[16] & 2)) throw new Error("the keyboard rejected the map (a key used twice?)");
     readStatus(st);
-    toast("LED map saved on the keyboard");
-    await calStop();
-    render();
-  } catch (e) { toast("Not saved: " + e.message, true); }
+    if (!(st[16] & 2)) throw new Error("the keyboard rejected the map (a key used twice?)");
+    const back = await calReadMap();
+    const bad = back.findIndex((v, i) => v !== codes[i]);
+    if (bad >= 0) throw new Error(`read-back differs at LED ${bad + 1}`);
+    $("calText").textContent = "Saved. Checking the right half…";
+    let right = 0;
+    for (let t = 0; t < 40 && right !== 1; t++) {
+      await sleep(100);
+      const s2 = await cmd([0xf6, 0x00, 1]);
+      readStatus(s2);
+      right = s2[21];
+    }
+    toast(right === 1 ? "LED map saved on both halves" : "Saved, but the right half didn't confirm it", right !== 1);
+    await calStartTest(back);
+  } catch (e) {
+    toast("Not saved: " + e.message, true);
+    CAL.phase = "done";
+    calShow();
+  }
+}
+function calTestKey(key) {
+  const [r, c] = key.split(",").map(Number), led = CAL.map ? CAL.map.indexOf(r * DATA.cols + c) : -1;
+  $("calNote").innerHTML = led >= 0
+    ? `<b>${escapeHtml(keyName(key))}</b> → LED ${led + 1} (${led < HALF ? "left" : "right"} half) should be green now`
+    : `<b>${escapeHtml(keyName(key))}</b> has no LED in the map`;
 }
 $("calStart").addEventListener("click", calStart);
+$("calTest").addEventListener("click", () => calStartTest());
 $("calSave").addEventListener("click", calSave);
 $("calCopy").addEventListener("click", async () => { $("calJson").select(); try { await navigator.clipboard.writeText($("calJson").value); toast("Copied"); } catch (e) { document.execCommand("copy"); toast("Copied"); } });
 $("calRestart").addEventListener("click", calStart);
 $("calClose").addEventListener("click", calStop);
 $("mapReset").addEventListener("click", async () => {
   if (!confirm("Go back to the built-in LED map (forget the measured one)?")) return;
-  try { const d = await cmd([0xf6, 0x0d]); if (d[0] === 0xff) throw new Error("refused"); readStatus(await cmd([0xf6, 0x00, 1])); toast("Using the built-in LED map"); render(); }
+  try { await cmd([0xf6, 0x0d]); readStatus(await cmd([0xf6, 0x00, 1])); toast("Using the built-in LED map"); render(); }
   catch (e) { toast("Failed: " + e.message, true); }
 });
 
@@ -842,7 +949,7 @@ $("tpRevert").addEventListener("click", tpRevert);
 function startZPoll() {
   if (HID.zpoll) return;
   HID.zpoll = setInterval(async () => {
-    if (S.mode !== "hid" || !S.ui || S.ui.tab !== 3) return stopZPoll();
+    if (S.mode !== "hid" || !S.ui || S.ui.tab !== 2) return stopZPoll();
     if (HID.zbusy) return;
     HID.zbusy = true;
     try { const d = await cmd([0xf5, 0x00]); addZ({ z: d[1], peak: d[2], lastPeak: d[3], touching: d[4], pressed: d[10] }); scheduleRender(); }
@@ -854,24 +961,26 @@ function stopZPoll() { clearInterval(HID.zpoll); HID.zpoll = null; }
 
 async function setTab(tab) {
   if (S.mode !== "hid" || !S.ui || tab === S.ui.tab) return;
-  if (S.ui.tab === 2) { await calStop(); await ledRevert(); }
-  if (S.ui.tab === 3 && S.tp && S.tp.dirty) await hidLoadTp();
+  if (S.ui.tab === 1) { await calStop(); await ledRevert(); }
+  if (S.ui.tab === 2 && S.tp && S.tp.dirty) await hidLoadTp();
   S.ui.tab = tab;
-  if (tab === 2) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
-  if (tab === 3) startZPoll();
+  if (tab === 1) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
+  if (tab === 2) startZPoll();
   render();
 }
 
 // Clicks (WebHID mode only).
 $("tabs").addEventListener("click", (e) => { const t = e.target.closest("[data-tab]"); if (t) setTab(+t.dataset.tab); });
 $("layers").addEventListener("click", (e) => { const t = e.target.closest("[data-layer]"); if (t && S.mode === "hid") { S.ui.layer = +t.dataset.layer; render(); } });
-$("kb").addEventListener("click", (e) => {
+$("kb").addEventListener("click", async (e) => {
   const t = e.target.closest("[data-r]"); if (!t || S.mode !== "hid") return;
-  S.ui.row = +t.dataset.r; S.ui.col = +t.dataset.c; S.ui.tab = 0; S.ui.slot = -1; render(); scrollToCurrent();
+  if (S.ui.tab !== 0) await setTab(0);
+  S.ui.row = +t.dataset.r; S.ui.col = +t.dataset.c; S.ui.slot = -1; render(); scrollToCurrent();
 });
-$("knobs").addEventListener("click", (e) => {
+$("knobs").addEventListener("click", async (e) => {
   const t = e.target.closest("[data-slot]"); if (!t || S.mode !== "hid") return;
-  S.ui.slot = +t.dataset.slot; S.ui.tab = 1; render(); scrollToCurrent();
+  if (S.ui.tab !== 0) await setTab(0);
+  S.ui.slot = +t.dataset.slot; S.ui.row = S.ui.col = 0xff; render(); scrollToCurrent();
 });
 let hidCat = -1;
 $("hidCats").addEventListener("click", (e) => { const t = e.target.closest("[data-cat]"); if (t) { hidCat = +t.dataset.cat; renderHidList(); } });
@@ -958,19 +1067,19 @@ function render() {
   $("mismatch").classList.toggle("hidden", !(bridge && S.ready && S.ready.hash !== DATA.pickerHash));
   if (bridge && S.state === "challenge") $("code").textContent = CHALLENGE[S.nonce % CHALLENGE.length];
   $("editor").classList.toggle("hidden", !ready);
-  $("picker").classList.toggle("hidden", !(ready && S.ui.tab <= 1));
+  $("picker").classList.toggle("hidden", !(ready && S.ui.tab === 0));
   renderHelp();
   if (!ready) return;
 
   const ui = S.ui;
   renderNote();
   setHtml($("tabs"), TABS.map((t, i) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
-  $("keysView").classList.toggle("hidden", ui.tab > 1);
-  $("ledView").classList.toggle("hidden", ui.tab !== 2);
-  $("padView").classList.toggle("hidden", ui.tab !== 3);
-  if (ui.tab <= 1) { renderKeys(ui); renderPicker(ui); }
-  if (ui.tab === 2) renderLeds(ui);
-  if (ui.tab === 3) renderPad(ui);
+  $("keysView").classList.toggle("hidden", ui.tab !== 0);
+  $("ledView").classList.toggle("hidden", ui.tab !== 1);
+  $("padView").classList.toggle("hidden", ui.tab !== 2);
+  if (ui.tab === 0) { renderKeys(ui); renderPicker(ui); }
+  if (ui.tab === 1) renderLeds(ui);
+  if (ui.tab === 2) renderPad(ui);
 }
 
 function renderNote() {
@@ -996,8 +1105,8 @@ function renderKeys(ui) {
   for (const k of DATA.layout) {
     const isKnob = (k.r === KNOB_L[0] && k.c === KNOB_L[1]) || (k.r === KNOB_R[0] && k.c === KNOB_R[1]);
     const v = km[k.r][k.c];
-    const selKey = ui.tab === 0 && k.r === ui.row && k.c === ui.col;
-    const knobSlot = isKnob && ui.tab === 1 && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
+    const selKey = !knobSel(ui) && k.r === ui.row && k.c === ui.col;
+    const knobSlot = isKnob && knobSel(ui) && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
     const cls = ["k", isKnob ? "knob" : "", v === 1 ? "trns" : "", v === 0 ? "none" : "", selKey || knobSlot ? "sel" : "", selKey && ui.held ? "held" : ""].join(" ");
     let text = escapeHtml(v === null ? "…" : keyText(v));
     if (!hid && (selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
@@ -1010,7 +1119,7 @@ function renderKeys(ui) {
     const pressKc = km[knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
     const vals = enc ? [enc[knob][0], enc[knob][1], pressKc] : [null, null, pressKc];
     return `<div class="knobbox"><b>${title}</b>` + vals.map((v, i) => {
-      const slot = knob * 3 + i, on = ui.tab === 1 && ui.slot === slot;
+      const slot = knob * 3 + i, on = knobSel(ui) && ui.slot === slot;
       const pend = !hid && on && ui.pending !== v ? ` <span class="new" style="color:var(--warn)">→ ${escapeHtml(kcName(ui.pending))}</span>` : "";
       return `<div class="slot ${on ? "on" : ""}" data-slot="${slot}"><span>${SLOT_NAMES[i]}</span><span>${escapeHtml(kcName(v))}${pend}</span></div>`;
     }).join("") + "</div>";
@@ -1018,8 +1127,7 @@ function renderKeys(ui) {
 }
 
 function currentValue(ui) {
-  if (ui.tab === 0) return ui.row === 0xff ? null : S.keymap[ui.layer][ui.row][ui.col];
-  if (ui.slot < 0) return null;
+  if (!knobSel(ui)) return ui.row === 0xff ? null : S.keymap[ui.layer][ui.row][ui.col];
   const knob = ui.slot < 3 ? 0 : 1, i = ui.slot % 3;
   if (i === 2) return S.keymap[ui.layer][knob ? KNOB_R[0] : KNOB_L[0]][knob ? KNOB_R[1] : KNOB_L[1]];
   return S.enc[ui.layer] ? S.enc[ui.layer][knob][i] : null;
@@ -1030,9 +1138,9 @@ function renderPicker(ui) {
   $("pickBridge").classList.toggle("hidden", hid);
   $("pickHid").classList.toggle("hidden", !hid);
   const cur = currentValue(ui);
-  const target = ui.tab === 0
-    ? (ui.row === 0xff ? null : `Key ${ui.row},${ui.col} on layer ${ui.layer}`)
-    : (ui.slot < 0 ? null : `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`);
+  const target = knobSel(ui)
+    ? `${ui.slot < 3 ? "Left" : "Right"} knob: ${SLOT_NAMES[ui.slot % 3].toLowerCase()} (layer ${ui.layer})`
+    : (ui.row === 0xff ? null : `Key ${ui.row},${ui.col} on layer ${ui.layer}`);
   $("pickTitle").textContent = target || (hid ? "Click a key or a knob action" : "Press a key to select it");
   $("curName").textContent = cur === null ? "–" : kcName(cur) || "(none)";
   $("pickArrow").classList.toggle("hidden", hid);
@@ -1171,21 +1279,20 @@ function drawZ(t) {
 function renderHelp() {
   let items, foot = "";
   if (S.mode === "hid") {
-    items = [["Keys / Knobs", "Click a key (or a knob action), then click a keycode in the list. It's saved right away."],
+    items = [["Layout", "Click a key, or a knob action (turn left / turn right / press), then click a keycode in the list. It's saved right away."],
              ["Layers", "Click a layer name above the keyboard."], ["Hold/tap keys", "Use the box under the keycode list."],
-             ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them."],
+             ["LEDs", "Drag the sliders; the lights preview live. Click Save to keep them. Effects light the wrong keys? Click Calibrate LED positions and press the key on top of each lit LED."],
              ["Trackpad", "Touch the pad to see Z live. Click Save to keep settings."]];
     foot = "The keyboard keeps typing normally while connected. Disconnect (or close the page) to end the session.";
   } else if (S.mode === "bridge" && S.state === "ready" && S.ui) {
     const per = {
       0: [["Any key", "Select it"], ["Hold a key + tap another", "Copy the other key's default-layer keycode"],
-          ["Left knob turn", "Change layer"], ["Right knob turn", "Choose keycode (turn fast to skip)"],
-          ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selected key"]],
-      1: [["Left knob turn", "Choose knob action (turn / press); change layer on the Keys tab"],
-          ["Right knob turn", "Choose keycode"], ["Hold right knob + turn", "Jump between categories"],
-          ["Any key", "Copy its default-layer keycode"], ["Right knob press", "Apply"]],
-      2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
-      3: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
+          ["Left knob turn", "Change layer"], ["Hold left knob + turn", "Select a knob action (turn left / turn right / press)"],
+          ["Hold left knob + tap a key", "Copy that key's keycode to the knob action"],
+          ["Right knob turn", "Choose keycode (turn fast to skip)"],
+          ["Hold right knob + turn", "Jump between categories"], ["Right knob press", "Apply to the selection"]],
+      1: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it (the lights preview live)"], ["Right knob press", "Save"]],
+      2: [["Left knob turn", "Choose setting"], ["Right knob turn", "Change it"], ["Right knob press", "Save"], ["Touch the trackpad", "See Z live"]],
     };
     items = per[S.ui.tab].concat([["Left knob press", "Next tab (hold ~1 s: resend everything)"]]);
     foot = "Exit: Raise + Config, hold both knob buttons 2 s, hold Esc 2 s, or 5 min without input. Unsaved LED/trackpad changes are dropped on exit.";

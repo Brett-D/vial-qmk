@@ -21,19 +21,21 @@
 //    Raise + CONFIG, both knob buttons held 2 s, Esc held 2 s, or
 //    CONFIG_MODE_IDLE_EXIT_MS without input.
 //
-// Keyboard-only controls once connected:
-//   left knob turn       layer (Keys) / slot (Knobs) / field (LEDs, Trackpad)
+// Keyboard-only controls once connected (tabs: Layout, LEDs, Trackpad):
+//   left knob turn       layer (Layout) / field (LEDs, Trackpad)
+//   left knob held+turn  select a knob action (Layout: turn left/right, press)
 //   left knob press      next tab; hold ~1 s = resend everything to the page
 //   right knob turn      pick keycode / change value (fast turns jump faster)
 //   right knob held+turn jump to the next/previous keycode category
-//   right knob press     apply (Keys, Knobs) / save (LEDs, Trackpad)
-//   any key (Keys tab)   select it; while holding it, tap another key to copy
-//                        that key's default-layer keycode
-//   any key (Knobs tab)  copy that key's default-layer keycode
+//   right knob press     apply (Layout) / save (LEDs, Trackpad)
+//   any key (Layout)     select it; while holding it, tap another key to copy
+//                        that key's default-layer keycode. With a knob action
+//                        selected, hold the left knob and tap a key to copy.
 
 #include "brettssofle.h"
 #include "bridge.h"
 #include "config_picker.h"
+#include "led_cal.h"
 #include "led_map.h"
 #include "dynamic_keymap.h"
 #include "keymap_introspection.h"
@@ -62,7 +64,8 @@
 //                            led idle idx, led max val, led mode count,
 //                            led enabled, vial unlocked, ask seconds left,
 //                            effect (VialRGB id), zone, underglow hue, underglow sat,
-//                            calibration LED (0xFE = off), map flags (1 measured, 2 last commit ok)]
+//                            calibration state (led_cal.h), map flags (1 measured, 2 last commit ok),
+//                            capture seq, row, col, flags, right half map (0 ?, 1 same, 2 differs)]
 #define CFG_RAW_HID_ID 0xF6
 enum cfg_hid_cmd {
     CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
@@ -73,12 +76,13 @@ enum cfg_hid_cmd {
     CMD_LED_ENABLE  = 0x05, // arg: 0/1 = lights off/on (preview; saved by VIA lighting save)
     CMD_SET_ZONE    = 0x06, // args: zone, underglow hue, underglow sat (preview)
     CMD_SAVE_ZONE   = 0x07, // save the previewed zone settings
-    CMD_CAL_LIGHT   = 0x08, // arg: physical LED 0-73 to light alone (0xFF = all off); starts calibration
+    CMD_CAL_LIGHT   = 0x08, // arg: physical LED 0-73 to light alone (0xFF = all off); starts calibration + key capture
     CMD_CAL_END     = 0x09, // end calibration, effects resume
     CMD_MAP_READ    = 0x0A, // arg: offset -> [.., .., offset, LED count, 26 map entries]
     CMD_MAP_WRITE   = 0x0B, // args: offset, len (<= 26), entries (staged)
     CMD_MAP_COMMIT  = 0x0C, // validate + save + apply the staged map (status byte 16 bit 1 = ok)
     CMD_MAP_RESET   = 0x0D, // back to the built-in map
+    CMD_CAL_TEST    = 0x0E, // light the mapped LED of each pressed key (ends with CMD_CAL_END)
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -115,12 +119,14 @@ enum frame_type {
 };
 
 enum cfg_state { ST_OFF, ST_ASK, ST_CHALLENGE, ST_READY, ST_CLOSING };
-enum cfg_tab { TAB_KEYS, TAB_KNOBS, TAB_LEDS, TAB_TRACKPAD, TAB_COUNT };
+enum cfg_tab { TAB_LAYOUT, TAB_LEDS, TAB_TRACKPAD, TAB_COUNT };
 enum led_field { LF_ENABLE, LF_EFFECT, LF_HUE, LF_SAT, LF_VAL, LF_SPEED, LF_ZONE, LF_UG_HUE, LF_UG_SAT, LF_IDLE, LF_COUNT };
 enum led_zone { ZONE_ALL, ZONE_SOLID_UNDERGLOW, ZONE_KEYS_ONLY, ZONE_COUNT };
 enum tp_field { TF_ENABLE, TF_THRESHOLD, TF_RELEASE, TF_COUNT };
-// Knobs tab slots: left ccw/cw/press, right ccw/cw/press.
+// Knob actions (Layout tab): left ccw/cw/press, right ccw/cw/press. The
+// selection is either a key (sel_row/sel_col) or a knob action (knob_slot).
 #define KNOB_SLOTS 6
+#define NO_SLOT 0xFF
 
 // Letters for the connect check (no I/O/Q/Z/B/G/V to avoid look-alikes). One
 // letter is enough: it is only shown by the page that received the HELLO, so
@@ -188,7 +194,7 @@ static struct {
 typedef struct {
     uint8_t state, tab, layer, hid;
     uint8_t zone, ug_hue, ug_sat; // LED zones, for the right half's LEDs
-    uint8_t cal;                  // LED calibration: 0 off, 1 all dark, 2 + LED index
+    uint8_t cal;                  // LED calibration / test state (led_cal.h)
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -240,10 +246,10 @@ static uint16_t knob_slot_keycode(uint8_t slot) {
 }
 
 static void load_pending_for_tab(void) {
-    if (cfg.tab == TAB_KEYS && cfg.sel_row != NO_KEY) {
-        set_pending(dynamic_keymap_get_keycode(cfg.layer, cfg.sel_row, cfg.sel_col));
-    } else if (cfg.tab == TAB_KNOBS) {
+    if (cfg.tab == TAB_LAYOUT && cfg.knob_slot != NO_SLOT) {
         set_pending(knob_slot_keycode(cfg.knob_slot));
+    } else if (cfg.tab == TAB_LAYOUT && cfg.sel_row != NO_KEY) {
+        set_pending(dynamic_keymap_get_keycode(cfg.layer, cfg.sel_row, cfg.sel_col));
     }
     cfg.tx_ui = true;
 }
@@ -299,44 +305,10 @@ static void zones_color(uint8_t *hue, uint8_t *sat) {
     *sat = is_keyboard_master() ? zones.sat : oled_state.ug_sat;
 }
 
-/* LED calibration: light one physical LED (raw chain index, independent of the
- * LED map) so the page can ask which key it is under. */
-#    define CAL_OFF 0xFE
-#    define CAL_DARK 0xFF
-static uint8_t cal = CAL_OFF;
-static bool    cal_was_enabled;
-static bool    map_commit_ok;
-
-static void cal_set(uint8_t index) {
-    if (cal == CAL_OFF) {
-        cal_was_enabled = rgb_matrix_is_enabled();
-        if (!cal_was_enabled) {
-            rgb_matrix_enable_noeeprom();
-        }
-    }
-    cal = index < LED_MAP_COUNT ? index : CAL_DARK;
-}
-
-static void cal_end(void) {
-    if (cal != CAL_OFF) {
-        cal = CAL_OFF;
-        if (!cal_was_enabled) {
-            rgb_matrix_disable_noeeprom();
-        }
-    }
-}
-
-static uint8_t cal_code(void) {
-    return cal == CAL_OFF ? 0 : cal == CAL_DARK ? 1 : 2 + cal;
-}
+static bool map_commit_ok;
 
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    uint8_t code = is_keyboard_master() ? cal_code() : oled_state.cal;
-    if (code) {
-        for (uint8_t i = led_min; i < led_max; i++) {
-            uint8_t v = code >= 2 && i == code - 2 ? RGB_MATRIX_MAXIMUM_BRIGHTNESS : 0;
-            rgb_matrix_set_color(i, v, v, v);
-        }
+    if (led_cal_indicators(led_min, led_max, is_keyboard_master() ? led_cal_code() : oled_state.cal)) {
         return false;
     }
     uint8_t zone = zones_zone();
@@ -512,9 +484,10 @@ static void bridge_ask(void) {
 // Confirmed: start keyboard-only mode and send HELLO to the page.
 static void bridge_start(void) {
     memset(&cfg, 0, sizeof(cfg));
-    cfg.sel_row = NO_KEY;
-    cfg.sel_col = NO_KEY;
-    cfg.pick    = 0;
+    cfg.sel_row   = NO_KEY;
+    cfg.sel_col   = NO_KEY;
+    cfg.knob_slot = NO_SLOT;
+    cfg.pick      = 0;
     cfg.pending = picker_at(0);
     start_handshake();
 }
@@ -678,11 +651,16 @@ static void cfg_raw_hid(uint8_t *data) {
             break;
         case CMD_CAL_LIGHT:
             if (hid_writes_allowed()) {
-                cal_set(arg);
+                led_cal_light(arg);
+            }
+            break;
+        case CMD_CAL_TEST:
+            if (hid_writes_allowed()) {
+                led_cal_test();
             }
             break;
         case CMD_CAL_END:
-            cal_end();
+            led_cal_end();
             break;
         case CMD_MAP_READ:
             data[3] = LED_MAP_COUNT;
@@ -736,8 +714,8 @@ static void cfg_raw_hid(uint8_t *data) {
     data[12] = zones.zone;
     data[13] = zones.hue;
     data[14] = zones.sat;
-    data[15] = cal;
     data[16] = (led_map_is_measured() ? 1 : 0) | (map_commit_ok ? 2 : 0);
+    led_cal_status(data); // 15, 17-21
 #endif
     data[9]  = vial_unlocked ? 1 : 0;
     data[10] = (ask_left + 999) / 1000;
@@ -829,12 +807,15 @@ static void next_tab(void) {
 
 static void navigate(int8_t dir) {
     switch (cfg.tab) {
-        case TAB_KEYS:
-            cfg.layer = (cfg.layer + LAYERS + dir) % LAYERS;
-            load_pending_for_tab();
-            break;
-        case TAB_KNOBS:
-            cfg.knob_slot = (cfg.knob_slot + KNOB_SLOTS + dir) % KNOB_SLOTS;
+        case TAB_LAYOUT:
+            if (cfg.knob_down[0]) {
+                // Left knob held + turn: step through the knob actions.
+                cfg.knob_slot = cfg.knob_slot == NO_SLOT ? (dir > 0 ? 0 : KNOB_SLOTS - 1) : (cfg.knob_slot + KNOB_SLOTS + dir) % KNOB_SLOTS;
+                cfg.sel_row = cfg.sel_col = NO_KEY;
+                cfg.sel_held                = false;
+            } else {
+                cfg.layer = (cfg.layer + LAYERS + dir) % LAYERS;
+            }
             load_pending_for_tab();
             break;
         case TAB_LEDS:
@@ -871,8 +852,7 @@ static void pick_category(int8_t dir) {
 
 static void change_value(int8_t dir) {
     switch (cfg.tab) {
-        case TAB_KEYS:
-        case TAB_KNOBS:
+        case TAB_LAYOUT:
             pick_step(dir);
             break;
 #ifdef RGB_MATRIX_ENABLE
@@ -889,13 +869,14 @@ static void change_value(int8_t dir) {
 
 static void apply(void) {
     switch (cfg.tab) {
-        case TAB_KEYS:
-            if (cfg.sel_row != NO_KEY) {
-                dynamic_keymap_set_keycode(cfg.layer, cfg.sel_row, cfg.sel_col, cfg.pending);
-                cfg.tx_rows[cfg.layer] |= 1u << cfg.sel_row;
+        case TAB_LAYOUT: {
+            if (cfg.knob_slot == NO_SLOT) {
+                if (cfg.sel_row != NO_KEY) {
+                    dynamic_keymap_set_keycode(cfg.layer, cfg.sel_row, cfg.sel_col, cfg.pending);
+                    cfg.tx_rows[cfg.layer] |= 1u << cfg.sel_row;
+                }
+                break;
             }
-            break;
-        case TAB_KNOBS: {
             uint8_t knob = cfg.knob_slot / 3;
             if (cfg.knob_slot % 3 == 2) {
                 uint8_t row = knob == 0 ? KNOB_L_ROW : KNOB_R_ROW;
@@ -998,17 +979,20 @@ static void key_event(uint8_t row, uint8_t col, bool pressed) {
             challenge_key(base);
             break;
         case ST_READY:
-            if (cfg.tab == TAB_KEYS) {
-                if (cfg.sel_held && (row != cfg.sel_row || col != cfg.sel_col)) {
+            if (cfg.tab == TAB_LAYOUT) {
+                if (cfg.knob_slot != NO_SLOT && cfg.knob_down[0]) {
+                    // Left knob held + key: copy its keycode for the knob action.
+                    cfg.knob_used[0] = true;
+                    set_pending(default_layer_keycode(row, col));
+                } else if (cfg.sel_held && (row != cfg.sel_row || col != cfg.sel_col)) {
                     set_pending(default_layer_keycode(row, col));
                 } else {
-                    cfg.sel_row  = row;
-                    cfg.sel_col  = col;
-                    cfg.sel_held = true;
+                    cfg.sel_row   = row;
+                    cfg.sel_col   = col;
+                    cfg.sel_held  = true;
+                    cfg.knob_slot = NO_SLOT;
                     load_pending_for_tab();
                 }
-            } else if (cfg.tab == TAB_KNOBS) {
-                set_pending(default_layer_keycode(row, col));
             }
             break;
     }
@@ -1026,7 +1010,7 @@ static void knob_turn(uint8_t knob, bool clockwise) {
         navigate(dir);
     } else if (cfg.knob_down[1]) {
         cfg.knob_used[1] = true;
-        if (cfg.tab == TAB_KEYS || cfg.tab == TAB_KNOBS) {
+        if (cfg.tab == TAB_LAYOUT) {
             pick_category(dir);
         }
     } else {
@@ -1035,6 +1019,11 @@ static void knob_turn(uint8_t knob, bool clockwise) {
 }
 
 bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
+#ifdef RGB_MATRIX_ENABLE
+    if (led_cal_process(record)) {
+        return false; // LED calibration / test: the page reads the key instead
+    }
+#endif
     keyevent_t *ev     = &record->event;
     bool        is_key = ev->type == KEY_EVENT && ev->key.row < MATRIX_ROWS;
     uint8_t     row = ev->key.row, col = ev->key.col;
@@ -1218,7 +1207,7 @@ static void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_l
 static void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
-    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat, cal_code()};
+    cfg_oled_t        now    = {cfg.state, cfg.tab, cfg.layer, hid.state, zones.zone, zones.hue, zones.sat, led_cal_code()};
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal;
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || (active && timer_elapsed(last_time) > CONFIG_MODE_OLED_SYNC_MS);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
@@ -1241,7 +1230,7 @@ bool config_mode_oled_task(void) {
         return false;
     }
     // Portrait OLED: 5 characters per line, so each string below is one line.
-    static const char tab_names[TAB_COUNT][6] PROGMEM = {"Keys ", "Knobs", "LEDs ", "Pad  "};
+    static const char tab_names[TAB_COUNT][6] PROGMEM = {"Keys ", "LEDs ", "Pad  "};
     if (asking) {
         oled_write_P(PSTR("CONF?"), true);
         oled_write_P(oled_state.hid == HS_ASK ? PSTR("Web  ") : PSTR("     "), false);
@@ -1307,8 +1296,8 @@ void config_mode_task(void) {
 #ifdef RGB_MATRIX_ENABLE
     zones_apply_flags(zones_zone());
     led_map_task();
-    if (cal != CAL_OFF && hid.state != HS_ACTIVE) {
-        cal_end(); // the page went away mid-calibration
+    if (hid.state != HS_ACTIVE) {
+        led_cal_end(); // the page went away mid-calibration
     }
 #endif
     if (!is_keyboard_master()) {

@@ -41,6 +41,8 @@ static uint8_t  sync_pending = (1 << LEDMAP_CHUNKS) - 1;
 static uint16_t sync_time;
 static uint8_t  rx_version, rx_mask;
 static uint8_t  rx_buf[LED_MAP_COUNT];
+static uint8_t  right_sum;
+static bool     right_known;
 
 static uint8_t checksum(const uint8_t *map) {
     uint8_t sum = LEDMAP_MAGIC;
@@ -48,6 +50,18 @@ static uint8_t checksum(const uint8_t *map) {
         sum += map[i];
     }
     return sum;
+}
+
+// Order-sensitive (unlike checksum()), for the right-half sync check.
+static uint8_t map_crc(const uint8_t *map) {
+    uint8_t crc = 0;
+    for (uint8_t i = 0; i < LED_MAP_COUNT; i++) {
+        crc ^= map[i];
+        for (uint8_t b = 0; b < 8; b++) {
+            crc = crc & 0x80 ? (uint8_t)(crc << 1) ^ 0x07 : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
 }
 
 bool led_map_valid(const uint8_t *map) {
@@ -128,24 +142,29 @@ static void schedule_sync(void) {
         sync_version = 1;
     }
     sync_pending = (1 << LEDMAP_CHUNKS) - 1;
+    right_known  = false;
 }
 
+// Right half: collect a full map, apply it, and reply with the checksum of the
+// map it now runs so the master can confirm the sync.
 static void slave_handler(uint8_t in_len, const void *in_data, uint8_t out_len, void *out_data) {
     const uint8_t *d = in_data;
-    if (in_len < 3 || d[1] + d[2] > LED_MAP_COUNT || in_len < 3 + d[2]) {
-        return;
-    }
-    if (d[0] != rx_version) {
-        rx_version = d[0];
-        rx_mask    = 0;
-    }
-    memcpy(&rx_buf[d[1]], &d[3], d[2]);
-    rx_mask |= 1 << (d[1] / LEDMAP_CHUNK);
-    if (rx_mask == (1 << LEDMAP_CHUNKS) - 1) {
-        rx_mask = 0;
-        if (memcmp(rx_buf, active, LED_MAP_COUNT) != 0 && led_map_valid(rx_buf)) {
-            map_apply(rx_buf);
+    if (in_len >= 3 && d[1] + d[2] <= LED_MAP_COUNT && in_len >= 3 + d[2]) {
+        if (d[0] != rx_version) {
+            rx_version = d[0];
+            rx_mask    = 0;
         }
+        memcpy(&rx_buf[d[1]], &d[3], d[2]);
+        rx_mask |= 1 << (d[1] / LEDMAP_CHUNK);
+        if (rx_mask == (1 << LEDMAP_CHUNKS) - 1) {
+            rx_mask = 0;
+            if (memcmp(rx_buf, active, LED_MAP_COUNT) != 0 && led_map_valid(rx_buf)) {
+                map_apply(rx_buf);
+            }
+        }
+    }
+    if (out_len >= 1) {
+        ((uint8_t *)out_data)[0] = map_crc(active);
     }
 }
 
@@ -178,8 +197,14 @@ void led_map_task(void) {
             buf[1]      = off;
             buf[2]      = len;
             memcpy(&buf[3], &active[off], len);
-            if (transaction_rpc_send(RPC_ID_USER_LEDMAP, 3 + len, buf)) {
+            uint8_t reply = 0;
+            if (transaction_rpc_exec(RPC_ID_USER_LEDMAP, 3 + len, buf, sizeof(reply), &reply)) {
                 sync_pending &= ~(1 << chunk);
+                if (chunk == LEDMAP_CHUNKS - 1) {
+                    // The last chunk completes the map: the reply is the result.
+                    right_sum   = reply;
+                    right_known = true;
+                }
             }
             return; // one chunk per loop
         }
@@ -223,6 +248,10 @@ void led_map_reset(void) {
 
 bool led_map_is_measured(void) {
     return measured;
+}
+
+uint8_t led_map_right_state(void) {
+    return !right_known ? 0 : right_sum == map_crc(active) ? 1 : 2;
 }
 
 #endif
