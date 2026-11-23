@@ -17,6 +17,7 @@
  */
 
 #include "brettssofle.h"
+#include "diag.h"
 #include "led_layers.h"
 
 // Default keymap. Everything here can be changed live in Vial.
@@ -205,6 +206,7 @@ static void rgb_idle_task(void) {
 #endif
 
 void keyboard_post_init_user(void) {
+    diag_init(); // a crash record from the previous run (diag.c)
 #ifdef OLED_ENABLE
     oled_right_init();
 #endif

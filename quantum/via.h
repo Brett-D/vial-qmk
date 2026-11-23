@@ -127,6 +127,8 @@ enum via_qmk_audio_value {
 
 // Can be called in an overriding via_init_kb() to test if keyboard level code usage of
 // EEPROM is invalid and use/save defaults.
+// 24-bit EEPROM validity magic (weak; default: Vial BUILD_ID / build date).
+uint32_t via_eeprom_magic(void);
 bool via_eeprom_is_valid(void);
 
 // Sets VIA/keyboard level usage of EEPROM to valid/invalid

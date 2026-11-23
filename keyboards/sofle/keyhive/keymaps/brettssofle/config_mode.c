@@ -35,6 +35,7 @@
 #include "brettssofle.h"
 #include "bridge.h"
 #include "deliver.h"
+#include "diag.h"
 #ifdef NETWORK_ENABLE
 #    include "net.h"
 #endif
@@ -48,6 +49,9 @@
 #include "transactions.h"
 #include "via.h"
 
+#ifndef CONFIG_NET_BYE_MS
+#    define CONFIG_NET_BYE_MS 6000 // "NET off" + why, after network mode ends
+#endif
 #ifndef CONFIG_MODE_IDLE_EXIT_MS
 #    define CONFIG_MODE_IDLE_EXIT_MS 300000
 #endif
@@ -97,6 +101,7 @@ enum cfg_hid_cmd {
     CMD_LAYERS      = 0x14, // whole-keyboard effect, key-press effect (VialRGB ids, 0 = none), key-press hue, sat, save
     CMD_LOOK        = 0x15, // speed, hue, sat, val (preview; saved by VIA lighting save)
     CMD_WIGGLE      = 0x16, // mouse wiggler: on, interval index (not saved)
+    CMD_DIAG        = 0x17, // crash record, stack use, why network mode ended (diag.c); arg 1 = clear
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -221,6 +226,7 @@ typedef struct {
     uint8_t lay_base, lay_react, lay_hue, lay_sat; // layered lighting (led_layers.c)
     uint8_t dl, dl_pct;                            // typed page delivery (deliver.c)
     uint8_t net;                                   // network mode: state | 0x80 = no address yet (fallbacks)
+    uint8_t net_bye;                               // network mode just ended: why (NET_EXIT_*)
 } cfg_oled_t;
 static cfg_oled_t oled_state;
 
@@ -578,7 +584,7 @@ void config_mode_toggle(void) {
     }
 #ifdef NETWORK_ENABLE
     if (net_mode_active()) {
-        net_mode_exit(); // CONFIG / both knobs leave network mode
+        net_mode_exit(NET_EXIT_KEY); // CONFIG / both knobs leave network mode
         return;
     }
 #endif
@@ -793,6 +799,9 @@ static void cfg_raw_hid(uint8_t *data) {
             nav.on   = arg && hid.state == HS_ACTIVE && cfg.state == ST_OFF;
             nav.time = timer_read32();
             break;
+        case CMD_DIAG:
+            diag_raw_hid(data); // its own reply layout
+            return;
         case CMD_REQUEST:
             hid_request();
             break;
@@ -1149,8 +1158,8 @@ static bool     net_fallback_key(keyrecord_t *record) {
         return false;
     }
     held_swallowed[ev->key.row] |= (matrix_row_t)1 << ev->key.col;
-    net_mode_exit();
-    fallback_deliver_at = timer_read32() | 1;
+    net_mode_exit(NET_EXIT_FALLBACK);
+    fallback_deliver_at = timer_stamp32();
     return true;
 }
 #endif
@@ -1390,8 +1399,11 @@ static void oled_sync_task(void) {
     now.dl_pct = deliver_percent();
 #ifdef NETWORK_ENABLE
     now.net = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) : 0;
+    uint32_t ago;
+    uint8_t  why = net_last_exit(&ago);
+    now.net_bye  = !now.net && why && ago < CONFIG_NET_BYE_MS ? why : 0;
 #endif
-    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl || now.net;
+    bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl || now.net || now.net_bye;
     // Resent now and then even when idle: the right half may have restarted.
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || timer_elapsed(last_time) > (active ? CONFIG_MODE_OLED_SYNC_MS : 5000);
     if (due && transaction_rpc_send(RPC_ID_USER_CFG, sizeof(now), &now)) {
@@ -1406,7 +1418,7 @@ bool config_mode_oled_task(void) {
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
     bool           net    = oled_state.net && oled_state.hid != HS_ASK; // CONF? for the page wins
-    uint8_t        screen = net ? 0xC0 | (oled_state.hid == HS_ACTIVE ? 0x10 : 0) | (oled_state.net & 0x80 ? 0x08 : 0) | (oled_state.net & 0x07) : oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    uint8_t        screen = !net && oled_state.net_bye && !oled_state.dl && !asking ? 0xB0 | oled_state.net_bye : net ? 0xC0 | (oled_state.hid == HS_ACTIVE ? 0x10 : 0) | (oled_state.net & 0x80 ? 0x08 : 0) | (oled_state.net & 0x07) : oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
     if (screen != last_screen) {
         oled_clear();
         last_screen = screen;
@@ -1436,6 +1448,14 @@ bool config_mode_oled_task(void) {
         }
         oled_set_cursor(0, 13);
         oled_write_P(PSTR("CONFG=exit "), false);
+        return true;
+    }
+    if (screen >> 4 == 0xB) {
+        // Network mode just ended: say why (v10 left it by itself, unseen).
+        static const char why[4][11] PROGMEM = {"          ", "by   key  ", "idle 10min", "P=   type "};
+        oled_write_P(PSTR("NET  "), true);
+        oled_write_P(PSTR("     off  "), false);
+        oled_write_P(why[oled_state.net_bye & 3], false);
         return true;
     }
     if (oled_state.dl) {
@@ -1534,7 +1554,7 @@ static void knob_combo_task(void) {
         return;
     }
     if (start == 0) {
-        start = timer_read32() | 1;
+        start = timer_stamp32();
     } else if (timer_elapsed32(start) >= CONFIG_MODE_COMBO_MS) {
         armed            = false;
         cfg.knob_used[0] = cfg.knob_used[1] = true;

@@ -7,6 +7,10 @@
  * Vial
  * ------------------------------------------------------------------------ */
 #define VIAL_KEYBOARD_UID { 0x21, 0x82, 0xA8, 0xF1, 0xCC, 0x55, 0x7D, 0x98 }
+// Keymap and settings survive reflashing while this stays the same; bump it
+// only when what is stored changes (layers, matrix, Vial entry counts, the
+// EECONFIG_USER / kb datablock layout). See eeprom_layout.c.
+#define BRETT_EEPROM_LAYOUT_VERSION 1
 // Hold the four corner keys (` / ` top row and both Shifts) to unlock Vial.
 #define VIAL_UNLOCK_COMBO_ROWS { 0, 5, 3, 8 }
 #define VIAL_UNLOCK_COMBO_COLS { 0, 0, 0, 0 }

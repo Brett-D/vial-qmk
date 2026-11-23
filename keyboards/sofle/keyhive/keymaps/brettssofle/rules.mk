@@ -45,7 +45,7 @@ SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
 # Config mode + keystroke bridge (config_page/sofle-config.html). After
 # editing config_page/gen_config.py or page.html, rerun:
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
-SRC += config_mode.c bridge.c wiggler.c deliver.c config_page_blob.c
+SRC += config_mode.c bridge.c wiggler.c deliver.c config_page_blob.c diag.c eeprom_layout.c
 # Typed page delivery: config_page_blob.h is the page as deliver.c types it,
 # regenerated from sofle-config.html at every build so the two never drift.
 CONFIG_PAGE_BLOB_GEN := $(shell python3 $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1 || python $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1)
@@ -65,7 +65,7 @@ ifeq ($(strip $(NETWORK_ENABLE)), yes)
     ifeq ($(wildcard $(LWIP_DIR)/core/init.c),)
         $(error lwIP not extracted: run  7z x lib/chibios/ext/lwip-2.1.2.7z -olib/chibios/ext  (or build with NETWORK_ENABLE=no))
     endif
-    OPT_DEFS += -DNETWORK_ENABLE
+    OPT_DEFS += -DNETWORK_ENABLE -DNET_DIAG
     EXTRAINCDIRS += $(BRETTS_DIR)/net $(LWIP_DIR)/include
     SRC += net/ncm.c net/ntb.c net/stack.c net/httpd.c net/api.c
     SRC += $(addprefix $(LWIP_DIR)/, core/init.c core/def.c core/inet_chksum.c core/ip.c core/mem.c core/memp.c \

@@ -223,7 +223,7 @@ bool deliver_process(keyrecord_t *record) {
     if (is_key && !ev->pressed && (dl_swallowed[row] & bit)) {
         dl_swallowed[row] &= ~bit;
         if (dl.go && row == dl.go_row && col == dl.go_col) {
-            dl.go_time = timer_read32() | 1;
+            dl.go_time = timer_stamp32();
         }
         return true;
     }

@@ -5,6 +5,14 @@
 
 #include QMK_KEYBOARD_H
 
+// A nonzero timer_read32() stamp (0 = "not set") that is never in the future:
+// "timer_read32() | 1" can be 1 ms ahead, so timer_elapsed32() wraps to ~49
+// days and the timeout fires at once.
+static inline uint32_t timer_stamp32(void) {
+    uint32_t t = timer_read32();
+    return t ? t : UINT32_MAX;
+}
+
 enum layers {
     _QWERTY,
     _COLEMAK,

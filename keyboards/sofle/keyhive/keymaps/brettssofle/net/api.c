@@ -117,9 +117,11 @@ static bool run_commands(const http_request_t *req, http_response_t *r) {
             }
             buf[i] = (uint8_t)(hi << 4 | lo);
         }
+        NET_CRUMB(CRUMB_API);
         capturing = true;
         raw_hid_receive(buf, sizeof(buf));
         capturing = false;
+        NET_CRUMB(CRUMB_HTTP);
         calls++;
         for (uint8_t i = 0; i < 32; i++) {
             o += sprintf(o, "%02x", buf[i]);

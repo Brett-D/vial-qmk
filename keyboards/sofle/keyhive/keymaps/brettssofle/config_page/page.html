@@ -111,6 +111,7 @@
   <button id="disconnectBtn" class="hidden">Disconnect</button>
   <span class="dim small" id="whereFrom">Works offline from this file.</span>
 </header>
+<div id="diagBanner" class="err hidden"><span id="diagText"></span> <button id="diagCopy">Copy</button> <button id="diagClear">Dismiss</button></div>
 <div id="focusWarn" class="banner">This page isn't focused. Click here first, or the keyboard's messages will be typed into another window.</div>
 <main>
   <section>
@@ -502,11 +503,32 @@ async function requestSession() {
   await closeHid();
 }
 
+// Crash record / stack use / why network mode ended (0xF6 0x17, diag.c).
+async function readDiag() {
+  let d;
+  try { d = await cmd([0xf6, 0x17]); } catch (e) { return; }
+  if (d[0] !== 0xf6 || d[2] !== 0xd1) return; // older firmware
+  const u32 = (i) => (d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24)) >>> 0, u16 = (i) => d[i] | (d[i + 1] << 8);
+  const hex = (v) => "0x" + v.toString(16).padStart(8, "0");
+  const crumbs = ["main loop", "network: receiving", "network: timers", "network: sending", "network: HTTP request", "network: page command", "network: start/stop"];
+  const boots = ["power on", "reset button", "crash", "watchdog", "restart"];
+  const exits = ["", "the Config key / both knobs", "10 min without traffic", "P (type the page instead)"];
+  log(`keyboard: last start ${boots[d[24]] || d[24]}; stack free: main loop ${u16(18)} B, network ${u16(20)} B, interrupts ${u16(22)} B` +
+      (d[25] ? `; network mode last ended by ${exits[d[25]] || d[25]}, ${u16(26)} s ago` : ""));
+  if (!d[3]) { $("diagBanner").classList.add("hidden"); return; }
+  $("diagText").textContent = `The keyboard restarted after a crash (HardFault at pc ${hex(u32(6))}, lr ${hex(u32(10))}, sp ${hex(u32(14))}, in ${crumbs[d[4]] || d[4]}` +
+    (d[5] ? `, interrupt ${d[5]}` : "") + `; stack free: main ${u16(18)} B, network ${u16(20)} B). Please send this line to the developer.`;
+  $("diagBanner").classList.remove("hidden");
+}
+$("diagCopy").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText($("diagText").textContent).then(() => toast("Copied")));
+$("diagClear").addEventListener("click", async () => { $("diagBanner").classList.add("hidden"); try { await cmd([0xf6, 0x17, 1]); } catch (e) { /* gone */ } });
+
 async function startHidSession(st) {
   S.mode = "hid"; S.state = "loading";
   document.body.classList.add("hid");
   readStatus(st);
   render();
+  await readDiag();
   try {
     await hidLoadAll();
   } catch (e) { log("load: " + e.message); toast("Lost the keyboard while reading: " + e.message, true); await closeHid(); return; }

@@ -12,6 +12,7 @@
 #include "led_map.h"
 #include "transactions.h"
 #include "version.h"
+#include "diag.h"
 
 #define VIEW_EE_OFFSET 78 // after the LED map (led_map.c: 76 bytes)
 #define VIEW_EE_MAGIC 0xA5
@@ -27,7 +28,12 @@ typedef struct {
     uint8_t tp_z, tp_peak, tp_last, tp_flags, tp_thr, tp_rel;
     uint8_t led_on, led_mode, led_val, led_zone, led_base, led_react;
     uint8_t wiggle; // mouse wiggler on (shown on every page)
+    uint8_t boot;   // how the keyboard last started (BOOT_*)
+    uint8_t crash;  // 1 = after a crash, 2 = also show the banner
+    uint8_t crumb, exc;
+    uint8_t pc[3], lr[3]; // low 24 bits (flash 0x10xxxxxx)
 } view_t;
+_Static_assert(sizeof(view_t) <= RPC_M2S_BUFFER_SIZE, "view_t too big for the split RPC");
 
 static view_t view; // master: what it sent; right half: what it shows
 
@@ -60,7 +66,19 @@ void oled_pages_task(void) {
     if (!is_keyboard_master()) {
         return;
     }
-    view_t now = {.page = view.page, .wiggle = wiggler_on()};
+    view_t              now = {.page = view.page, .wiggle = wiggler_on()};
+    const diag_crash_t *d   = diag_crash();
+    static bool         banner_done;
+    // The crash banner stays until a key is pressed or for a minute.
+    banner_done |= last_matrix_activity_time() != 0 || timer_read32() > 60000;
+    now.boot  = d->boot;
+    now.crash = d->crashed ? (banner_done ? 1 : 2) : 0;
+    now.crumb = d->crumb;
+    now.exc   = d->exc;
+    for (uint8_t i = 0; i < 3; i++) {
+        now.pc[i] = d->pc >> (8 * i);
+        now.lr[i] = d->lr >> (8 * i);
+    }
 #ifdef POINTING_DEVICE_ENABLE
     if (now.page == OLED_PAGE_TRACKPAD) {
         const trackpad_z_t *z = trackpad_z_get();
@@ -223,6 +241,37 @@ static void write_uptime(void) {
     oled_write(s, false);
 }
 
+// The low 20 bits of a code address as 5 hex digits (one OLED line).
+static void write_hex5(const uint8_t *a) {
+    uint32_t v = (uint32_t)a[0] | (uint32_t)a[1] << 8 | (uint32_t)a[2] << 16;
+    char     s[6];
+    for (int8_t i = 4; i >= 0; i--) {
+        s[i] = "0123456789abcdef"[v & 15];
+        v >>= 4;
+    }
+    s[5] = 0;
+    oled_write(s, false);
+}
+
+// After a crash reboot: where it happened (also on the info page and the
+// config page). "in" = what the network code was doing; "irq" = interrupt.
+static void page_crash(void) {
+    oled_write_P(PSTR("CRASH"), true);
+    oled_write_P(PSTR("     pc   "), false);
+    write_hex5(view.pc);
+    oled_write_P(PSTR("lr   "), false);
+    write_hex5(view.lr);
+    oled_write_P(PSTR("in   "), false);
+    oled_write(diag_crumb_name(view.crumb), false);
+    if (view.exc) {
+        oled_write_P(PSTR("irq  "), false);
+        write_num(view.exc, false);
+    } else {
+        oled_write_P(PSTR("main loop "), false);
+    }
+    oled_write_P(PSTR("     Any  key  "), false);
+}
+
 static void page_trackpad(void) {
     oled_write_P(PSTR("TPAD "), true);
     oled_write_P(PSTR("Z    "), false);
@@ -276,7 +325,13 @@ static void page_info(void) {
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
     oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR(" v10 "), false);
+    oled_write_P(PSTR(" v11 "), false);
+    static const char boots[5][6] = {"power", "reset", "CRASH", "wdog ", "other"};
+    oled_write_P(PSTR("Boot "), false);
+    oled_write(boots[view.boot < 5 ? view.boot : 4], view.boot == BOOT_CRASH);
+    if (view.crash) {
+        write_hex5(view.pc);
+    }
 }
 
 // Last line: page number, "W" while the mouse wiggler is on.
@@ -291,12 +346,17 @@ static void footer(uint8_t page) {
 
 // Right half: draws the selected page; false = page 0 (the caller draws the status).
 bool oled_pages_render(void) {
-    static uint8_t last = 0xFF;
-    if (view.page != last) {
+    static uint8_t last  = 0xFF;
+    uint8_t        shown = view.crash == 2 ? 0xFE : view.page; // 0xFE: the crash banner
+    if (shown != last) {
         oled_clear();
-        last = view.page;
+        last = shown;
     }
     oled_set_cursor(0, 0);
+    if (shown == 0xFE) {
+        page_crash();
+        return true;
+    }
     switch (view.page) {
         case OLED_PAGE_TRACKPAD:
             page_trackpad();

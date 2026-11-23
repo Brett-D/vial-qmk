@@ -15,6 +15,7 @@
 #include <strings.h>
 #include "lwip/tcp.h"
 #include "httpd.h"
+#include "stack.h"
 #include "config_page_blob.h"
 
 #define CONNS 3
@@ -160,12 +161,30 @@ static bool host_ok(const char *host) {
     return false;
 }
 
+// "METHOD /path HTTP/1.1": copies method and path (bounded).
+static bool request_line(const char *s, http_request_t *req) {
+    size_t i = 0, j = 0;
+    while (s[i] && s[i] != ' ' && i + 1 < sizeof(req->method)) {
+        req->method[i] = s[i];
+        i++;
+    }
+    if (s[i] != ' ' || i == 0) {
+        return false;
+    }
+    i++;
+    while (s[i] && s[i] != ' ' && s[i] != '\r' && j + 1 < sizeof(req->path)) {
+        req->path[j++] = s[i++];
+    }
+    return j > 0 && (s[i] == ' ' || s[i] == '\r' || s[i] == 0);
+}
+
 static void handle(conn_t *c) {
+    NET_CRUMB(CRUMB_HTTP);
     char *end = strstr(c->req, "\r\n\r\n");
     *end      = 0;
-    http_request_t req;
+    static http_request_t req; // static: keeps the network stack shallow
     memset(&req, 0, sizeof(req));
-    if (sscanf(c->req, "%7s %95s", req.method, req.path) != 2) {
+    if (!request_line(c->req, &req)) {
         text_response(c, 400, "bad request\n");
         return;
     }

@@ -142,7 +142,8 @@ a CDC-NCM network adapter, product ID `0x1288`); typing and the trackpad keep
 working. The computer gets **192.168.7.2** by DHCP — no gateway and no DNS,
 so its internet connection is untouched — and the keyboard is
 **192.168.7.1**. The OLED shows **NET**: `USB conn.` → `Link up DHCP` →
-`Open 192.168.7.1`. Open **http://192.168.7.1** (or http://sofle.local where
+`Open 192.168.7.1`. When network mode ends, the OLED says why for a few
+seconds (`NET off`: by key / idle 10min / P). Open **http://192.168.7.1** (or http://sofle.local where
 .local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
 serves the config page itself, gzipped from flash. The page asks for a
 session straight away; the OLED shows **CONF?** — press the right knob (or
@@ -294,6 +295,24 @@ The **same UF2 goes on both halves** (`MASTER_LEFT` decides which half is which)
 3. Copy the `.uf2` onto the drive. It disconnects and reboots.
 4. Repeat for the other half, then reconnect TRRS and plug USB into the **left** half.
 
-Every new build resets the saved Vial keymap to the defaults in `keymap.c` (Vial
-stamps each build with a random ID). Before reflashing, save your layout in Vial
-(*File → Save current layout*) and load it again afterwards.
+### Settings survive reflashing
+
+Stock Vial marks the EEPROM with a random per-build ID, so every new firmware
+reset the keymap, knobs, LEDs, LED map and trackpad settings. This keymap
+marks it with `BRETT_EEPROM_LAYOUT_VERSION` (config.h) instead, mixed with
+the sizes that decide where things are stored (layers, matrix, encoders,
+Vial tap-dance/combo/override/macro sizes, EECONFIG sizes; `eeprom_layout.c`,
+via a weak `via_eeprom_magic()` hook in `quantum/via.c`). Reflashing keeps
+everything; only a real layout change resets it, once. If one of those sizes
+changes, the build stops with "EEPROM layout changed (...)": bump the version
+and record the new values in `eeprom_layout.c`. The Vial keyboard UID is
+unchanged. (The first flash of a firmware with this, v11, still resets once.)
+
+### Crash reports
+
+If the keyboard ever hits a fault, it now reboots instead of freezing and
+remembers where: the right OLED shows **CRASH** with the code addresses (pc,
+lr) and what it was doing ("in netRx", ...) until a key is pressed; the INFO
+page shows "Boot CRASH" and the address; and the config page shows a red line
+to copy. The page's log also lists free stack space. Network code runs on its
+own 6 KB stack.

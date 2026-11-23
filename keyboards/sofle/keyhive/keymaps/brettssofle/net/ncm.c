@@ -25,6 +25,7 @@
 #include "net.h"
 #include "ntb.h"
 #include "stack.h"
+#include "diag.h"
 
 #ifndef NET_PRODUCT_ID
 #    define NET_PRODUCT_ID (PRODUCT_ID + 1) // its own PID: Windows binds the new function cleanly
@@ -133,6 +134,8 @@ static uint8_t           notify_buf[16] __attribute__((aligned(4)));
 static uint8_t           txq[TX_QUEUE][FRAME_MAX];
 static uint16_t          txq_len[TX_QUEUE];
 static uint8_t           txq_head, txq_count;
+static uint8_t           exit_why;
+static uint32_t          exit_time;
 
 uint32_t net_millis(void) {
     return timer_read32();
@@ -372,6 +375,18 @@ static void send_notification(void) {
     chSysUnlock();
 }
 
+static void stack_start(void) {
+    NET_CRUMB(CRUMB_NET_START);
+    netstack_start(ncm_tx);
+    NET_CRUMB(CRUMB_LOOP);
+}
+
+static void stack_stop(void) {
+    NET_CRUMB(CRUMB_NET_START);
+    netstack_stop();
+    NET_CRUMB(CRUMB_LOOP);
+}
+
 void net_mode_enter(void) {
     if (net_on) {
         return;
@@ -382,20 +397,27 @@ void net_mode_enter(void) {
     net_on     = true;
     state      = NET_USB;
     enter_time = timer_read32();
-    netstack_start(ncm_tx);
+    diag_on_net_stack(stack_start);
     restart_usb_driver(&USB_DRIVER); // re-enumerate with the network function
 }
 
-void net_mode_exit(void) {
+void net_mode_exit(uint8_t why) {
     if (!net_on) {
         return;
     }
-    netstack_stop();
+    exit_why  = why;
+    exit_time = timer_read32();
+    diag_on_net_stack(stack_stop);
     net_on = false;
     link_reset();
     state = NET_OFF;
     clear_keyboard();
     restart_usb_driver(&USB_DRIVER); // back to the plain keyboard
+}
+
+uint8_t net_last_exit(uint32_t *ms_ago) {
+    *ms_ago = exit_why ? timer_elapsed32(exit_time) : 0;
+    return exit_why;
 }
 
 bool net_mode_active(void) {
@@ -410,12 +432,12 @@ bool net_failed(void) {
     return net_on && state != NET_READY && timer_elapsed32(enter_time) > NET_FALLBACK_MS;
 }
 
-void net_task(void) {
-    if (!net_on) {
-        return;
-    }
+// Runs on the network code's own stack (diag.c): lwIP, the HTTP server and
+// the API (which runs VIA / Vial commands) go too deep for the main loop's.
+static void net_task_body(void) {
     if (rx_full) {
         // One transfer block per call; lwIP answers synchronously.
+        NET_CRUMB(CRUMB_NET_RX);
         ntb_parse(rx_buf, rx_len, netstack_input);
         rx_full = false;
         chSysLock();
@@ -424,13 +446,21 @@ void net_task(void) {
         }
         chSysUnlock();
     }
+    NET_CRUMB(CRUMB_NET_TIMER);
     netstack_poll();
+    NET_CRUMB(CRUMB_NET_TX);
     send_notification();
     flush_tx();
+    NET_CRUMB(CRUMB_LOOP);
+}
 
+void net_task(void) {
+    if (!net_on) {
+        return;
+    }
+    diag_on_net_stack(net_task_body);
     state = !data_on ? NET_USB : netstack_leases() ? NET_READY : NET_LINK;
-    uint32_t last = netstack_last_rx();
-    if (state == NET_READY && last && timer_elapsed32(last) > NET_IDLE_EXIT_MS) {
-        net_mode_exit();
+    if (state == NET_READY && netstack_idle_ms() > NET_IDLE_EXIT_MS) {
+        net_mode_exit(NET_EXIT_IDLE);
     }
 }

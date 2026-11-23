@@ -81,19 +81,26 @@ void via_qmk_rgb_matrix_set_value(uint8_t *data);
 void via_qmk_rgb_matrix_get_value(uint8_t *data);
 #endif
 
+// The 3-byte value stored at VIA_EEPROM_MAGIC_ADDR that marks the EEPROM as
+// written by a compatible firmware. Vial uses the random BUILD_ID, so every
+// new build resets the keymap and settings; a keyboard/keymap can override
+// this with a value that only changes when its stored layout does.
+__attribute__((weak)) uint32_t via_eeprom_magic(void) {
+#ifdef VIAL_ENABLE
+    return BUILD_ID & 0xFFFFFF;
+#else
+    char *p = QMK_BUILDDATE; // e.g. "2019-11-05-11:29:54"
+    return (uint32_t)(((p[2] & 0x0F) << 4) | (p[3] & 0x0F)) | (uint32_t)(((p[5] & 0x0F) << 4) | (p[6] & 0x0F)) << 8 | (uint32_t)(((p[8] & 0x0F) << 4) | (p[9] & 0x0F)) << 16;
+#endif
+}
+
 // Can be called in an overriding via_init_kb() to test if keyboard level code usage of
 // EEPROM is invalid and use/save defaults.
 bool via_eeprom_is_valid(void) {
-#ifdef VIAL_ENABLE
-    uint8_t magic0 = BUILD_ID & 0xFF;
-    uint8_t magic1 = (BUILD_ID >> 8) & 0xFF;
-    uint8_t magic2 = (BUILD_ID >> 16) & 0xFF;
-#else
-    char *  p      = QMK_BUILDDATE; // e.g. "2019-11-05-11:29:54"
-    uint8_t magic0 = ((p[2] & 0x0F) << 4) | (p[3] & 0x0F);
-    uint8_t magic1 = ((p[5] & 0x0F) << 4) | (p[6] & 0x0F);
-    uint8_t magic2 = ((p[8] & 0x0F) << 4) | (p[9] & 0x0F);
-#endif
+    uint32_t magic  = via_eeprom_magic();
+    uint8_t  magic0 = magic & 0xFF;
+    uint8_t  magic1 = (magic >> 8) & 0xFF;
+    uint8_t  magic2 = (magic >> 16) & 0xFF;
 
     return (eeprom_read_byte((void *)VIA_EEPROM_MAGIC_ADDR + 0) == magic0 && eeprom_read_byte((void *)VIA_EEPROM_MAGIC_ADDR + 1) == magic1 && eeprom_read_byte((void *)VIA_EEPROM_MAGIC_ADDR + 2) == magic2);
 }
@@ -101,16 +108,10 @@ bool via_eeprom_is_valid(void) {
 // Sets VIA/keyboard level usage of EEPROM to valid/invalid
 // Keyboard level code (eg. via_init_kb()) should not call this
 void via_eeprom_set_valid(bool valid) {
-#ifdef VIAL_ENABLE
-    uint8_t magic0 = BUILD_ID & 0xFF;
-    uint8_t magic1 = (BUILD_ID >> 8) & 0xFF;
-    uint8_t magic2 = (BUILD_ID >> 16) & 0xFF;
-#else
-    char *  p      = QMK_BUILDDATE; // e.g. "2019-11-05-11:29:54"
-    uint8_t magic0 = ((p[2] & 0x0F) << 4) | (p[3] & 0x0F);
-    uint8_t magic1 = ((p[5] & 0x0F) << 4) | (p[6] & 0x0F);
-    uint8_t magic2 = ((p[8] & 0x0F) << 4) | (p[9] & 0x0F);
-#endif
+    uint32_t magic  = via_eeprom_magic();
+    uint8_t  magic0 = magic & 0xFF;
+    uint8_t  magic1 = (magic >> 8) & 0xFF;
+    uint8_t  magic2 = (magic >> 16) & 0xFF;
 
     eeprom_update_byte((void *)VIA_EEPROM_MAGIC_ADDR + 0, valid ? magic0 : 0xFF);
     eeprom_update_byte((void *)VIA_EEPROM_MAGIC_ADDR + 1, valid ? magic1 : 0xFF);

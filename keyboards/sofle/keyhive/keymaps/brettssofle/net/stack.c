@@ -31,8 +31,10 @@ static net_tx_fn      tx_fn;
 static bool           ready;
 static uint8_t        leases;
 static uint32_t       last_rx;
+static bool           rx_seen;
 static struct udp_pcb *dhcp_pcb;
 static uint8_t        frame[1536];
+static uint8_t        dhcp_msg[576]; // static: the network code's stack is precious
 
 u32_t sys_now(void) {
     return net_millis();
@@ -42,8 +44,10 @@ uint8_t netstack_leases(void) {
     return leases;
 }
 
-uint32_t netstack_last_rx(void) {
-    return last_rx;
+uint32_t netstack_idle_ms(void) {
+    // A plain timestamp: never "| 1" it, which can put it in the future and
+    // make the elapsed time wrap to ~49 days (v10 left network mode at once).
+    return rx_seen ? net_millis() - last_rx : 0;
 }
 
 static err_t link_output(struct netif *n, struct pbuf *p) {
@@ -143,8 +147,8 @@ static void dhcp_reply(const uint8_t *req, uint8_t type, bool give_address) {
 }
 
 static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
-    uint8_t  msg[576];
-    uint16_t len = pbuf_copy_partial(p, msg, sizeof(msg), 0);
+    uint8_t *msg = dhcp_msg;
+    uint16_t len = pbuf_copy_partial(p, msg, sizeof(dhcp_msg), 0);
     pbuf_free(p);
     if (len < BOOTP_FIXED + 5 || msg[0] != 1 || msg[1] != 1 || msg[2] != 6) {
         return;
@@ -188,7 +192,7 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
 void netstack_start(net_tx_fn tx) {
     tx_fn   = tx;
     leases  = 0;
-    last_rx = 0;
+    rx_seen = false;
     if (!ready) {
         lwip_init();
         ip4_addr_t ip, mask, gw;
@@ -220,7 +224,8 @@ void netstack_input(const uint8_t *data, uint16_t len) {
     if (!ready || !tx_fn || len < 14 || len > 1518) {
         return;
     }
-    last_rx        = net_millis() | 1;
+    last_rx        = net_millis();
+    rx_seen        = true;
     struct pbuf *p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
     if (!p) {
         return; // out of buffers: dropped (TCP/ARP retry)
