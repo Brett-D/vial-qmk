@@ -325,7 +325,7 @@ static void page_info(void) {
     oled_write_P(PSTR("     Up   "), false);
     write_uptime();
     oled_write_P(PSTR("     Cfg  "), false);
-    oled_write_P(PSTR(" v11 "), false);
+    oled_write_P(PSTR(" v12 "), false);
     static const char boots[5][6] = {"power", "reset", "CRASH", "wdog ", "other"};
     oled_write_P(PSTR("Boot "), false);
     oled_write(boots[view.boot < 5 ? view.boot : 4], view.boot == BOOT_CRASH);

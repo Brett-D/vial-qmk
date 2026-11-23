@@ -308,6 +308,18 @@ changes, the build stops with "EEPROM layout changed (...)": bump the version
 and record the new values in `eeprom_layout.c`. The Vial keyboard UID is
 unchanged. (The first flash of a firmware with this, v11, still resets once.)
 
+### Backup and restore
+
+On the config page (WebHID file mode or the network page), **Backup**
+downloads `sofle-backup-<date>.json` with every layer's keymap, the knobs,
+lighting (both effects, colours, brightness, speed, zones, underglow colour,
+idle timeout), the measured LED map, trackpad press-to-click settings and the
+wiggler. **Restore…** loads such a file and lists what would change per
+section (untick what to keep); *Restore selected* writes it through the
+confirmed session, reads everything back and reports anything that didn't
+take — e.g. a Bootloader key, which Vial only accepts after unlocking. Files
+from another matrix size or a newer backup format are refused.
+
 ### Crash reports
 
 If the keyboard ever hits a fault, it now reboots instead of freezing and
