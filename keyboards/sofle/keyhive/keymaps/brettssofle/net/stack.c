@@ -15,6 +15,7 @@
 #include "lwip/etharp.h"
 #include "netif/ethernet.h"
 #include "stack.h"
+#include "httpd.h"
 
 // Locally administered addresses ("Sofle"): the computer side is what the
 // NCM function reports as its MAC (iMACAddress), the keyboard uses its own.
@@ -199,6 +200,7 @@ void netstack_start(net_tx_fn tx) {
         dhcp_pcb = udp_new();
         udp_bind(dhcp_pcb, IP4_ADDR_ANY, DHCP_SERVER_PORT);
         udp_recv(dhcp_pcb, dhcp_recv, NULL);
+        httpd_start();
         ready = true;
     }
     netif_set_up(&nif);

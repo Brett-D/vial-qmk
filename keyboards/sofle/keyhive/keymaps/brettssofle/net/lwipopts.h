@@ -12,7 +12,9 @@
 #define LWIP_SOCKET 0
 #define LWIP_TIMERS 1
 
-#define MEM_ALIGNMENT 4
+#ifndef MEM_ALIGNMENT
+#    define MEM_ALIGNMENT 4 // RP2040 (the 64-bit host tests use 8)
+#endif
 #define MEM_SIZE (12 * 1024)
 #define MEMP_NUM_PBUF 16
 #define PBUF_POOL_SIZE 8

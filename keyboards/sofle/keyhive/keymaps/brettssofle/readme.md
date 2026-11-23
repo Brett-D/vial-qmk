@@ -142,7 +142,9 @@ a CDC-NCM network adapter, product ID `0x1288`); typing and the trackpad keep
 working. The computer gets **192.168.7.2** by DHCP — no gateway and no DNS,
 so its internet connection is untouched — and the keyboard is
 **192.168.7.1**. The OLED shows **NET**: `USB conn.` → `Link up DHCP` →
-`Open 192.168.7.1`. `CONFIG` / both knobs again return to the plain keyboard;
+`Open 192.168.7.1`. Open **http://192.168.7.1** (or http://sofle.local where
+.local names resolve) in any browser: the keyboard serves the config page
+itself, gzipped from flash. `CONFIG` / both knobs again return to the plain keyboard;
 it also does so by itself after 10 minutes without network traffic.
 
 - Windows 10 (1903+) / 11: a new "Ethernet" adapter appears (built-in
@@ -154,8 +156,9 @@ it also does so by itself after 10 minutes without network traffic.
   **P** to go back to the plain keyboard and get the page typed instead
   (below), or use the saved `sofle-config.html`.
 
-Milestones: v8 = network link, DHCP and ping; the page over HTTP and its
-API follow. Network code: `net/` (lwIP from `lib/chibios/ext`, extracted
+Milestones: v8 = network link, DHCP and ping; v9 = the page over HTTP (only
+for Host 192.168.7.1 / sofle.local, so other sites can't reach it through DNS
+rebinding); its JSON API follows. Network code: `net/` (lwIP from `lib/chibios/ext`, extracted
 once — see rules.mk; build without it: `NETWORK_ENABLE=no`).
 
 

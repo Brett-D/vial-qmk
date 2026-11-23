@@ -45,7 +45,7 @@ SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
 # Config mode + keystroke bridge (config_page/sofle-config.html). After
 # editing config_page/gen_config.py or page.html, rerun:
 #   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
-SRC += config_mode.c bridge.c wiggler.c deliver.c
+SRC += config_mode.c bridge.c wiggler.c deliver.c config_page_blob.c
 # Typed page delivery: config_page_blob.h is the page as deliver.c types it,
 # regenerated from sofle-config.html at every build so the two never drift.
 CONFIG_PAGE_BLOB_GEN := $(shell python3 $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1 || python $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1)
@@ -67,7 +67,7 @@ ifeq ($(strip $(NETWORK_ENABLE)), yes)
     endif
     OPT_DEFS += -DNETWORK_ENABLE
     EXTRAINCDIRS += $(BRETTS_DIR)/net $(LWIP_DIR)/include
-    SRC += net/ncm.c net/ntb.c net/stack.c
+    SRC += net/ncm.c net/ntb.c net/stack.c net/httpd.c
     SRC += $(addprefix $(LWIP_DIR)/, core/init.c core/def.c core/inet_chksum.c core/ip.c core/mem.c core/memp.c \
         core/netif.c core/pbuf.c core/sys.c core/tcp.c core/tcp_in.c core/tcp_out.c core/timeouts.c core/udp.c \
         core/ipv4/etharp.c core/ipv4/icmp.c core/ipv4/ip4.c core/ipv4/ip4_addr.c core/ipv4/ip4_frag.c netif/ethernet.c)
