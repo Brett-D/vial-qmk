@@ -35,3 +35,5 @@ void httpd_start(void);
 uint32_t httpd_requests(void); // pages / API calls answered since start
 // Routes other than GET / : return true and fill resp to answer (net/api.c).
 bool httpd_route(const http_request_t *req, http_response_t *resp);
+// Called each time network mode starts (net/api.c: new session token).
+void httpd_api_reset(void);

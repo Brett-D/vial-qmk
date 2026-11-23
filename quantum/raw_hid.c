@@ -4,7 +4,16 @@
 #include "raw_hid.h"
 #include "host.h"
 
+// Return true to take the reply instead of sending it to the host (e.g. a
+// command that arrived another way than USB raw HID).
+__attribute__((weak)) bool raw_hid_send_user(uint8_t *data, uint8_t length) {
+    return false;
+}
+
 void raw_hid_send(uint8_t *data, uint8_t length) {
+    if (raw_hid_send_user(data, length)) {
+        return;
+    }
     host_raw_hid_send(data, length);
 }
 

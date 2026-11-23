@@ -1405,12 +1405,13 @@ bool config_mode_oled_task(void) {
     static uint8_t last_screen;
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
-    uint8_t        screen = oled_state.net ? 0xE0 | (oled_state.net & 0x0F) | (oled_state.net & 0x80 ? 0x10 : 0) : oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
+    bool           net    = oled_state.net && oled_state.hid != HS_ASK; // CONF? for the page wins
+    uint8_t        screen = net ? 0xC0 | (oled_state.hid == HS_ACTIVE ? 0x10 : 0) | (oled_state.net & 0x80 ? 0x08 : 0) | (oled_state.net & 0x07) : oled_state.dl ? 0xF0 | oled_state.dl : active ? 1 + (asking ? 0x80 : 0) + (oled_state.nav ? 0x40 : 0) + oled_state.state * 8 + oled_state.hid : 0;
     if (screen != last_screen) {
         oled_clear();
         last_screen = screen;
     }
-    if (oled_state.net) {
+    if (net) {
         // USB network config mode (net/).
         oled_write_P(PSTR("NET  "), true);
         oled_write_P(PSTR("     "), false);
@@ -1425,7 +1426,11 @@ bool config_mode_oled_task(void) {
                     oled_write_P(PSTR("Link up   DHCP "), false);
                     break;
                 default: // NET_READY
-                    oled_write_P(PSTR("Open 192. 168. 7.1  "), false);
+                    if (oled_state.hid == HS_ACTIVE) {
+                        oled_write_P(PSTR("Page conn."), false); // confirmed: the page can save
+                    } else {
+                        oled_write_P(PSTR("Open 192. 168. 7.1  "), false);
+                    }
                     break;
             }
         }

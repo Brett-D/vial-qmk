@@ -44,6 +44,8 @@ __attribute__((weak)) bool httpd_route(const http_request_t *req, http_response_
     return false;
 }
 
+__attribute__((weak)) void httpd_api_reset(void) {}
+
 static void conn_free(conn_t *c) {
     if (c->pcb) {
         tcp_arg(c->pcb, NULL);
@@ -182,6 +184,11 @@ static void handle(conn_t *c) {
         *end = '\r';
         return; // wait for the rest of the body
     }
+    if (clen[0]) {
+        req.body_len = (uint16_t)atoi(clen);
+    } else if (req.body_len) {
+        req.body_len = 0; // no Content-Length: no body
+    }
 
     bool get = strcmp(req.method, "GET") == 0 || strcmp(req.method, "HEAD") == 0;
     if (get && (strcmp(req.path, "/") == 0 || strcmp(req.path, "/index.html") == 0)) {
@@ -281,6 +288,7 @@ static err_t on_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
 
 void httpd_start(void) {
     static bool started;
+    httpd_api_reset();
     if (started) {
         return;
     }

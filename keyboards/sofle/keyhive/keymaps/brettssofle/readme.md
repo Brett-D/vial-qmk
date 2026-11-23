@@ -143,8 +143,11 @@ working. The computer gets **192.168.7.2** by DHCP — no gateway and no DNS,
 so its internet connection is untouched — and the keyboard is
 **192.168.7.1**. The OLED shows **NET**: `USB conn.` → `Link up DHCP` →
 `Open 192.168.7.1`. Open **http://192.168.7.1** (or http://sofle.local where
-.local names resolve) in any browser: the keyboard serves the config page
-itself, gzipped from flash. `CONFIG` / both knobs again return to the plain keyboard;
+.local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
+serves the config page itself, gzipped from flash. The page asks for a
+session straight away; the OLED shows **CONF?** — press the right knob (or
+Enter) and the page reads and saves everything with the mouse, as in the
+WebHID mode. The OLED then shows `Page conn.`. `CONFIG` / both knobs again return to the plain keyboard;
 it also does so by itself after 10 minutes without network traffic.
 
 - Windows 10 (1903+) / 11: a new "Ethernet" adapter appears (built-in
@@ -156,9 +159,21 @@ it also does so by itself after 10 minutes without network traffic.
   **P** to go back to the plain keyboard and get the page typed instead
   (below), or use the saved `sofle-config.html`.
 
-Milestones: v8 = network link, DHCP and ping; v9 = the page over HTTP (only
-for Host 192.168.7.1 / sofle.local, so other sites can't reach it through DNS
-rebinding); its JSON API follows. Network code: `net/` (lwIP from `lib/chibios/ext`, extracted
+Milestones: v8 = network link, DHCP and ping; v9 = the page over HTTP; v10 = its API.
+
+The API (`net/api.c`) carries the page's 32-byte VIA / Vial / 0xF5 / 0xF6
+commands over HTTP and runs them through `raw_hid_receive()`, so it does
+exactly what the WebHID mode does, with the same write gate:
+
+- `POST /api/session` → `{"token":"…"}` (a new token each time network mode
+  starts).
+- `POST /api/hid` with header `X-Sofle-Token` and a body of 1–8 commands as
+  hex → `{"r":"<replies as hex>"}`.
+
+Other web sites can't use it: the server answers only Host `192.168.7.1` /
+`sofle.local` (DNS rebinding), Origin must be absent or the keyboard's own,
+every command needs the token, and no CORS headers are ever sent. Writes need
+the CONF? confirm on the keyboard. Network code: `net/` (lwIP from `lib/chibios/ext`, extracted
 once — see rules.mk; build without it: `NETWORK_ENABLE=no`).
 
 
