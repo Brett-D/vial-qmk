@@ -40,5 +40,6 @@ uint8_t led_layers_mode(void);          // RGB_MATRIX_CUSTOM_LAYERED
 // led_fx_background(effect_params_t *): declared in rgb_matrix_user.inc (needs rgb_matrix's types).
 // rgb_driver.c, once per frame before flushing: false = no overlay this frame.
 bool led_fx_frame_begin(bool calibrating);
-void led_fx_pixel(uint8_t led, uint8_t rgb[3]);
+void led_fx_pixel(uint8_t led, const uint8_t in[3], uint16_t out[3]); // the key-press layer over one LED: 8-bit in, 8.8 out
+void rgb_driver_dither_task(void); // rgb_driver.c: re-sends the frame with new dither values between frames
 bool config_mode_led_cal_busy(void); // LED calibration owns the LEDs (no overlay)

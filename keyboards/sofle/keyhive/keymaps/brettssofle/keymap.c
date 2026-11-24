@@ -218,6 +218,7 @@ void housekeeping_task_user(void) {
     if (is_keyboard_master()) {
         rgb_idle_task();
     }
+    rgb_driver_dither_task(); // smooth dim levels between frames (rgb_driver.c)
 #endif
 #ifdef POINTING_DEVICE_ENABLE
     trackpad_z_sync_task();

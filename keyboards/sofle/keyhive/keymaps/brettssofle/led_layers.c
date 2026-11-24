@@ -30,6 +30,7 @@
 #    define LAYERS_EE_MAGIC 0x4D
 #    define BRIGHT_EE_OFFSET 76 // v21 key-press brightness + check, between the LED map (0-75) and the OLED page
 #    define BRIGHT_EE_CHECK 0x5B
+#    define BRIGHT_EE_GAMMA 0x80 // v23: brightness settings converted for the gamma output (bit 7 of the value byte)
 #    define FX_SYNC_MS 2000
 #    define FX_DIM_STEP 24 // per frame, background dim in / out
 
@@ -37,6 +38,7 @@ _Static_assert(LAYERS_EE_OFFSET + 8 <= EECONFIG_KB_DATA_SIZE, "raise EECONFIG_KB
 _Static_assert(1 + LED_MAP_COUNT + 1 <= BRIGHT_EE_OFFSET && BRIGHT_EE_OFFSET + 2 <= 78, "key-press brightness overlaps the LED map or the OLED page");
 
 static fx_settings_t fx;
+static bool          gamma_done; // v23 conversion of the brightness settings done (EEPROM)
 static uint8_t       dim_now = 255;
 static uint32_t      remote_at; // right half: last RPC_ID_USER_LEDFX (newer than the old sync)
 
@@ -254,14 +256,17 @@ static void load(void) {
     }
     uint8_t b[2]; // v21; before: the background's brightness
     eeconfig_read_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
-    fx.bright = (b[0] ^ BRIGHT_EE_CHECK) == b[1] && b[0] <= 100 ? b[0] : 0;
+    bool ok    = (b[0] ^ BRIGHT_EE_CHECK) == b[1];
+    fx.bright  = ok && (b[0] & 0x7F) <= 100 ? b[0] & 0x7F : 0;
+    gamma_done = ok && (b[0] & BRIGHT_EE_GAMMA);
 }
 
 void led_fx_save(void) {
     uint8_t p[8];
     pack(&fx, p);
     eeconfig_update_kb_datablock(p, LAYERS_EE_OFFSET, sizeof(p));
-    uint8_t b[2] = {fx.bright, fx.bright ^ BRIGHT_EE_CHECK};
+    uint8_t v    = fx.bright | (gamma_done ? BRIGHT_EE_GAMMA : 0);
+    uint8_t b[2] = {v, v ^ BRIGHT_EE_CHECK};
     eeconfig_update_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
 }
 
@@ -365,9 +370,37 @@ void led_fx_task(void) {
     }
 }
 
+// v23 sends the LEDs through gamma 2.2 (rgb_driver.c). Once, the saved
+// brightness settings are raised so a full-level LED gives exactly the light it
+// gave before (same look, same power); from then on the sliders follow what
+// the eye sees.
+static uint8_t gamma_inverse(uint8_t v) {
+    uint32_t k = fx_gamma_k(RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+    uint8_t  x = 0;
+    while (x < RGB_MATRIX_MAXIMUM_BRIGHTNESS && fx_gamma16((uint16_t)x << 8, RGB_MATRIX_MAXIMUM_BRIGHTNESS, k) < ((uint16_t)v << 8)) x++;
+    return x;
+}
+
+static void gamma_convert(void) {
+    uint8_t v = rgb_matrix_get_val();
+    if (v) {
+        rgb_matrix_sethsv(rgb_matrix_get_hue(), rgb_matrix_get_sat(), gamma_inverse(v));
+    }
+    if (fx.bright) {
+        uint8_t x = gamma_inverse(fx_overlay_v(fx.bright, 0, RGB_MATRIX_MAXIMUM_BRIGHTNESS));
+        uint8_t b = (uint8_t)(((uint16_t)x * 100 + RGB_MATRIX_MAXIMUM_BRIGHTNESS / 2) / RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+        fx.bright = b ? (b > 100 ? 100 : b) : 1;
+    }
+    gamma_done = true;
+    led_fx_save();
+}
+
 void led_layers_init(void) {
     if (is_keyboard_master()) {
         load();
+        if (!gamma_done) {
+            gamma_convert();
+        }
     } else {
         fx = fx_default;
         transaction_register_rpc(RPC_ID_USER_LEDFX, remote_handler);
@@ -447,13 +480,14 @@ bool led_fx_frame_begin(bool calibrating) {
     return true;
 }
 
-// The overlay over one LED's background colour (rgb, in place).
-void led_fx_pixel(uint8_t led, uint8_t rgb[3]) {
+// The overlay over one LED's background colour: in = 8-bit, out = 8.8 (v23).
+void led_fx_pixel(uint8_t led, const uint8_t in[3], uint16_t rgb[3]) {
+    for (uint8_t i = 0; i < 3; i++) rgb[i] = (uint16_t)in[i] << 8;
     if (!frame_on || !HAS_ANY_FLAGS(g_led_config.flags[led], rgb_matrix_get_flags())) {
         return;
     }
     if (dim_now != 255) {
-        for (uint8_t i = 0; i < 3; i++) rgb[i] = (uint16_t)rgb[i] * dim_now >> 8;
+        for (uint8_t i = 0; i < 3; i++) rgb[i] = (uint32_t)rgb[i] * dim_now >> 8;
     }
     uint8_t  lx = g_led_config.point[led].x, ly = g_led_config.point[led].y;
     uint16_t best = 0;
@@ -472,8 +506,7 @@ void led_fx_pixel(uint8_t led, uint8_t rgb[3]) {
     uint8_t v      = fx_overlay_v(fx.bright, frame_v, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
     rgb_t   c      = hsv_to_rgb((hsv_t){fx_hue(&prep, &ev[bj], frame_hue, lx, ly), fx_sat(&prep), v});
     uint8_t top[3] = {c.r, c.g, c.b};
-    fx_blend(fx.blend, rgb, top, best > 255 ? 255 : (uint8_t)best, v);
-    fx_cap(rgb, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+    fx_blend16(fx.blend, rgb, top, best > 255 ? 255 : (uint8_t)best, v);
 }
 
 #endif

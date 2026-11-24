@@ -145,6 +145,8 @@ def parse_fx():
 
     core = (KEYMAP_DIR / "led_fx_core.h").read_text(encoding="utf-8")
     sin = [int(v) for v in re.search(r"fx_sin_q\[65\] = \{([^}]*)\}", core).group(1).replace("\n", " ").split(",")]
+    gamma = [int(v) for v in re.search(r"fx_gamma_q\[65\] = \{([^}]*)\}", core).group(1).replace("\n", " ").split(",")]
+    assert len(gamma) == 65
     lay = (KEYMAP_DIR / "rgb_layout.c").read_text(encoding="utf-8")
     blocks = lay[lay.index("#define LED_CONFIG_DEFAULT"):].split("}, { \\")
     matrix = [[int(v) if v.strip() != "NO_LED" else None for v in row.split(",") if v.strip()] for row in re.findall(r"\{([^{}]*NO_LED[^{}]*)\}", blocks[0])]
@@ -156,6 +158,7 @@ def parse_fx():
     fx = {"kinds": kinds, "ownBg": int(re.search(r"#define FX_OWN_BG (0x\w+)", table).group(1), 16),
           "ownSolo": int(re.search(r"#define FX_OWN_SOLO (0x\w+)", table).group(1), 16),
           "backgrounds": rows("FX_OWN_BACKGROUNDS"), "solos": rows("FX_OWN_SOLOS"), "overlays": rows("FX_OVERLAYS"), "qmk": rows("FX_QMK_FLAGS")}
+    fx["gamma"] = gamma
     return fx, sin, leds
 
 
@@ -281,7 +284,7 @@ def main():
         "layout": layout,
         "layerNames": LAYER_NAMES,
         "ledEffects": led_effects,
-        "fxTable": fx_table, "fxSin": fx_sin, "fxLeds": fx_leds,
+        "fxTable": fx_table, "fxSin": fx_sin, "fxLeds": fx_leds, "fxGamma": fx_table.pop("gamma"),
         "ledReact": [vialrgb_effect_enum().index(n) for n in REACT_EFFECTS],
         "ledSolo": [vialrgb_effect_enum().index(n) for n in SOLO_EFFECTS],
         "ledLayeredId": LAYERED_ID,

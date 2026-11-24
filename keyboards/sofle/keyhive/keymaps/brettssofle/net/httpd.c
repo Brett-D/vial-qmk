@@ -233,7 +233,12 @@ static void handle(conn_t *c) {
 static err_t on_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
     conn_t *c = arg;
     if (!p) {
-        return conn_close(c); // the computer closed its side
+        // The computer finished sending (FIN): it can still be reading the answer,
+        // so a response in progress drains first (on_sent / on_poll close it).
+        if (c->responded && (c->head_sent < c->head_len || c->body_sent < c->body_len || pcb->unsent || pcb->unacked)) {
+            return ERR_OK;
+        }
+        return conn_close(c);
     }
     if (c->responded) {
         tcp_recved(pcb, p->tot_len);

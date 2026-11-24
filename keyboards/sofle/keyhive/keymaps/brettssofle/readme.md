@@ -201,6 +201,38 @@ key-press effects ~0.08 ms per live press, up to 0.56–0.8 ms with 8
 presses running at once (fast typing), ~0.95 ms on the first frame of a new
 press (distances are then cached per press).
 
+**Smooth output (v23).** Fades used to step visibly: linear ramps, 8-bit
+maths and the 100 brightness cap left only ~100 levels, and the dim end of a
+fade dropped off in big perceptual jumps. Now:
+
+- fades, ring edges, echo rings, trails and heat ease in and out
+  (smoothstep, `fx_smooth8`), and every ring eases out over the last fifth
+  of its reach instead of stopping dead;
+- the key-press layer is composited in 8.8 fixed point (`fx_blend16`);
+- the output goes through **gamma 2.2** (`fx_gamma16`, after the cap and
+  scaled to it, so the cap is still the most an LED gives and power is
+  unchanged), so the fade looks even to the eye;
+- **temporal dithering** (`rgb_driver.c`): each channel carries its
+  rounding error into the next send, and between frames (60 Hz) the frame is
+  sent again every ~4 ms with new dither values (the WS2812 transfer is
+  DMA). Levels below ~0.2 of the lowest step stay off, so dim LEDs don't
+  blink. LED calibration stays linear and undithered.
+
+Gamma makes the Brightness slider follow what the eye sees. So that nothing
+looks dimmer after updating, the first start of v23 raises the saved
+Brightness and key-press brightness once so a full-level LED gives exactly
+the light it gave before (for example 30 % → 58 %). A flag in bit 7 of
+EEPROM byte 76 marks that as done. Backups from v23 carry `"gamma": 1`; older
+backups get the same conversion when restored. Effects' dim phases (the bottom of
+a breath, the tail of a fade) are darker than before, as gamma intends.
+
+Cost (v23): +1.9 KB flash (tables and the dither stage), ~0.4 KB RAM. Per
+frame and half: the output stage 0.05 ms, each dither re-send 0.02 ms;
+key-press effects with 8 presses at once 0.38–1.0 ms (ring 0.69 ms, echo
+rings 1.0 ms), up to ~1.2 ms on the first frame of a new press. QMK renders
+the background in 5 slices per frame with one time per frame (`g_rgb_timer`
+is latched at the start), so the slicing adds no stepping.
+
 ## Config mode
 
 Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad press-to-click from

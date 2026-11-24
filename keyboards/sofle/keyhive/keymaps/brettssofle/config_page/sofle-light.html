@@ -351,7 +351,7 @@ if (B.on) {
 $("bSave").onclick = () => {
   const b = { format: "sofle-config-backup", version: 1, created: new Date().toISOString(), keyboard: "Keyhive Sofle (brettssofle)", pickerHash: DATA.pickerHash,
               layers: S.keymap.length, rows: DATA.rows, cols: DATA.cols, keymap: S.keymap, encoders: S.enc,
-              leds: { enable: S.led.on, base: S.led.fx, react: S.led.react, rxHue: S.led.rh, rxSat: S.led.rs, hue: S.led.h, sat: S.led.s, val: S.led.v, speed: S.led.speed },
+              leds: { enable: S.led.on, base: S.led.fx, react: S.led.react, rxHue: S.led.rh, rxSat: S.led.rs, hue: S.led.h, sat: S.led.s, val: S.led.v, speed: S.led.speed, gamma: 1 },
               trackpad: { enable: S.tp.on, threshold: S.tp.thr, release: S.tp.rel } };
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(b, null, 1)], { type: "application/json" }));
@@ -371,7 +371,7 @@ $("bFile").onchange = async () => {
   try {
     for (const [l, r, c, v] of keys) await setKey(l, r, c, v);
     for (const [l, n, i, v] of enc) await setEnc(l, n, i, v);
-    if (b.leds) { const x = b.leds; Object.assign(S.led, { on: x.enable, fx: x.base || S.led.fx, react: x.react ?? S.led.react, rh: x.rxHue ?? S.led.rh, rs: x.rxSat ?? S.led.rs, h: x.hue, s: x.sat, v: x.val, speed: x.speed }); await ledSend(); await $("lSave").onclick(); }
+    if (b.leds) { const x = b.leds; if (x.gamma !== 1 && x.val && S.max) x.val = Math.min(S.max, Math.round(S.max * Math.pow(x.val / S.max, 1 / 2.2))); Object.assign(S.led, { on: x.enable, fx: x.base || S.led.fx, react: x.react ?? S.led.react, rh: x.rxHue ?? S.led.rh, rs: x.rxSat ?? S.led.rs, h: x.hue, s: x.sat, v: x.val, speed: x.speed }); await ledSend(); await $("lSave").onclick(); }
     if (b.trackpad) { const t = b.trackpad; await ok([0xf5, 0x01, t.enable ? 1 : 0, t.threshold, t.release]); }
     await load();
     $("bOut").textContent = "Restored.";

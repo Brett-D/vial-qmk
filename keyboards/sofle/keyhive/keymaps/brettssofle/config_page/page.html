@@ -744,17 +744,20 @@ function pvFrame(now) {
       const o = l.base >= DATA.fxTable.ownBg ? FX.background(l.base, ctx, x, y) : pvQmkBase(l.base, x, y, t, l);
       rgb = FX.hsv2rgb(o.h, o.s, o.v);
     }
+    rgb = rgb.map((v) => v * 256); // 8.8, as led_fx_pixel
     if (l.enable && effect) {
       if (PV.dim !== 255) rgb = rgb.map((v) => (v * PV.dim) >> 8);
       let best = 0, bj = 0;
       ev.forEach((e, j) => { const a = FX.intensity(p, e, x, y); if (effect === FX.E.HEAT) best += a; else if (a > best) { best = a; bj = j; } });
       if (best) {
         const v = FX.overlayV(s.bright, l.val, l.max || 255), top = FX.hsv2rgb(FX.hue(p, ev[bj], l.hue, x, y), FX.sat(p), v);
-        FX.blend(s.blend, rgb, top, Math.min(255, best), v);
-        FX.cap(rgb, l.max || 255);
+        FX.blend16(s.blend, rgb, top, Math.min(255, best), v);
       }
     }
-    const k = 255 / Math.max(V, l.max || 0, 1), cx = pvX(x), cy = pvY(y);
+    FX.cap16(rgb, l.max || 255);
+    // The keyboard applies gamma 2.2 (FX.gamma16) to these values; a screen does the
+    // same to the colours it is given, so showing them before gamma looks like the LEDs.
+    const k = 255 / 256 / Math.max(V, l.max || 0, 1), cx = pvX(x), cy = pvY(y);
     g.fillStyle = `rgb(${rgb.map((v) => Math.min(255, Math.round(v * k))).join(",")})`;
     if (flag & 1) { g.fillRect(cx - 15, cy - 15, 30, 30); g.strokeStyle = "#2a2d35"; g.strokeRect(cx - 15.5, cy - 15.5, 31, 31); }
     else { g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.fill(); }
@@ -771,7 +774,16 @@ $("fxCanvas").addEventListener("click", async (ev) => {
   if (S.mode === "hid" && HID.dev && HID.dev.opened) { try { await cmd([0xf6, 0x1c, 4, best[3], best[4]]); } catch (e) { /* preview still runs */ } }
 });
 $("fxDemo").addEventListener("click", () => { PV.demoLeft = 7; PV.demo = performance.now(); });
-function ledsFromOldBackup(x) { // v19 and older: base + react (VialRGB ids)
+// Before v23 the LEDs had no gamma: the same light needs a higher brightness now
+// (the keyboard converted its own settings once, the same way).
+const gammaUp = (v, max) => (v && max ? Math.min(max, Math.round(max * Math.pow(v / max, 1 / 2.2))) : v);
+function ledsFromOldBackup(x) { // v19 and older: base + react (VialRGB ids); v22 and older: no gamma
+  if (x.gamma !== 1) {
+    x = { ...x, gamma: 1 };
+    const max = S.led && S.led.max ? S.led.max : 100;
+    if (x.val !== undefined) x.val = gammaUp(x.val, max);
+    if (x.fxBright) x.fxBright = Math.max(1, gammaUp(x.fxBright, 100));
+  }
   if (x.react === undefined || x.fxEffect !== undefined) return x;
   const y = { ...x };
   delete y.react;
@@ -1945,6 +1957,7 @@ async function makeBackup() {
   readStatus(await cmd([0xf6, 0x00, 0]));
   const leds = {};
   for (const k of Object.keys(LED_FIELDS)) leds[k] = S.led[k];
+  leds.gamma = 1; // v23: brightness values for the gamma output (older backups are converted on restore)
   return {
     format: BACKUP_FORMAT, version: BACKUP_VERSION, created: new Date().toISOString(),
     keyboard: "Keyhive Sofle (brettssofle)", pickerHash: DATA.pickerHash,

@@ -94,6 +94,9 @@ static struct {
     uint16_t freeze_timer;
 } press;
 
+static uint8_t tp_owned; // buttons the trackpad holds (press-to-click, tap clicks)
+static uint8_t key_held; // buttons mouse-button keys hold
+
 static void tp_press_set(bool down) {
     press.down         = down;
     press.down_timer   = timer_read();
@@ -228,16 +231,30 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
         }
     }
 
-    static uint8_t owned = 0;
-    uint8_t        out   = tp_click_step() | (press.down ? BTN_LEFT : 0);
-    // Only clear buttons this module pressed; mouse keys share the same bits.
-    mouse_report.buttons = (mouse_report.buttons & ~(owned & ~out)) | out;
-    owned                = out;
+    uint8_t out = tp_click_step() | (press.down ? BTN_LEFT : 0);
+    // Only clear buttons this module pressed and no mouse key holds; mouse keys share the same bits.
+    mouse_report.buttons = (mouse_report.buttons & ~(tp_owned & ~out & ~key_held)) | out;
+    tp_owned             = out;
 
     if (drag_scroll) {
         tp_drag_scroll(&mouse_report);
     }
     return mouse_report;
+}
+
+// Mouse-button keys (T/Y/U/R): QMK sends their release straight away. With
+// press-to-click holding the left button, releasing a key for the same button
+// would drop the drag until the next poll, so the buttons the trackpad holds
+// stay in the report here too (and the trackpad doesn't release a key's button).
+void pointing_device_keycode_handler(uint16_t keycode, bool pressed) {
+    if (IS_MOUSEKEY_BUTTON(keycode)) {
+        uint8_t        bit = 1 << (keycode - QK_MOUSE_BUTTON_1);
+        report_mouse_t r   = pointing_device_get_report();
+        key_held           = pressed ? key_held | bit : key_held & ~bit;
+        r.buttons          = pointing_device_handle_buttons(r.buttons, pressed, keycode - QK_MOUSE_BUTTON_1) | tp_owned;
+        pointing_device_set_report(r);
+        pointing_device_send();
+    }
 }
 
 bool is_mouse_record_user(uint16_t keycode, keyrecord_t *record) {

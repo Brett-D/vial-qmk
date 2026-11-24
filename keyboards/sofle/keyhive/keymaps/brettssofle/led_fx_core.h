@@ -58,7 +58,7 @@ typedef struct {
     fx_settings_t s;
     uint16_t      R, w, spacing, R3, HR, TT, HT;
     uint8_t       rings;
-    uint32_t      speed_q16, band_k, fade_k, lin_k, trail_k, tt_k, hr_k, ht_k;
+    uint32_t      speed_q16, band_k, lin_k, trail_k, tt_k, hr_k, ht_k;
 } fx_prep_t;
 
 static inline void fx_prepare(fx_prep_t *p, const fx_settings_t *s) {
@@ -73,7 +73,6 @@ static inline void fx_prepare(fx_prep_t *p, const fx_settings_t *s) {
     p->HT        = 1500 + s->radius * 300;
     p->speed_q16 = (uint32_t)(30 + s->speed * 15) * 65536 / 1000;
     p->band_k    = 255ul * 65536 / p->w;
-    p->fade_k    = (uint32_t)s->fade * 17 * 65536 / p->R;
     p->lin_k     = 255ul * 65536 / p->R;
     p->trail_k   = 255ul * 65536 / (3 * p->w);
     p->tt_k      = 255ul * 65536 / p->TT;
@@ -109,6 +108,35 @@ static inline uint8_t fx_div255(uint32_t x) { // x / 255 for x <= 65534
     return (uint8_t)((x + 1 + (x >> 8)) >> 8);
 }
 
+// Smoothstep on 0-255: eases in and out, so fades and ring edges have no
+// corner (v23; the linear ramps showed as steps).
+// fx_smooth_q[x] = x * x * (765 - 2x) / 65025 (no division per LED on the M0+).
+static const uint8_t fx_smooth_q[256] = {0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,3,3,4,4,4,5,5,6,6,7,7,8,9,9,10,11,11,12,13,13,14,15,16,16,17,18,19,20,21,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,39,40,41,42,43,44,45,47,48,49,50,51,53,54,55,56,58,59,60,62,63,64,66,67,68,70,71,72,74,75,77,78,79,81,82,84,85,86,88,89,91,92,94,95,97,98,99,101,102,104,105,107,108,110,111,113,114,116,117,119,120,122,123,125,126,128,129,131,132,134,135,137,138,140,141,143,144,146,147,149,150,152,153,155,156,157,159,160,162,163,165,166,168,169,170,172,173,175,176,177,179,180,182,183,184,186,187,188,190,191,192,194,195,196,198,199,200,201,203,204,205,206,207,209,210,211,212,213,214,215,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,233,234,235,236,237,238,238,239,240,241,241,242,243,243,244,245,245,246,247,247,248,248,249,249,250,250,250,251,251,252,252,252,253,253,253,253,254,254,254,254,254,254,254,254,254,255};
+static inline uint8_t fx_smooth8(uint8_t x) {
+    return fx_smooth_q[x];
+}
+
+// Gamma 2.2 at the LEDs (rgb_driver.c): (i / 64)^2.2 * 65535, interpolated.
+static const uint16_t fx_gamma_q[65] = {0,7,32,78,147,240,359,504,676,875,1104,1361,1648,1966,2314,2693,3104,3547,4022,4530,5072,5646,6255,6897,7574,8286,9033,9815,10632,11486,12375,13301,14263,15262,16298,17371,18482,19630,20816,22040,23303,24604,25943,27322,28739,30196,31692,33227,34802,36417,38072,39768,41503,43280,45097,46954,48853,50793,52774,54796,56860,58966,61114,63303,65535};
+
+// For fx_gamma16: worked out once for the brightness cap.
+static inline uint32_t fx_gamma_k(uint8_t cap) {
+    return cap ? 4294901760ul / ((uint32_t)cap << 8) : 0; // 65535 * 65536 / (cap * 256)
+}
+
+// x: linear light in 8.8 (0 .. cap * 256) -> the same range with gamma 2.2:
+// the cap stays the most the LEDs give (power unchanged), lower levels follow
+// what the eye sees, so a fade looks even instead of dropping off late.
+static inline uint16_t fx_gamma16(uint16_t x, uint8_t cap, uint32_t k) {
+    uint32_t top = (uint32_t)cap << 8;
+    if (x > top) x = (uint16_t)top;
+    uint32_t t = (uint32_t)x * k >> 16;
+    if (t > 65535) t = 65535;
+    uint8_t  i = (uint8_t)(t >> 10);
+    uint32_t y = fx_gamma_q[i] + (((uint32_t)(fx_gamma_q[i + 1] - fx_gamma_q[i]) * (t & 1023)) >> 10);
+    return (uint16_t)(y * top >> 16);
+}
+
 static inline uint16_t fx_isqrt(uint32_t n) { // floor(sqrt(n)), n < 2^18 (LED space: < 225^2 + 81^2)
     uint32_t r = 0, bit = 1ul << 16;
     while (bit > n) bit >>= 2;
@@ -128,6 +156,23 @@ static inline uint8_t fx_y5(uint8_t y) { return (uint8_t)((y * 5) >> 2); }
 
 /* ---- key-press overlay ---- */
 
+static inline uint8_t fx_band(const fx_prep_t *p, uint16_t x) { // 255 on the ring's centre line, 0 at width (soft edges)
+    return x >= p->w ? 0 : fx_smooth8((uint8_t)(255 - ((uint32_t)x * p->band_k >> 16)));
+}
+
+// Strength by how far the ring has gone: the fade setting eases it down, and
+// it always eases out over the last fifth (v22 stopped dead at the end).
+static inline uint8_t fx_fade(const fx_prep_t *p, uint16_t r) {
+    if (r >= p->R) return 0;
+    uint8_t lin = (uint8_t)((uint32_t)r * p->lin_k >> 16);
+    uint8_t f   = (uint8_t)(255 - fx_div255((uint32_t)p->s.fade * 17 * fx_smooth8(lin)));
+    if (lin > 204) f = fx_div255((uint32_t)f * fx_smooth8((uint8_t)((255 - lin) * 5)));
+    return f;
+}
+
+static const uint8_t fx_echo_q[4] = {255, 160, 100, 62}; // each echo ring ~0.62 of the one before
+
+
 // One press as seen this frame.
 typedef struct {
     uint8_t  x, y5;   // where (LED space, y scaled)
@@ -137,6 +182,7 @@ typedef struct {
     uint8_t  tx, ty5; // lightning: where the bolt goes
     uint16_t len;
     uint32_t inv_len;
+    uint8_t  fade; // fx_fade(r): the same for every LED this frame
 } fx_event_t;
 
 // press_ms: when it happened on the synced clock (both halves agree to a few ms; >> 11 hides that).
@@ -151,6 +197,7 @@ static inline void fx_event_prepare(const fx_prep_t *p, fx_event_t *e, uint8_t x
     int16_t sx = (int16_t)e->tx - e->x, sy = (int16_t)e->ty5 - e->y5;
     e->len     = fx_isqrt((uint32_t)(sx * sx) + (uint32_t)(sy * sy));
     e->inv_len = e->len ? 65536ul / e->len : 0;
+    e->fade    = fx_fade(p, e->r);
 }
 
 static inline uint8_t fx_alive(const fx_prep_t *p, const fx_event_t *e) {
@@ -161,16 +208,8 @@ static inline uint8_t fx_alive(const fx_prep_t *p, const fx_event_t *e) {
     }
 }
 
-static inline uint8_t fx_band(const fx_prep_t *p, uint16_t x) { // 255 on the ring's centre line, 0 at width
-    return x >= p->w ? 0 : (uint8_t)(255 - ((uint32_t)x * p->band_k >> 16));
-}
-
-static inline uint8_t fx_fade(const fx_prep_t *p, uint16_t r) {
-    return r >= p->R ? 0 : (uint8_t)(255 - ((uint32_t)r * p->fade_k >> 16));
-}
-
-static inline uint8_t fx_ring_at(const fx_prep_t *p, uint16_t d, uint16_t rr) {
-    return fx_div255((uint32_t)fx_band(p, d > rr ? d - rr : rr - d) * fx_fade(p, rr));
+static inline uint8_t fx_ring_at(const fx_prep_t *p, uint16_t d, uint16_t rr, uint8_t fade) {
+    return fx_div255((uint32_t)fx_band(p, d > rr ? d - rr : rr - d) * fade);
 }
 
 // Overlay strength (0-255) of press e at the LED at lx, ly (LED space).
@@ -194,28 +233,28 @@ static inline uint8_t fx_intensity_c(const fx_prep_t *p, const fx_event_t *e, ui
     }
     switch (p->s.effect) {
         case FX_RING:
-            return fx_ring_at(p, d, r);
+            return fx_ring_at(p, d, r, e->fade);
         case FX_WAVE: {
             uint8_t best = 0;
             for (uint8_t k = 0; k < p->rings; k++) {
                 uint16_t back = k * p->spacing;
                 if (back > r) break;
-                uint8_t v = fx_div255((uint32_t)fx_ring_at(p, d, r - back) * (255 - k * 48));
+                uint8_t v = fx_div255((uint32_t)fx_ring_at(p, d, r - back, k ? fx_fade(p, r - back) : e->fade) * fx_echo_q[k & 3]);
                 if (v > best) best = v;
             }
             return best;
         }
         case FX_SPLASH:
-            return fx_div255((uint32_t)(d <= r ? 255 : fx_band(p, d - r)) * fx_fade(p, r));
+            return fx_div255((uint32_t)(d <= r ? 255 : fx_band(p, d - r)) * e->fade);
         case FX_GLOW:
-            return d > 8 || r >= p->R ? 0 : (uint8_t)(255 - ((uint32_t)r * p->lin_k >> 16));
+            return d > 8 || r >= p->R ? 0 : fx_smooth8((uint8_t)(255 - ((uint32_t)r * p->lin_k >> 16)));
         case FX_CROSS:
         case FX_NEXUS: {
             uint8_t on_row = ay <= 6, on_col = ax <= 6;
             if (!on_row && !on_col) return 0;
             uint16_t a = on_row && on_col ? 0 : on_row ? ax : ay; // distance along the arm
             uint8_t  v = p->s.effect == FX_CROSS ? (a <= r ? 255 : fx_band(p, a - r)) : fx_band(p, a > r ? a - r : r - a);
-            return fx_div255((uint32_t)v * fx_fade(p, r));
+            return fx_div255((uint32_t)v * e->fade);
         }
         case FX_SHOCKWAVE: {
             uint8_t v;
@@ -223,24 +262,24 @@ static inline uint8_t fx_intensity_c(const fx_prep_t *p, const fx_event_t *e, ui
                 v = fx_band(p, d - r);
             } else {
                 uint16_t back = r - d; // inside: a trail fading towards the centre
-                v             = back >= 3 * p->w ? 0 : (uint8_t)((255 - ((uint32_t)back * p->trail_k >> 16)) * 3 >> 2);
+                v             = back >= 3 * p->w ? 0 : (uint8_t)(fx_smooth8((uint8_t)(255 - ((uint32_t)back * p->trail_k >> 16))) * 3 >> 2);
                 if (back < p->w) {
                     uint8_t edge = fx_band(p, back);
                     if (edge > v) v = edge;
                 }
             }
-            return fx_div255((uint32_t)v * fx_fade(p, r));
+            return fx_div255((uint32_t)v * e->fade);
         }
         case FX_SPARKS: {
             uint32_t hs = fx_hash32(((uint32_t)lx << 8 | ly5) ^ e->seed);
             if ((hs & 7) || d > r || d < 6) return 0;
-            return fx_div255((uint32_t)fx_fade(p, r) * (128 + (hs >> 8 & 127)));
+            return fx_div255((uint32_t)e->fade * (128 + (hs >> 8 & 127)));
         }
         case FX_DROPLETS: {
             uint16_t rr   = r < p->R3 ? r : p->R3;
-            uint8_t  ring = fx_div255((uint32_t)fx_band(p, d > rr ? d - rr : rr - d) * fx_fade(p, r));
+            uint8_t  ring = fx_div255((uint32_t)fx_band(p, d > rr ? d - rr : rr - d) * e->fade);
             if (r >= p->R3 && d > p->R3 && d <= 2 * p->R3 && !(fx_hash32(((uint32_t)lx << 8 | ly5) ^ e->seed) & 3)) {
-                uint8_t drop = fx_div255((uint32_t)fx_fade(p, r) * 200);
+                uint8_t drop = fx_div255((uint32_t)e->fade * 200);
                 if (drop > ring) ring = drop;
             }
             return ring;
@@ -261,13 +300,13 @@ static inline uint8_t fx_intensity_c(const fx_prep_t *p, const fx_event_t *e, ui
             if (ao > 8) return 0;
             uint8_t v     = (uint8_t)(255 - ao * 28);
             uint8_t flick = (e->seed >> ((e->t >> 5) & 15)) & 1 ? 255 : 140;
-            return fx_div255((uint32_t)fx_div255((uint32_t)v * flick) * fx_fade(p, r));
+            return fx_div255((uint32_t)fx_div255((uint32_t)v * flick) * e->fade);
         }
         case FX_TRAIL:
-            return d > 8 || e->t >= p->TT ? 0 : (uint8_t)(255 - ((uint32_t)e->t * p->tt_k >> 16));
+            return d > 8 || e->t >= p->TT ? 0 : fx_smooth8((uint8_t)(255 - ((uint32_t)e->t * p->tt_k >> 16)));
         case FX_HEAT:
             if (d >= p->HR || e->t >= p->HT) return 0;
-            return fx_div255((uint32_t)(255 - ((uint32_t)d * p->hr_k >> 16)) * (255 - ((uint32_t)e->t * p->ht_k >> 16)));
+            return fx_div255((uint32_t)fx_smooth8((uint8_t)(255 - ((uint32_t)d * p->hr_k >> 16))) * fx_smooth8((uint8_t)(255 - ((uint32_t)e->t * p->ht_k >> 16))));
         default:
             return 0;
     }
@@ -297,10 +336,11 @@ static inline uint8_t fx_overlay_v(uint8_t bright, uint8_t frame_v, uint8_t cap)
     return bright ? (uint8_t)((uint16_t)(bright > 100 ? 100 : bright) * cap / 100) : frame_v;
 }
 
-// The LEDs never go over the brightness cap (Add can sum past it).
-static inline void fx_cap(uint8_t rgb[3], uint8_t cap) {
+// The LEDs never go over the brightness cap (Add can sum past it); 8.8.
+static inline void fx_cap16(uint16_t rgb[3], uint8_t cap) {
+    uint16_t top = (uint16_t)cap << 8;
     for (uint8_t i = 0; i < 3; i++) {
-        if (rgb[i] > cap) rgb[i] = cap;
+        if (rgb[i] > top) rgb[i] = top;
     }
 }
 
@@ -308,19 +348,22 @@ static inline uint8_t fx_sat(const fx_prep_t *p) {
     return p->s.colour == FX_FIXED ? p->s.sat : 255;
 }
 
-// Blends the overlay colour c over the background b with strength a (V = brightness setting).
-static inline void fx_blend(uint8_t mode, uint8_t b[3], const uint8_t c[3], uint8_t a, uint8_t V) {
-    uint8_t top = b[0] > b[1] ? (b[0] > b[2] ? b[0] : b[2]) : (b[1] > b[2] ? b[1] : b[2]);
-    uint8_t lum = top > V / 2 ? top : V / 2; // tint: the background's brightness, at least half
+// Blends the overlay colour c (8-bit) over the background b with strength a
+// (V = brightness setting). b is 8.8 fixed point (v23): a fading ring keeps
+// its fine steps instead of rounding to the cap's ~100 levels.
+static inline void fx_blend16(uint8_t mode, uint16_t b[3], const uint8_t c[3], uint8_t a, uint8_t V) {
+    uint16_t top = b[0] > b[1] ? (b[0] > b[2] ? b[0] : b[2]) : (b[1] > b[2] ? b[1] : b[2]);
+    uint32_t lum = top > (uint32_t)V * 128 ? top : (uint32_t)V * 128; // tint: the background's brightness, at least half
     for (uint8_t i = 0; i < 3; i++) {
+        uint32_t c16 = (uint32_t)c[i] << 8;
         if (mode == FX_ADD) {
-            uint16_t v = b[i] + fx_div255((uint32_t)c[i] * a);
-            b[i]       = v > 255 ? 255 : (uint8_t)v;
+            uint32_t v = b[i] + c16 * a / 255;
+            b[i]       = v > 65535 ? 65535 : (uint16_t)v;
             continue;
         }
-        uint16_t t16    = mode == FX_TINT && V ? (uint16_t)c[i] * lum / V : c[i];
-        uint8_t  target = t16 > 255 ? 255 : (uint8_t)t16; // a background brighter than the setting
-        b[i]           = target >= b[i] ? b[i] + fx_div255((uint32_t)(target - b[i]) * a) : b[i] - fx_div255((uint32_t)(b[i] - target) * a);
+        uint32_t target = mode == FX_TINT && V ? (uint32_t)c[i] * lum / V : c16;
+        if (target > 65535) target = 65535; // a background brighter than the setting
+        b[i] = target >= b[i] ? (uint16_t)(b[i] + (target - b[i]) * a / 255) : (uint16_t)(b[i] - (b[i] - target) * a / 255);
     }
 }
 

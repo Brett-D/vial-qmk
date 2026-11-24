@@ -49,7 +49,6 @@ const FX = (() => {
     p.R3 = Math.floor(p.R / 3); p.HR = 2 * p.w + 8; p.TT = 400 + s.radius * 200; p.HT = 1500 + s.radius * 300;
     p.speed_q16 = Math.floor((30 + s.speed * 15) * 65536 / 1000);
     p.band_k = Math.floor(255 * 65536 / p.w);
-    p.fade_k = Math.floor(s.fade * 17 * 65536 / p.R);
     p.lin_k = Math.floor(255 * 65536 / p.R);
     p.trail_k = Math.floor(255 * 65536 / (3 * p.w));
     p.tt_k = Math.floor(255 * 65536 / p.TT);
@@ -65,6 +64,7 @@ const FX = (() => {
     const sx = e.tx - e.x, sy = e.ty5 - e.y5;
     e.len = isqrt(sx * sx + sy * sy);
     e.inv_len = e.len ? Math.floor(65536 / e.len) : 0;
+    e.fade = fade(p, e.r);
     return e;
   }
   function alive(p, e) {
@@ -72,55 +72,64 @@ const FX = (() => {
     if (p.s.effect === E.HEAT) return e.t < p.HT;
     return e.r < p.R + (p.rings - 1) * p.spacing + p.w;
   }
-  const band = (p, x) => (x >= p.w ? 0 : 255 - q16(x, p.band_k));
-  const fade = (p, r) => (r >= p.R ? 0 : 255 - q16(r, p.fade_k));
-  const ringAt = (p, d, rr) => div255(band(p, d > rr ? d - rr : rr - d) * fade(p, rr));
+  // v23: smoothstep (fx_smooth8), soft ring edges, eased fade with a soft tail, echo decay table.
+  const smooth8 = (x) => Math.floor(x * x * (765 - 2 * x) / 65025);
+  const band = (p, x) => (x >= p.w ? 0 : smooth8(255 - q16(x, p.band_k)));
+  function fade(p, r) {
+    if (r >= p.R) return 0;
+    const lin = q16(r, p.lin_k);
+    let f = 255 - div255(p.s.fade * 17 * smooth8(lin));
+    if (lin > 204) f = div255(f * smooth8((255 - lin) * 5));
+    return f;
+  }
+  const ECHO = [255, 160, 100, 62];
+  const ringAt = (p, d, rr, f) => div255(band(p, d > rr ? d - rr : rr - d) * f);
   function intensity(p, e, lx, ly) {
     const ly5 = y5(ly), dx = lx - e.x, dy = ly5 - e.y5, ax = Math.abs(dx), ay = Math.abs(dy), r = e.r, fx = p.s.effect;
     const reach = fx === E.HEAT ? p.HR : fx === E.TRAIL || fx === E.GLOW ? 9 : fx === E.LIGHTNING ? 255 : r + p.w + 1;
     if (ax > reach || ay > reach) return 0;
     const d = isqrt(ax * ax + ay * ay);
     switch (fx) {
-      case E.RING: return ringAt(p, d, r);
+      case E.RING: return ringAt(p, d, r, e.fade);
       case E.WAVE: {
         let best = 0;
         for (let k = 0; k < p.rings; k++) {
           const back = k * p.spacing;
           if (back > r) break;
-          const v = div255(ringAt(p, d, r - back) * (255 - k * 48));
+          const v = div255(ringAt(p, d, r - back, k ? fade(p, r - back) : e.fade) * ECHO[k & 3]);
           if (v > best) best = v;
         }
         return best;
       }
-      case E.SPLASH: return div255((d <= r ? 255 : band(p, d - r)) * fade(p, r));
-      case E.GLOW: return d > 8 || r >= p.R ? 0 : 255 - q16(r, p.lin_k);
+      case E.SPLASH: return div255((d <= r ? 255 : band(p, d - r)) * e.fade);
+      case E.GLOW: return d > 8 || r >= p.R ? 0 : smooth8(255 - q16(r, p.lin_k));
       case E.CROSS: case E.NEXUS: {
         const onRow = ay <= 6, onCol = ax <= 6;
         if (!onRow && !onCol) return 0;
         const a = onRow && onCol ? 0 : onRow ? ax : ay;
         const v = fx === E.CROSS ? (a <= r ? 255 : band(p, a - r)) : band(p, a > r ? a - r : r - a);
-        return div255(v * fade(p, r));
+        return div255(v * e.fade);
       }
       case E.SHOCKWAVE: {
         let v;
         if (d > r) v = band(p, d - r);
         else {
           const back = r - d;
-          v = back >= 3 * p.w ? 0 : ((255 - q16(back, p.trail_k)) * 3) >> 2;
+          v = back >= 3 * p.w ? 0 : (smooth8(255 - q16(back, p.trail_k)) * 3) >> 2;
           if (back < p.w) { const edge = band(p, back); if (edge > v) v = edge; }
         }
-        return div255(v * fade(p, r));
+        return div255(v * e.fade);
       }
       case E.SPARKS: {
         const hs = hash32(u32(((lx << 8) | ly5) ^ e.seed));
         if ((hs & 7) || d > r || d < 6) return 0;
-        return div255(fade(p, r) * (128 + ((hs >>> 8) & 127)));
+        return div255(e.fade * (128 + ((hs >>> 8) & 127)));
       }
       case E.DROPLETS: {
         const rr = r < p.R3 ? r : p.R3;
-        let ring = div255(band(p, d > rr ? d - rr : rr - d) * fade(p, r));
+        let ring = div255(band(p, d > rr ? d - rr : rr - d) * e.fade);
         if (r >= p.R3 && d > p.R3 && d <= 2 * p.R3 && !(hash32(u32(((lx << 8) | ly5) ^ e.seed)) & 3)) {
-          const drop = div255(fade(p, r) * 200);
+          const drop = div255(e.fade * 200);
           if (drop > ring) ring = drop;
         }
         return ring;
@@ -138,12 +147,12 @@ const FX = (() => {
         const ao = Math.abs(side - zig);
         if (ao > 8) return 0;
         const v = 255 - ao * 28, flick = (e.seed >>> ((e.t >> 5) & 15)) & 1 ? 255 : 140;
-        return div255(div255(v * flick) * fade(p, r));
+        return div255(div255(v * flick) * e.fade);
       }
-      case E.TRAIL: return d > 8 || e.t >= p.TT ? 0 : 255 - q16(e.t, p.tt_k);
+      case E.TRAIL: return d > 8 || e.t >= p.TT ? 0 : smooth8(255 - q16(e.t, p.tt_k));
       case E.HEAT:
         if (d >= p.HR || e.t >= p.HT) return 0;
-        return div255((255 - q16(d, p.hr_k)) * (255 - q16(e.t, p.ht_k)));
+        return div255(smooth8(255 - q16(d, p.hr_k)) * smooth8(255 - q16(e.t, p.ht_k)));
     }
     return 0;
   }
@@ -158,14 +167,25 @@ const FX = (() => {
   const sat = (p) => (p.s.colour === FIXED ? p.s.sat : 255);
   // Key-press brightness (v21): its own share of the cap, or the background's setting (0).
   const overlayV = (bright, frameV, cap) => (bright ? Math.floor(Math.min(bright, 100) * cap / 100) : frameV);
-  function cap(rgb, c) { for (let i = 0; i < 3; i++) if (rgb[i] > c) rgb[i] = c; }
-  function blend(mode, b, c, a, V) {
-    const top = Math.max(b[0], b[1], b[2]), lum = top > (V >> 1) ? top : V >> 1;
+  // 8.8 fixed point from v23 (fx_cap16 / fx_blend16): b is 0..65535, c 8-bit.
+  function cap16(rgb, c) { for (let i = 0; i < 3; i++) if (rgb[i] > c * 256) rgb[i] = c * 256; }
+  function blend16(mode, b, c, a, V) {
+    const top = Math.max(b[0], b[1], b[2]), lum = top > V * 128 ? top : V * 128;
     for (let i = 0; i < 3; i++) {
-      if (mode === ADD) { b[i] = Math.min(255, b[i] + div255(c[i] * a)); continue; }
-      const target = mode === TINT && V ? Math.min(255, Math.floor(c[i] * lum / V)) : c[i];
-      b[i] = target >= b[i] ? b[i] + div255((target - b[i]) * a) : b[i] - div255((b[i] - target) * a);
+      const c16 = c[i] * 256;
+      if (mode === ADD) { b[i] = Math.min(65535, b[i] + Math.floor(c16 * a / 255)); continue; }
+      const target = Math.min(65535, mode === TINT && V ? Math.floor(c[i] * lum / V) : c16);
+      b[i] = target >= b[i] ? b[i] + Math.floor((target - b[i]) * a / 255) : b[i] - Math.floor((b[i] - target) * a / 255);
     }
+  }
+  // Gamma 2.2 at the LEDs (fx_gamma16), scaled to the cap; DATA.fxGamma = fx_gamma_q.
+  const gammaK = (capv) => (capv ? Math.floor(4294901760 / (capv * 256)) : 0);
+  function gamma16(x, capv, k) {
+    const top = capv * 256, G = DATA.fxGamma;
+    if (x > top) x = top;
+    const t = Math.min(65535, Math.floor(x * k / 65536)), i = t >> 10;
+    const y = G[i] + Math.floor((G[i + 1] - G[i]) * (t & 1023) / 1024);
+    return Math.floor(y * top / 65536);
   }
   // QMK's hsv_to_rgb (quantum/color.c, without the CIE curve).
   function hsv2rgb(h, s, v) {
@@ -254,5 +274,5 @@ const FX = (() => {
     }
     return o;
   }
-  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap, blend, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
+  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
 })();
