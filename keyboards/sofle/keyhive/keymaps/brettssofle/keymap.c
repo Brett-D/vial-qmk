@@ -19,7 +19,12 @@
 #include "brettssofle.h"
 #include "diag.h"
 #include "pet.h"
-#include "led_layers.h"
+#include "led_fx.h"
+#include "user_config.h"
+#include "trackpad.h"
+#include "oled_pages.h"
+#include "config_mode.h"
+#include "rgb_driver.h"
 
 // Default keymap. Everything here can be changed live in Vial.
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -203,7 +208,7 @@ void keyboard_post_init_user(void) {
 #ifdef OLED_ENABLE
     oled_right_init();
 #endif
-    trackpad_z_post_init(); // the EECONFIG_USER settings (LED zones / idle too), with or without the trackpad
+    user_config_init(); // the EECONFIG_USER settings (press-to-click, LED zones / idle)
     pet_init(); // before the OLED page: a saved pet page needs pet_enabled()
     oled_pages_init();
 #ifdef RGB_MATRIX_ENABLE
@@ -219,9 +224,6 @@ void housekeeping_task_user(void) {
         rgb_idle_task();
     }
     rgb_driver_dither_task(); // smooth dim levels between frames (rgb_driver.c)
-#endif
-#ifdef POINTING_DEVICE_ENABLE
-    trackpad_z_sync_task();
 #endif
     pet_task();
     oled_pages_task();

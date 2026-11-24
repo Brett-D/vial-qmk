@@ -16,7 +16,7 @@ Keymap for a Keyhive Sofle v2 with:
 | `CYCLE` (Raise + top-left) | Switches the default layer between QWERTY and Colemak-DH (saved) |
 | `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
 | Encoders | Left: volume, press = mute. Right: page up/down, press = next OLED page (`OLED_PAGE`) |
-| LEDs | Per-key RGB Matrix with two layers: a **whole-keyboard** effect (static colour, rainbows, raindrops, …) and a **key-press** effect (reactive, splash, …) drawn on top in its own colour; presses light up and fade back into the whole-keyboard effect. Either can be off, so a single effect works too (`led_layers.c`, `rgb_matrix_user.inc`). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode; Vial (VialRGB) can pick single effects |
+| LEDs | Per-key RGB Matrix with two layers: a **whole-keyboard** effect (static colour, rainbows, raindrops, …) and a **key-press** effect (reactive, splash, …) drawn on top in its own colour; presses light up and fade back into the whole-keyboard effect. Either can be off, so a single effect works too (`leds/led_fx.c`, `leds/led_fx_draw.c`, `rgb_matrix_user.inc`). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode; Vial (VialRGB) can pick single effects |
 | Right OLED | Five pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime, last start), **5 pet** (see *OLED pet*; skipped when the pet is off). A **W** next to the page number means the mouse wiggler is on. Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
 
 ### Mouse wiggler
@@ -57,7 +57,7 @@ be remapped in Vial.
 Two-finger taps aren't possible: in the absolute mode needed for glide and
 circular scroll, the Pinnacle reports only one finger.
 
-#### Press-to-click and `trackpad_z.html`
+#### Press-to-click
 
 The Cirque reports **Z** (signal strength / contact size, 0–63, not true
 force). Press-to-click latches: when Z crosses the **threshold** (default 51)
@@ -67,16 +67,9 @@ when you lift your finger or Z falls below the **release Z** (default 24, well
 under light-touch levels). The cursor is held still for 60 ms at press and
 release so a hard press doesn't nudge it, a press never also counts as a tap,
 and it's ignored during ring scrolls.
-To tune it, open `trackpad_z.html` straight from disk in Edge/Chrome (close the
-Vial tab first) and click *Connect*. It graphs Z live with the press/release
-lines, has *Record LIGHT* / *Record FIRM* modes to measure your touches, and
-lets you switch press-to-click on/off and change the threshold and release Z.
-*Apply & save* stores them on the keyboard (EEPROM; a new firmware build resets
-them to the defaults). It talks raw HID command `0xF5`. The same settings, with
-a live Z graph, are also in config mode's **Trackpad** tab (no WebHID needed).
-
-Uncomment `TRACKPAD_Z_DEBUG` in `config.h` to also show live Z, peak, last
-peak and a touch counter on the right OLED.
+To tune it, use config mode's **Trackpad** tab: a live Z graph with the
+press/release lines, press-to-click on/off, the threshold and the release Z,
+saved on the keyboard (EEPROM, raw HID command `0xF5`, `trackpad/trackpad_z.c`).
 #### Tuning
 
 Change these in `config.h` and rebuild:
@@ -88,7 +81,7 @@ Change these in `config.h` and rebuild:
 | `TRACKPAD_DRAG_SCROLL_DIVISOR` | 8 | Higher = slower drag scroll |
 | `TRACKPAD_LONG_PRESS_RIGHT_CLICK` | off | Touch and hold still = right click (can misfire during slow ring scrolls) |
 | `TRACKPAD_LONG_PRESS_TERM` | 500 ms | Hold time for the long-press right click |
-| `TRACKPAD_PRESS_DEFAULT_ENABLED` / `_THRESHOLD` / `_RELEASE_Z` | 1 / 51 / 24 | Press-to-click defaults (live values are set in `trackpad_z.html`) |
+| `TRACKPAD_PRESS_DEFAULT_ENABLED` / `_THRESHOLD` / `_RELEASE_Z` | 1 / 51 / 24 | Press-to-click defaults (live values are set in config mode's Trackpad tab) |
 | `TRACKPAD_PRESS_DEBOUNCE` | 2 polls | Polls Z must stay at/above the threshold before pressing |
 | `TRACKPAD_PRESS_MIN_MS` | 30 ms | Shortest press before a low Z can release it |
 | `TRACKPAD_PRESS_FREEZE_MS` | 60 ms | Cursor held still after press and release |
@@ -121,7 +114,7 @@ once** with the config page (mouse mode):
 The map is kept in EEPROM on the left half and sent to the right half
 (`led_map.c`). **Use built-in LED map** forgets it. **Copy result** gives a
 JSON you can bake in as the built-in map:
-`python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_rgb_layout.py --map led.json`
+`python keyboards/sofle/keyhive/keymaps/brettssofle/tools/gen.py rgb-layout --map led.json`
 
 The built-in map in `rgb_layout.c` is derived from keyhive's rgblight
 `led_map` + the Sofle RGB chain order and does not match every board.
@@ -175,12 +168,12 @@ warning when the key-press colour is close to the background's or Tint is
 chosen; nothing is blocked.
 
 **Page**: LEDs tab → *Background* and *On key press* sections, and a
-preview of the keyboard with the same maths (`config_page/fx_core.js`, a
+preview of the keyboard with the same maths (`page/fx_core.js`, a
 line-for-line port, checked value for value against the C by
 checked value for value against the C by the development test harness,
 which is kept outside this repository); QMK's own backgrounds are approximated there.
 Click a key in the preview for a test ripple — it also runs on the
-keyboard. Settings are kept in EEPROM (8 bytes, `led_layers.c`; v6–v19
+keyboard. Settings are kept in EEPROM (8 bytes, `leds/led_fx.c`; v6–v19
 settings are converted) and are in backups.
 
 Raw HID: `0xF6 0x1C` op 0 get, 1 set (preview), 2 save, 3 revert, 4 fire
@@ -236,7 +229,7 @@ is latched at the start), so the slicing adds no stepping.
 ## Config mode
 
 Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad press-to-click from
-`config_page/sofle-config.html` — a single file you open from disk (keep a
+`sofle-config.html` (made by the build in `generated/`) — a single file you open from disk (keep a
 copy on any computer). Nothing to install, no internet. Two ways to use it:
 
 ### USB network mode (keyboard at 192.168.7.1)
@@ -292,7 +285,7 @@ once — see rules.mk; build without it: `NETWORK_ENABLE=no`).
 
 ### Typed page delivery (nothing to install, no network)
 
-The keyboard carries two copies of the page (`config_page_blob.h`, rebuilt
+The keyboard carries two copies of the page (`generated/config_page_blob.h`, rebuilt
 from the HTML at every build) and can type either into any browser:
 
 | | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
@@ -389,8 +382,7 @@ commands that change the keyboard (keymap/encoder/lighting sets, macros,
 QMK settings, trackpad 0xF5 set, …) are refused, so another web page can't
 silently rewrite it. Reading still works. **The Vial app is affected too:
 unlock it first** (Vial → Security → Unlock, then hold the four corner keys),
-otherwise its changes are refused. `trackpad_z.html` can read live Z, but
-needs Vial unlocked to save — use the Trackpad tab here instead.
+otherwise its changes are refused.
 
 ### Colours
 
@@ -436,9 +428,8 @@ Keymap changes are saved like Vial's (EEPROM; a new firmware build resets them
 to the defaults in `keymap.c`). v1 covers keymap, knobs, LEDs and
 trackpad; use Vial for combos, tap dance and macros.
 
-After changing `config_page/gen_config.py`, `config_page/page.html` or
-`config_page/light.html`, regenerate `config_picker.h` and both pages:
-`python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
+The pages are rebuilt from `page/` with every firmware build, or on their
+own with `python keyboards/sofle/keyhive/keymaps/brettssofle/tools/gen.py`.
 
 ## Building
 
@@ -462,14 +453,12 @@ Before the first build:
    `python -c "import py7zr; py7zr.SevenZipFile('lib/chibios/ext/lwip-2.1.2.7z').extractall('lib/chibios/ext')"`.
    Or build without network mode: add `NETWORK_ENABLE=no`.
 2. **Python 3** must be on the PATH (it is in the QMK environment and the
-   Docker image): every build regenerates `config_page_blob.h` (the pages
-   the keyboard types and serves, gzipped) from `config_page/sofle-config.html`
-   and `sofle-light.html`. That file is not in git.
-
-After editing `config_page/page.html`, `light.html` or `gen_config.py`,
-rerun `python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
-(it writes `sofle-config.html` / `sofle-light.html`, which are committed:
-they are also the files you open from disk). Pet art: `gen_pet_art.py`.
+   Docker image): every build runs `tools/gen.py`, which writes everything
+   generated into `generated/` (not in git): the pet art, the keycode picker,
+   `sofle-config.html` / `sofle-light.html` (the pages you open from disk)
+   and `config_page_blob.h` (the pages the keyboard types and serves,
+   gzipped). A failing generator stops the build. Run it on its own with
+   `python keyboards/sofle/keyhive/keymaps/brettssofle/tools/gen.py`.
 
 Without a local QMK environment, use Docker from the repository root (PowerShell):
 
@@ -482,6 +471,39 @@ Output: `sofle_keyhive_brettssofle_rp2040_ce.uf2` in the repository root.
 
 For trackpad debug output (`qmk console` / hid_listen), add `TRACKPAD_DEBUG=yes`.
 To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE=no`.
+
+## Code layout
+
+| Folder | What |
+|---|---|
+| `keymap.c`, `config.h`, `rules.mk`, `vial.json` | keymap, layers, hooks (init / housekeeping / `process_record_user`), build options |
+| `brettssofle.h` | layers and custom keycodes only; each module has its own header |
+| `common/` | `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
+| `trackpad/` | gestures and press-to-click (`trackpad.c`), Cirque Z + raw HID `0xF5` (`trackpad_z.c`), mouse wiggler |
+| `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key |
+| `pet/` | the OLED pet (state, care, EEPROM record; drawing) |
+| `leds/` | per-half WS2812 driver with the smooth output stage (`rgb_driver.c`), LED layout (`rgb_layout.c`, a source: `tools/gen.py rgb-layout` rewrites it), measured LED map and calibration, the lighting engine: settings / storage / split sync (`led_fx.c`), drawing (`led_fx_draw.c`), maths (`led_fx_core.h`) and the effect table (`led_fx_table.h`) |
+| `config/` | config mode: keyboard-only editor and keys (`config_mode.c`), web session and raw HID `0xF6` (`config_hid.c`), right-OLED sync and screens (`config_oled.c`), shared internals (`config_internal.h`), keystroke bridge, typed page delivery |
+| `net/` | USB network mode: CDC-NCM, lwIP glue, DHCP, HTTP server and JSON API |
+| `page/` | the config pages' sources: `page.html` (markup, styles) + `js/*.js` (its script, in order), `light.html`, `fx_core.js` (the engine maths for the preview), `loader.js` / `bootstrap.html` (typed delivery) |
+| `tools/` | generators behind one entry point, `gen.py` (run by every build) |
+| `generated/` | everything the generators write; not in git |
+| `rgb_matrix_user.inc` | the LAYERED rgb_matrix effect (stays here: QMK looks for it in the keymap folder) |
+
+Outside the keymap the fork adds only weak hooks that change nothing unless
+a keymap defines them:
+
+- `quantum/via.c` / `via.h`: `via_command_kb()` (raw HID commands before
+  VIA/Vial, as in upstream QMK) and `via_eeprom_magic()` (a stable EEPROM
+  magic instead of Vial's random build id, so settings survive reflashing);
+- `quantum/raw_hid.c` / `raw_hid.h`: `raw_hid_send_user()` (network mode
+  takes VIA replies for HTTP);
+- `tmk_core/protocol/chibios/usb_main.c`: `usb_event_user()`,
+  `usb_requests_hook_user()`; `tmk_core/protocol/usb_descriptor.c` / `.h`:
+  `get_usb_descriptor_user()` (the CDC-NCM function in network mode).
+
+The development test harness (simulators, split-pair tests, browser tests,
+parity and timing measurements) is kept outside this repository.
 
 ## Flashing
 
@@ -518,7 +540,7 @@ unchanged. (The first flash of a firmware with this, v11, still resets once.)
 
 A little pixel pet lives on the right OLED's fifth page: **Pip, cat, dog,
 owl, dragon, blob or axolotl** (all original art, drawn by
-`config_page/gen_pet_art.py`, which writes the firmware's `pet_art.h` and the
+`tools/gen_pet_art.py`, which writes the firmware's `pet_art.h` and the
 page's copy from the same source). The page is laid out for the tall, narrow
 screen: name and mood icon, the pet, four stat bars (food, fun, energy,
 clean), then the selected care action as a big icon with its name.

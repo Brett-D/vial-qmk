@@ -1,2 +1,3 @@
-# Generated at every build by config_page/gen_page_blob.py (rules.mk).
-config_page_blob.h
+# Written by tools/gen.py at every build (rules.mk).
+generated/
+__pycache__/

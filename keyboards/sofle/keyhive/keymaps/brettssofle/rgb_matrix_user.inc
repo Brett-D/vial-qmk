@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
 // LAYERED: the background (one of QMK's effects, or ours from led_fx_core.h);
-// the key-press overlay is composited over it at flush (led_layers.c,
+// the key-press overlay is composited over it at flush (led_fx.c,
 // rgb_driver.c). This file is part of rgb_matrix.c, so the built-in effect
 // functions are callable here.
 
@@ -10,8 +10,8 @@ RGB_MATRIX_EFFECT(LAYERED)
 
 #ifdef RGB_MATRIX_CUSTOM_EFFECT_IMPLS
 
-bool led_fx_background(effect_params_t *params); // led_layers.c: our own backgrounds (or dark)
-#    include "led_layers.h"
+bool led_fx_background(effect_params_t *params); // led_fx.c: our own backgrounds (or dark)
+#    include "led_fx.h"
 
 #    define LAYER_EFFECT(name) \
         case RGB_MATRIX_##name: \

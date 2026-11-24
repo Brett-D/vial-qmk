@@ -41,22 +41,28 @@ else
     CONSOLE_ENABLE = no
 endif
 
-SRC += trackpad.c trackpad_z.c oled.c oled_pages.c
-# Config mode + keystroke bridge (config_page/sofle-config.html). After
-# editing config_page/gen_config.py, page.html or light.html, rerun:
-#   python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py
-SRC += config_mode.c bridge.c wiggler.c deliver.c config_page_blob.c diag.c eeprom_layout.c pet.c pet_draw.c page_key.c
+# Layout (readme.md, "Code layout"): one folder per area; generated/ holds
+# everything tools/gen.py writes (not in git).
+EXTRAINCDIRS += $(addprefix $(BRETTS_DIR)/, common config leds oled pet trackpad generated)
+
+SRC += common/diag.c common/eeprom_layout.c common/brett_util.c common/user_config.c
+SRC += trackpad/trackpad.c trackpad/trackpad_z.c trackpad/wiggler.c
+SRC += oled/oled.c oled/oled_pages.c oled/page_key.c
+SRC += pet/pet.c pet/pet_draw.c
 OPT_DEFS += -DPET_ENABLE
-# Typed page delivery: config_page_blob.h is the page as deliver.c types it,
-# regenerated from sofle-config.html / sofle-light.html at every build so they never drift.
-# Stops the build if the generator fails (an old header must not be used).
-CONFIG_PAGE_BLOB_GEN := $(shell (python3 $(BRETTS_DIR)/config_page/gen_page_blob.py || python $(BRETTS_DIR)/config_page/gen_page_blob.py) 2>&1; echo "gen_rc=$$?")
-$(info $(filter-out gen_rc=%,$(CONFIG_PAGE_BLOB_GEN)))
-ifneq ($(lastword $(CONFIG_PAGE_BLOB_GEN)),gen_rc=0)
-    $(error config_page_blob.h could not be generated (needs Python 3): $(CONFIG_PAGE_BLOB_GEN))
+# Config mode: keyboard-only mode (keystroke bridge), the web session over raw
+# HID, the right-OLED screens, typed page delivery.
+SRC += config/config_mode.c config/config_hid.c config/config_oled.c config/bridge.c config/deliver.c config/config_page_blob.c
+# Generated files (pet art, the config pages, the page blob deliver.c types and
+# net/ serves): rebuilt from page/ and tools/ at every build so they never
+# drift. Stops the build if a generator fails (old outputs must not be used).
+BRETTS_GEN := $(shell (python3 $(BRETTS_DIR)/tools/gen.py || python $(BRETTS_DIR)/tools/gen.py) 2>&1; echo "gen_rc=$$?")
+$(info $(filter-out gen_rc=%,$(BRETTS_GEN)))
+ifneq ($(lastword $(BRETTS_GEN)),gen_rc=0)
+    $(error generated/ could not be made (needs Python 3): $(BRETTS_GEN))
 endif
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
-    SRC += rgb_driver.c rgb_layout.c led_map.c led_cal.c led_layers.c
+    SRC += leds/rgb_driver.c leds/rgb_layout.c leds/led_map.c leds/led_cal.c leds/led_fx.c leds/led_fx_draw.c
 endif
 
 # USB network config mode (net/): the keyboard re-enumerates with a CDC-NCM

@@ -93,20 +93,12 @@
 // #define TRACKPAD_LONG_PRESS_RIGHT_CLICK
 #define TRACKPAD_LONG_PRESS_TERM 500
 
-// Experiment: show the trackpad's Z (signal strength, 0-63) live on the right
-// OLED, to see whether a light touch and a firm press are distinguishable.
-// trackpad_z.html works without it (raw HID). Off by default.
-// #define TRACKPAD_Z_DEBUG
 // RPC_ID_USER_CFG mirrors config mode to the right OLED (config_mode.c);
 // RPC_ID_USER_LEDMAP sends the measured LED map to the right half (led_map.c);
 // RPC_ID_USER_VIEW sends the right OLED's page and its values (oled_pages.c);
-// RPC_ID_USER_LEDFX sends the lighting settings and test ripples (led_layers.c).
+// RPC_ID_USER_LEDFX sends the lighting settings and test ripples (led_fx.c).
 // New ids go at the end, so the existing ones keep their numbers.
-#ifdef TRACKPAD_Z_DEBUG
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX, RPC_ID_USER_TP_Z // debug id last: the others keep their numbers
-#else
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
-#endif
+#define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
 
 // Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE
 // polls presses the left button; it stays held at normal touch pressure (for
@@ -136,8 +128,8 @@
 // Each half drives only its own 37 LEDs; see rgb_driver.c.
 // EEPROM keyboard datablock (unused by the sofle code): the measured LED map
 // (0-75, led_map.c), the OLED page (78-79, oled_pages.c) and the layered
-// lighting choice (80-85, led_layers.c). EECONFIG_USER keeps the 32-bit
-// settings word. The version stays at the first size (80) so data saved by
+// lighting choice (80-87, led_fx.c; key-press brightness 76-77). EECONFIG_USER
+// keeps the 32-bit settings word (user_config.c). The version stays at the first size (80) so data saved by
 // earlier builds stays valid; new parts carry their own magic.
 #    define EECONFIG_KB_DATA_SIZE 88
 #    define EECONFIG_KB_DATA_VERSION 80
