@@ -786,7 +786,8 @@ static void cfg_raw_hid(uint8_t *data) {
             bool ok = hid_writes_allowed();
             if (arg == 1 && ok) {
                 fx_settings_t n = {.base = led_mode_of(data[3]), .effect = data[4], .blend = data[5], .colour = data[6], .hue = data[7], .sat = data[8],
-                                   .speed = data[9], .width = data[10], .radius = data[11], .fade = data[12], .echoes = data[13], .dim = data[14]};
+                                   .speed = data[9], .width = data[10], .radius = data[11], .fade = data[12], .echoes = data[13], .dim = data[14],
+                                   .bright = data[15] & 0x80 ? data[15] & 0x7F : s.bright}; // v21 pages set bit 7; older ones keep it
                 ok = (n.base || !data[3]) && led_fx_set(&n); // refused: led_fx_table.h doesn't allow it
             } else if (arg == 2 && ok) {
                 led_fx_save();
@@ -798,8 +799,8 @@ static void cfg_raw_hid(uint8_t *data) {
                 led_fx_fire(data[3], data[4]);
             }
             led_fx_get(&s);
-            uint8_t reply[13] = {led_effect_of(s.base), s.effect, s.blend, s.colour, s.hue, s.sat, s.speed, s.width, s.radius, s.fade, s.echoes, s.dim, (uint8_t)(arg == 0 || ok)};
-            memcpy(&data[3], reply, sizeof(reply)); // [15] = done (0 = refused)
+            uint8_t reply[14] = {led_effect_of(s.base), s.effect, s.blend, s.colour, s.hue, s.sat, s.speed, s.width, s.radius, s.fade, s.echoes, s.dim, (uint8_t)(arg == 0 || ok), s.bright};
+            memcpy(&data[3], reply, sizeof(reply)); // [15] = done (0 = refused), [16] = key-press brightness (v21)
             return;
         }
         case CMD_SET_ZONE: // preview: zone, underglow hue, underglow sat

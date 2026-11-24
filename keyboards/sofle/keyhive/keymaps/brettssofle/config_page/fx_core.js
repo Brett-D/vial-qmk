@@ -156,6 +156,9 @@ const FX = (() => {
     return p.s.hue;
   }
   const sat = (p) => (p.s.colour === FIXED ? p.s.sat : 255);
+  // Key-press brightness (v21): its own share of the cap, or the background's setting (0).
+  const overlayV = (bright, frameV, cap) => (bright ? Math.floor(Math.min(bright, 100) * cap / 100) : frameV);
+  function cap(rgb, c) { for (let i = 0; i < 3; i++) if (rgb[i] > c) rgb[i] = c; }
   function blend(mode, b, c, a, V) {
     const top = Math.max(b[0], b[1], b[2]), lum = top > (V >> 1) ? top : V >> 1;
     for (let i = 0; i < 3; i++) {
@@ -243,5 +246,5 @@ const FX = (() => {
     }
     return o;
   }
-  return { E, B, prepare, event, alive, intensity, hue, sat, blend, hsv2rgb, background, sin8, hash32, isqrt, y5 };
+  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap, blend, hsv2rgb, background, sin8, hash32, isqrt, y5 };
 })();

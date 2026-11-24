@@ -50,6 +50,7 @@ typedef struct {
     uint8_t fade;   // 0-15: 0 = full strength to the end, 15 = fades out evenly
     uint8_t echoes; // 0-3: extra rings (echo rings)
     uint8_t dim;    // 0-7: background brightness while a ripple runs (0 = no change)
+    uint8_t bright; // v21: key-press brightness, 1-100 % of the cap (0 = the background's brightness)
 } fx_settings_t;
 
 // Worked out once per frame from the settings.
@@ -288,6 +289,18 @@ static inline uint8_t fx_hue(const fx_prep_t *p, const fx_event_t *e, uint8_t ba
             return (uint8_t)(e->seed >> 24);
         default:
             return p->s.hue;
+    }
+}
+
+// The key-press colour's brightness: its own share of the cap, or the background's setting.
+static inline uint8_t fx_overlay_v(uint8_t bright, uint8_t frame_v, uint8_t cap) {
+    return bright ? (uint8_t)((uint16_t)(bright > 100 ? 100 : bright) * cap / 100) : frame_v;
+}
+
+// The LEDs never go over the brightness cap (Add can sum past it).
+static inline void fx_cap(uint8_t rgb[3], uint8_t cap) {
+    for (uint8_t i = 0; i < 3; i++) {
+        if (rgb[i] > cap) rgb[i] = cap;
     }
 }
 

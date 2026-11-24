@@ -19,6 +19,7 @@
 
 #include "brettssofle.h"
 #include "led_layers.h"
+#include "led_map.h"
 
 #ifdef RGB_MATRIX_ENABLE
 #    include "transactions.h"
@@ -27,6 +28,8 @@
 #    define LAYERS_EE_OFFSET 80 // after the LED map (0-75) and the OLED page (78-79)
 #    define LAYERS_EE_OLD 0x4C  // v6-v19: magic, base, react, hue, sat, sum
 #    define LAYERS_EE_MAGIC 0x4D
+#    define BRIGHT_EE_OFFSET 76 // v21 key-press brightness + check, between the LED map (0-75) and the OLED page
+#    define BRIGHT_EE_CHECK 0x5B
 #    define FX_SYNC_MS 2000
 #    define FX_DIM_STEP 24 // per frame, background dim in / out
 #    ifdef WPM_ENABLE
@@ -34,6 +37,7 @@
 #    endif
 
 _Static_assert(LAYERS_EE_OFFSET + 8 <= EECONFIG_KB_DATA_SIZE, "raise EECONFIG_KB_DATA_SIZE");
+_Static_assert(1 + LED_MAP_COUNT + 1 <= BRIGHT_EE_OFFSET && BRIGHT_EE_OFFSET + 2 <= 78, "key-press brightness overlaps the LED map or the OLED page");
 
 static fx_settings_t fx;
 static uint8_t       dim_now = 255;
@@ -213,7 +217,7 @@ void led_fx_get(fx_settings_t *s) {
 static bool valid(const fx_settings_t *s) {
     bool solo = led_layers_is_solo(s->base);
     return (!s->base || led_layers_is_base(s->base) || solo) && !(solo && s->effect) && s->effect < FX_EFFECT_COUNT && s->blend < FX_BLEND_COUNT && s->colour < FX_COLOUR_COUNT &&
-           s->speed < 16 && s->width < 16 && s->radius < 16 && s->fade < 16 && s->echoes < 4 && s->dim < 8 && (s->base || s->effect);
+           s->speed < 16 && s->width < 16 && s->radius < 16 && s->fade < 16 && s->echoes < 4 && s->dim < 8 && s->bright <= 100 && (s->base || s->effect);
 }
 
 // Ours are drawn by LAYERED; QMK's run as themselves when there's no key-press effect.
@@ -251,12 +255,17 @@ static void load(void) {
     } else {
         fx = fx_default;
     }
+    uint8_t b[2]; // v21; before: the background's brightness
+    eeconfig_read_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
+    fx.bright = (b[0] ^ BRIGHT_EE_CHECK) == b[1] && b[0] <= 100 ? b[0] : 0;
 }
 
 void led_fx_save(void) {
     uint8_t p[8];
     pack(&fx, p);
     eeconfig_update_kb_datablock(p, LAYERS_EE_OFFSET, sizeof(p));
+    uint8_t b[2] = {fx.bright, fx.bright ^ BRIGHT_EE_CHECK};
+    eeconfig_update_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
 }
 
 void led_layers_save(void) {
@@ -318,6 +327,7 @@ static void remote_handler(uint8_t in_len, const void *in_data, uint8_t out_len,
     const uint8_t *p = in_data;
     fx_settings_t  s;
     if (in_len >= 10 && unpack(p, &s)) {
+        s.bright  = in_len >= 11 && p[10] <= 100 ? p[10] : 0; // v21; a v20 left half: the background's
         fx        = s;
         remote_at = timer_stamp32();
         if (p[8] < MATRIX_ROWS && p[9] < MATRIX_COLS) {
@@ -340,17 +350,19 @@ void led_fx_task(void) {
     if (!is_keyboard_master() || !is_transport_connected()) {
         return;
     }
-    static uint8_t  sent[8];
+    static uint8_t  sent[9];
     static uint32_t sent_at;
-    uint8_t         p[10];
+    uint8_t         p[11];
     pack(&fx, p);
-    p[8] = fire_row < 0 ? 0xFF : fire_row;
-    p[9] = fire_col < 0 ? 0xFF : fire_col;
-    if (fire_row < 0 && !memcmp(p, sent, 8) && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
+    p[8]  = fire_row < 0 ? 0xFF : fire_row;
+    p[9]  = fire_col < 0 ? 0xFF : fire_col;
+    p[10] = fx.bright; // v21 (a v20 right half reads the first 10)
+    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
         return;
     }
     if (transaction_rpc_send(RPC_ID_USER_LEDFX, sizeof(p), p)) {
         memcpy(sent, p, 8);
+        sent[8]  = p[10];
         sent_at  = timer_stamp32();
         fire_row = fire_col = -1;
     }
@@ -462,9 +474,11 @@ void led_fx_pixel(uint8_t led, uint8_t rgb[3]) {
     if (!best) {
         return;
     }
-    rgb_t   c      = hsv_to_rgb((hsv_t){fx_hue(&prep, &ev[bj], frame_hue, lx, ly), fx_sat(&prep), frame_v});
+    uint8_t v      = fx_overlay_v(fx.bright, frame_v, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+    rgb_t   c      = hsv_to_rgb((hsv_t){fx_hue(&prep, &ev[bj], frame_hue, lx, ly), fx_sat(&prep), v});
     uint8_t top[3] = {c.r, c.g, c.b};
-    fx_blend(fx.blend, rgb, top, best > 255 ? 255 : (uint8_t)best, frame_v);
+    fx_blend(fx.blend, rgb, top, best > 255 ? 255 : (uint8_t)best, v);
+    fx_cap(rgb, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
 }
 
 #endif

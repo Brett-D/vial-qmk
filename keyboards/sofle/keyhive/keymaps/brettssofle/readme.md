@@ -145,6 +145,13 @@ The LEDs are drawn in layers, every frame, on each half:
      distance, random per press.
    - *Over the background*: **Replace** (default: always clearly visible),
      **Add** (lightens), **Tint** (keeps the background's brightness).
+   - *Key-press brightness* (v21): **same as the background** (default) or
+     its own 1–100 % of the maximum brightness, so the animations can be
+     brighter or dimmer than the rest. The background's *Brightness* slider
+     is the rest of the keyboard; *dim background while active* lowers the
+     background only while an animation runs. With Tint the animation takes
+     the background's brightness. The LEDs never go over the maximum
+     brightness (`fx_cap`, also when Add sums past it).
    - *Speed*, *band width*, *reach*, *fade*, *echo rings* (echo rings only) and
      *dim background while active* (the background dims a little while a
      ripple runs, so it stands out).
@@ -178,7 +185,11 @@ settings are converted) and are in backups.
 Raw HID: `0xF6 0x1C` op 0 get, 1 set (preview), 2 save, 3 revert, 4 fire
 (row, col); set/reply bytes 3–14 = background (VialRGB id, or 0xC0+ ours /
 0xD0+ standalone), effect, blend, colour mode, hue, sat, speed, width,
-reach, fade, echoes, dim; reply byte 15 = accepted. The v6–v19 command
+reach, fade, echoes, dim; set byte 15 = key-press brightness (0 = the
+background's, 1–100 %) with bit 7 set (without it the keyboard keeps its
+value: v20 pages); reply byte 15 = accepted, 16 = key-press brightness.
+The brightness is kept in EEPROM bytes 76–77 (with a check byte) and sent
+to the right half as an 11th RPC byte (a v20 right half reads the first 10). The v6–v19 command
 `0xF6 0x14` still works (light page).
 
 Cost (v20): about +5.5 KB of flash for the engine and +8.6 KB for the
@@ -254,8 +265,8 @@ from the HTML at every build) and can type either into any browser:
 | | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
 |---|---|---|
 | has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, background + key-press effects with the preview, pet, wiggler, knob control, keyboard-only mode, help, …) |
-| gzipped | 12.3 KB | 55.0 KB |
-| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~22 s, then ~419 s |
+| gzipped | 12.3 KB | 55.5 KB |
+| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~22 s, then ~423 s |
 | when done | opens in the same tab in keyboard-only mode; **Save for mouse mode next time** | Save as / Use it here |
 
 The full page is also served by network mode (quicker, and the mouse works
