@@ -88,7 +88,10 @@ static void map_from_default(uint8_t *map) {
     }
 }
 
+static uint8_t map_gen; // bumped whenever g_led_config changes (led_fx_draw.c's distance cache)
+
 static void map_apply(const uint8_t *map) {
+    map_gen++;
     memcpy(active, map, LED_MAP_COUNT);
     for (uint8_t r = 0; r < MATRIX_ROWS; r++) {
         for (uint8_t c = 0; c < MATRIX_COLS; c++) {
@@ -235,6 +238,7 @@ void led_map_reset(void) {
     ledmap_store_t store = {0};
     eeconfig_update_kb_datablock(&store, 0, sizeof(store));
     memcpy(&g_led_config, &led_config_default, sizeof(g_led_config));
+    map_gen++;
     map_from_default(active);
     measured = false;
     schedule_sync();
@@ -242,6 +246,10 @@ void led_map_reset(void) {
 
 bool led_map_is_measured(void) {
     return measured;
+}
+
+uint8_t led_map_generation(void) {
+    return map_gen;
 }
 
 uint8_t led_map_right_state(void) {

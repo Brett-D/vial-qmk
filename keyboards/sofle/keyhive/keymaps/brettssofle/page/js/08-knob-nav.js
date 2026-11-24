@@ -20,13 +20,20 @@ function navItems() {
   const root = S.ui.tab === 1 ? (CAL.on ? $("calView") : $("ledCtl")) : S.ui.tab === 3 ? $("petView") : $("padView");
   return [...root.querySelectorAll("input:not([type=color]), select, button, summary")].filter(navVisible); // the knob uses the swatches
 }
+function navClamp(items) {
+  const last = Math.max(0, items.length - 1);
+  NAV.pick = Math.max(0, Math.min(NAV.pick, last));
+  NAV.idx = Math.max(0, Math.min(NAV.idx, last));
+}
 function navPaint(scroll = true) {
   document.querySelectorAll(".navf, .navedit").forEach((el) => el.classList.remove("navf", "navedit"));
   if (!NAV.on) return;
   const items = navItems();
   if (!items.length) return;
-  const i = NAV.mode === "pick" ? NAV.pick : NAV.idx;
-  const el = items[Math.max(0, Math.min(i, items.length - 1))];
+  // The list can shrink (another tab, a hidden control): keep the stored index
+  // on the highlighted item, so a press activates what is shown.
+  navClamp(items);
+  const el = items[NAV.mode === "pick" ? NAV.pick : NAV.idx];
   el.classList.add(NAV.mode === "edit" ? "navedit" : "navf");
   if (scroll) el.scrollIntoView({ block: "nearest" });
 }
@@ -56,6 +63,7 @@ function navTurn(n) {
 }
 async function navPress() {
   const items = navItems();
+  navClamp(items);
   if (NAV.mode === "edit") { NAV.mode = "move"; NAV.editEl = null; return navPaint(); }
   if (NAV.mode === "pick") {
     const el = items[NAV.pick];

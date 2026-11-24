@@ -161,7 +161,7 @@ async function restoreApply() {
     if (want.has("leds")) {
       prog("Lighting…");
       Object.assign(S.led, b.leds, { dirty: 1 });
-      await flushLed();
+      if (!(await flushLed())) throw new Error("the lighting didn't reach the keyboard");
       await ok([0x09]);
       await ok([0xf6, 0x01, S.led.idle]);
       await ok([0xf6, 0x07]);

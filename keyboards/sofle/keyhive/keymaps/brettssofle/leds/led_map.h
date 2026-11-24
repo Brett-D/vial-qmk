@@ -20,6 +20,7 @@ void led_map_write(uint8_t offset, const uint8_t *data, uint8_t len); // staged 
 bool led_map_commit(void);                                            // validate, save, apply, sync
 void led_map_reset(void);                                             // back to rgb_layout.c's built-in map
 bool led_map_is_measured(void);
+uint8_t led_map_generation(void); // changes whenever the LED positions do (commit, reset, right-half sync)
 // Master: does the right half run the same map? (checksum it reports back
 // after each full sync) 0 = not known yet, 1 = same, 2 = different.
 uint8_t led_map_right_state(void);

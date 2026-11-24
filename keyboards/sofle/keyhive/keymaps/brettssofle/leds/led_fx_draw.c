@@ -8,6 +8,7 @@
 
 #include QMK_KEYBOARD_H
 #include "led_fx.h"
+#include "led_map.h"
 
 #ifdef RGB_MATRIX_ENABLE
 #    define FX_DIM_STEP 24 // per frame, background dim in / out
@@ -64,6 +65,11 @@ void led_fx_layered_drawn(void) {
 bool led_fx_frame_begin(bool calibrating) {
     bool drawn    = layered_drawn;
     layered_drawn = false;
+    static uint8_t map_gen;
+    if (map_gen != led_map_generation()) { // LED positions moved: the cached distances are stale
+        map_gen = led_map_generation();
+        memset(dcache, 0xFF, sizeof dcache);
+    }
     led_fx_get(&fx); // this frame's settings
     frame_on = drawn && rgb_matrix_is_enabled() && rgb_matrix_get_mode() == led_layers_mode() && fx.effect && !calibrating;
     if (!frame_on) {

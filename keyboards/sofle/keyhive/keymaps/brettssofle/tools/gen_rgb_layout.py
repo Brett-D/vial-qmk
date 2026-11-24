@@ -19,7 +19,7 @@ import argparse
 import json
 from pathlib import Path
 
-from paths import write, LEDS, QMK_ROOT as ROOT
+from paths import write, LEDS as LEDS_DIR, QMK_ROOT as ROOT
 ROWS, COLS, LEDS = 10, 7, 74
 UNDERGLOW, NONE = 0xFE, 0xFF
 W, H = 16.5, 5.75  # layout size in key units -> QMK's 224 x 64 LED space
@@ -136,7 +136,7 @@ def main():
     for r in range(ROWS):
         out.append("    { " + ", ".join("{%3d,%3d}" % pos.get((r, c), (0, 0)) for c in range(COLS)) + " },")
     out += ["};", "// clang-format on", "#endif", ""]
-    write(LEDS / "rgb_layout.c", "\n".join(out))
+    write(LEDS_DIR / "rgb_layout.c", "\n".join(out))
     print(f"rgb_layout.c: {len(keys)} key LEDs, {codes.count(UNDERGLOW)} underglow, {codes.count(NONE)} none ({src})")
 
 

@@ -30,13 +30,19 @@ async function assign(kc) {
 }
 
 // LEDs: live preview through the VIA lighting commands, saved with Save.
-let ledFlushing = false;
-async function flushLed() {
-  if (ledFlushing) return;
-  ledFlushing = true;
+// One flush at a time; Save / restore await the running one (it also sends
+// changes made meanwhile). While Undo reloads the saved state, nothing is sent.
+let ledFlushP = null, ledHold = false;
+function flushLed() {
+  if (ledHold) return Promise.resolve(true);
+  if (!ledFlushP) ledFlushP = ledFlushLoop().finally(() => { ledFlushP = null; });
+  return ledFlushP;
+}
+async function ledFlushLoop() {
   const send = async (bytes) => { const d = await cmd(bytes); if (d[0] === 0xff) throw new Error("refused — reconnect"); };
   try {
     for (;;) {
+      if (ledHold) break; // Undo: stop at the next step
       // Snapshot first: sliders keep changing S.led while a command is in flight.
       const l = { ...S.led }, s = S.ledSent;
       if (l.enable && s.enable !== 1) { await send([0xf6, 0x05, 1]); s.enable = 1; continue; }
@@ -61,8 +67,8 @@ async function flushLed() {
       }
       break;
     }
-  } catch (e) { toast("Lighting change failed: " + e.message, true); }
-  ledFlushing = false;
+    return true;
+  } catch (e) { toast("Lighting change failed: " + e.message, true); return false; }
 }
 function ledInput() {
   const l = S.led;
@@ -82,7 +88,7 @@ function ledInput() {
 }
 async function ledSave() {
   try {
-    await flushLed();
+    if (!(await flushLed())) throw new Error("the lighting changes didn't reach the keyboard");
     const d = await cmd([0x09]);
     if (d[0] === 0xff) throw new Error("refused");
     await cmd([0xf6, 0x01, S.led.idle]);
@@ -95,7 +101,13 @@ async function ledSave() {
 }
 async function ledRevert() {
   if (!S.led || !S.led.dirty) return;
-  try { await cmd([0xf6, 0x04]); await hidLoadLed(); } catch (e) { log("revert: " + e.message); }
+  ledHold = true; // no preview writes until the saved state is back
+  try {
+    if (ledFlushP) await ledFlushP; // let the command in flight finish first
+    await cmd([0xf6, 0x04]);
+    await hidLoadLed();
+  } catch (e) { log("revert: " + e.message); }
+  ledHold = false;
   render();
 }
 function buildLedSelects() {
