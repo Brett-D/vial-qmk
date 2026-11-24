@@ -97,6 +97,12 @@ void oled_sync_task(void) {
 }
 
 #ifdef OLED_ENABLE
+// Config mode, CONF?, a web session, network mode or a typed delivery is on
+// screen: the OLED stays on even without key presses (each has its own timeout).
+bool config_mode_oled_busy(void) {
+    return oled_state.state != ST_OFF || oled_state.hid == HS_ASK || oled_state.hid == HS_ACTIVE || oled_state.net || oled_state.dl;
+}
+
 bool config_mode_oled_task(void) {
     static uint8_t last_screen;
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;

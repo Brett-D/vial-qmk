@@ -242,6 +242,7 @@ static void cfg_raw_hid(uint8_t *data) {
         case CMD_PET_GET:
         case CMD_PET_ACT:
         case CMD_PET_SET:
+        case CMD_PET_RESTORE:
             if (hid.state == HS_ACTIVE) {
                 hid.time = timer_read32();
             }

@@ -91,8 +91,9 @@ bool oled_task_user(void) {
     }
 
     // Activity is synced from the master, so typing on either half or using
-    // the trackpad keeps the screen on.
-    if (last_input_activity_elapsed() > OLED_SLEEP_TIMEOUT_MS) {
+    // the trackpad keeps the screen on. Config, network and delivery screens
+    // stay on regardless: the page or a long delivery isn't key activity.
+    if (last_input_activity_elapsed() > OLED_SLEEP_TIMEOUT_MS && !config_mode_oled_busy()) {
         oled_off();
         return false;
     }

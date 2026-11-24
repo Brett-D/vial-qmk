@@ -104,6 +104,7 @@ static bool layered_run(uint8_t mode, effect_params_t *params) {
 }
 
 static bool LAYERED(effect_params_t *params) {
+    led_fx_layered_drawn(); // this frame may get the key-press overlay (not a suspend / timeout blackout)
     // A new background inside LAYERED starts like a new effect (QMK only does
     // that when the mode changes): init for one whole frame (all render passes).
     static uint8_t last_base = 0xFF, reinit;

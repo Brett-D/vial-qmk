@@ -96,8 +96,45 @@ static struct {
     uint16_t freeze_timer;
 } press;
 
-static uint8_t tp_owned; // buttons the trackpad holds (press-to-click, tap clicks)
-static uint8_t key_held; // buttons mouse-button keys hold
+static uint8_t tp_owned;     // buttons the trackpad holds (press-to-click, tap clicks)
+static uint8_t key_count[8]; // mouse-button keys holding each button (T and Y are both left click)
+
+static uint8_t keys_holding(void) {
+    uint8_t held = 0;
+    for (uint8_t b = 0; b < 8; b++) {
+        if (key_count[b]) held |= 1 << b;
+    }
+    return held;
+}
+
+// Cursor and wheel keys (and their repeats) send mousekey's own report straight
+// to the computer (mousekey_send), so it carries every held button too, or a
+// drag would end. clear_keyboard() (config / network mode, which then swallow
+// the key releases) empties that report: key holds it no longer has are over.
+static void mk_buttons_sync(void) {
+#    ifdef MOUSEKEY_ENABLE
+    uint8_t have = mousekey_get_report().buttons;
+    for (uint8_t b = 0; b < 8; b++) {
+        uint8_t bit  = 1 << b;
+        bool    want = key_count[b] || (tp_owned & bit);
+        if (want && !(have & bit)) {
+            mousekey_on(QK_MOUSE_BUTTON_1 + b);
+        } else if (!want && (have & bit)) {
+            mousekey_off(QK_MOUSE_BUTTON_1 + b);
+        }
+    }
+#    endif
+}
+
+static void mk_drop_cleared_keys(uint8_t keep) {
+#    ifdef MOUSEKEY_ENABLE
+    uint8_t have = mousekey_get_report().buttons | keep;
+    for (uint8_t b = 0; b < 8; b++) {
+        if (!(have & (1 << b))) key_count[b] = 0;
+    }
+#    endif
+}
+static uint8_t key_mask; // keys_holding() as last put in the reports
 
 static void tp_press_set(bool down) {
     press.down         = down;
@@ -234,9 +271,15 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     }
 
     uint8_t out = tp_click_step() | (press.down ? BTN_LEFT : 0);
-    // Only clear buttons this module pressed and no mouse key holds; mouse keys share the same bits.
-    mouse_report.buttons = (mouse_report.buttons & ~(tp_owned & ~out & ~key_held)) | out;
+    mk_drop_cleared_keys(0);
+    // Buttons held by the trackpad or keys; one neither holds any more is released
+    // (other bits, e.g. from the driver, are left alone).
+    uint8_t ours_before  = tp_owned | key_mask;
     tp_owned             = out;
+    key_mask             = keys_holding();
+    uint8_t ours         = out | key_mask;
+    mouse_report.buttons = (mouse_report.buttons & ~(ours_before & ~ours)) | ours;
+    mk_buttons_sync();
 
     if (drag_scroll) {
         tp_drag_scroll(&mouse_report);
@@ -244,17 +287,26 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     return mouse_report;
 }
 
-// Mouse-button keys (T/Y/U/R): QMK sends their release straight away. With
-// press-to-click holding the left button, releasing a key for the same button
-// would drop the drag until the next poll, so the buttons the trackpad holds
-// stay in the report here too (and the trackpad doesn't release a key's button).
+// Mouse-button keys (T/Y/U/R): QMK sends their release straight away. A button
+// is released only when no key holds it any more (two keys can be the same
+// button) and the trackpad doesn't hold it (press-to-click drag); either way the
+// other's hold stays in this report and in mousekey's.
 void pointing_device_keycode_handler(uint16_t keycode, bool pressed) {
     if (IS_MOUSEKEY_BUTTON(keycode)) {
-        uint8_t        bit = 1 << (keycode - QK_MOUSE_BUTTON_1);
-        report_mouse_t r   = pointing_device_get_report();
-        key_held           = pressed ? key_held | bit : key_held & ~bit;
-        r.buttons          = pointing_device_handle_buttons(r.buttons, pressed, keycode - QK_MOUSE_BUTTON_1) | tp_owned;
+        uint8_t b = keycode - QK_MOUSE_BUTTON_1;
+        mk_drop_cleared_keys(1 << b); // QMK's mousekey_off already took this key's own bit
+        if (pressed) {
+            if (key_count[b] < 255) key_count[b]++;
+        } else if (key_count[b]) {
+            key_count[b]--;
+        }
+        uint8_t        ours_before = tp_owned | key_mask;
+        report_mouse_t r           = pointing_device_get_report();
+        key_mask                   = keys_holding();
+        uint8_t ours               = tp_owned | key_mask;
+        r.buttons                  = (r.buttons & ~(ours_before & ~ours)) | ours;
         pointing_device_set_report(r);
+        mk_buttons_sync();
         pointing_device_send();
     }
 }

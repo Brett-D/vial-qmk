@@ -52,7 +52,9 @@ automatically:
 The layer stays on while a mouse key is held, turns off ~0.65 s after you lift
 your finger, and turns off immediately when you press any other key, so typing
 isn't affected. All of these keys (and `Drag scroll`, under *User* keycodes) can
-be remapped in Vial.
+be remapped in Vial. A button stays down while any key or the trackpad holds
+it: releasing T while Y is still held, or using mouse-movement keys during a
+press-to-click drag, doesn't end the drag.
 
 Two-finger taps aren't possible: in the absolute mode needed for glide and
 circular scroll, the Pinnacle reports only one finger.

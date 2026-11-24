@@ -39,6 +39,7 @@ bool led_layers_is_solo(uint8_t mode);  // standalone (no key-press effect with 
 uint8_t led_layers_mode(void);          // RGB_MATRIX_CUSTOM_LAYERED
 
 // led_fx_background(effect_params_t *): declared in rgb_matrix_user.inc (needs rgb_matrix's types).
+void led_fx_layered_drawn(void); // LAYERED rendered this frame (else the next flush has no overlay)
 // rgb_driver.c, once per frame before flushing: false = no overlay this frame.
 bool led_fx_frame_begin(bool calibrating);
 void led_fx_pixel(uint8_t led, const uint8_t in[3], uint16_t out[3]); // the key-press layer over one LED: 8-bit in, 8.8 out

@@ -52,10 +52,20 @@ static fx_event_t ev[LED_HITS_TO_REMEMBER];
 #    define FX_HALF_LEDS (RGB_MATRIX_LED_COUNT / 2)
 static uint8_t dcache[LED_HITS_TO_REMEMBER][FX_HALF_LEDS];
 static uint8_t dkey[LED_HITS_TO_REMEMBER][2];
+static bool    layered_drawn;
+
+// LAYERED rendered (part of) this frame. A suspend or RGB_MATRIX_TIMEOUT
+// renders effect NONE instead and flushes that black frame once: it must go
+// out without the overlay, or a running ripple stays lit while the computer sleeps.
+void led_fx_layered_drawn(void) {
+    layered_drawn = true;
+}
 
 bool led_fx_frame_begin(bool calibrating) {
+    bool drawn    = layered_drawn;
+    layered_drawn = false;
     led_fx_get(&fx); // this frame's settings
-    frame_on = rgb_matrix_is_enabled() && rgb_matrix_get_mode() == led_layers_mode() && fx.effect && !calibrating;
+    frame_on = drawn && rgb_matrix_is_enabled() && rgb_matrix_get_mode() == led_layers_mode() && fx.effect && !calibrating;
     if (!frame_on) {
         dim_now = 255;
         return false;

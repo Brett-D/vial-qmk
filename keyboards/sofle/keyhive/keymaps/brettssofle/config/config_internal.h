@@ -94,6 +94,7 @@ enum cfg_hid_cmd {
     CMD_PET_GET     = 0x18, // the OLED pet (pet.c): stats, settings, name
     CMD_PET_ACT     = 0x19, // care: 1 feed, 2 play, 3 sleep/wake, 4 clean, 5 new pet
     CMD_PET_SET     = 0x1A, // flags (1 on, 2 can die), decay speed, name
+    CMD_PET_RESTORE = 0x1B, // species, stage (restoring a backup)
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
