@@ -532,6 +532,14 @@ const FX = (() => {
     return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q], [v, t, p]][region];
   }
   const scale = (v, k) => (v * k) >> 8;
+  // led_fx_core.h fx_typing_wpm: words per minute from the last presses (ms ago).
+  function typingWpm(ago) {
+    let newest = 65535, oldest = 0, cnt = 0;
+    for (const a of ago) { if (a > 3000) continue; cnt++; if (a < newest) newest = a; if (a > oldest) oldest = a; }
+    if (cnt < 2 || newest > 2000) return 0;
+    const span = Math.max(150, oldest - newest);
+    return Math.min(255, Math.floor((cnt - 1) * 12000 / span));
+  }
   function background(id, c, x, y) {
     const ts = mul32(c.t, c.spd + 32) >>> 7, Y = y5(y);
     const o = { h: c.hue, s: c.sat, v: c.val };
@@ -603,7 +611,7 @@ const FX = (() => {
     }
     return o;
   }
-  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap, blend, hsv2rgb, background, sin8, hash32, isqrt, y5 };
+  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap, blend, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
 })();
 
 const S = {
@@ -985,7 +993,7 @@ function pvFrame(now) {
   PV.ev = PV.ev.filter((e) => now - e.born < 6000);
   const want = effect && ev.length ? 255 - l.fxDim * 28 : 255;
   PV.dim = PV.dim < want ? Math.min(want, PV.dim + 24) : Math.max(want, PV.dim - 24);
-  const ctx = { t, hue: l.hue, sat: l.sat, val: l.val, spd: l.speed, wpm: Math.min(120, PV.ev.filter((e) => now - e.born < 5000).length * 12),
+  const ctx = { t, hue: l.hue, sat: l.sat, val: l.val, spd: l.speed, wpm: FX.typingWpm(PV.ev.map((e) => Math.min(65535, Math.floor(now - e.born)))),
                 n: PV.ev.length, hx: PV.ev.map((e) => e.x), ht: PV.ev.map((e) => Math.min(65535, Math.floor(now - e.born))) };
   g.fillStyle = "#0c0d10"; g.fillRect(0, 0, PV_W, PV_H);
   for (const [x, y, flag] of DATA.fxLeds) {

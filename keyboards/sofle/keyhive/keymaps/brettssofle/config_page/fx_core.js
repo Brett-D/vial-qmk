@@ -175,6 +175,14 @@ const FX = (() => {
     return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q], [v, t, p]][region];
   }
   const scale = (v, k) => (v * k) >> 8;
+  // led_fx_core.h fx_typing_wpm: words per minute from the last presses (ms ago).
+  function typingWpm(ago) {
+    let newest = 65535, oldest = 0, cnt = 0;
+    for (const a of ago) { if (a > 3000) continue; cnt++; if (a < newest) newest = a; if (a > oldest) oldest = a; }
+    if (cnt < 2 || newest > 2000) return 0;
+    const span = Math.max(150, oldest - newest);
+    return Math.min(255, Math.floor((cnt - 1) * 12000 / span));
+  }
   function background(id, c, x, y) {
     const ts = mul32(c.t, c.spd + 32) >>> 7, Y = y5(y);
     const o = { h: c.hue, s: c.sat, v: c.val };
@@ -246,5 +254,5 @@ const FX = (() => {
     }
     return o;
   }
-  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap, blend, hsv2rgb, background, sin8, hash32, isqrt, y5 };
+  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap, blend, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
 })();

@@ -58,12 +58,15 @@ static void conn_free(conn_t *c) {
     memset(c, 0, sizeof(*c));
 }
 
-static void conn_close(conn_t *c) {
+// ERR_ABRT if the pcb had to be aborted (freed): callbacks must return it to lwIP.
+static err_t conn_close(conn_t *c) {
     struct tcp_pcb *pcb = c->pcb;
     conn_free(c);
     if (pcb && tcp_close(pcb) != ERR_OK) {
         tcp_abort(pcb);
+        return ERR_ABRT;
     }
+    return ERR_OK;
 }
 
 static void send_more(conn_t *c) {
@@ -230,8 +233,7 @@ static void handle(conn_t *c) {
 static err_t on_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
     conn_t *c = arg;
     if (!p) {
-        conn_close(c); // the computer closed its side
-        return ERR_OK;
+        return conn_close(c); // the computer closed its side
     }
     if (c->responded) {
         tcp_recved(pcb, p->tot_len);
@@ -259,7 +261,7 @@ static err_t on_sent(void *arg, struct tcp_pcb *pcb, u16_t len) {
     c->idle   = 0;
     send_more(c);
     if (c->responded && c->head_sent == c->head_len && c->body_sent == c->body_len && !pcb->unsent && !pcb->unacked) {
-        conn_close(c);
+        return conn_close(c);
     }
     return ERR_OK;
 }

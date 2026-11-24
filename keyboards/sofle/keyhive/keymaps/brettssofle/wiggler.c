@@ -11,12 +11,13 @@
 
 #define WIGGLE_BACK_MS 30
 
-static const uint16_t interval_s[WIGGLE_INTERVALS] = {30, 60, 120, 240};
-
 static bool     on;
 static uint8_t  idx = 1; // 1 min
-static bool     back_pending;
 static uint32_t last_nudge;
+#ifdef POINTING_DEVICE_ENABLE
+static const uint16_t interval_s[WIGGLE_INTERVALS] = {30, 60, 120, 240};
+static bool           back_pending;
+#endif
 
 bool wiggler_on(void) {
     return on;

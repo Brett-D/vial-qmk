@@ -42,6 +42,8 @@
 #endif
 #ifdef NETWORK_ENABLE
 #    include "net.h"
+#else
+#    define NET_READY 3 // net.h (the OLED code reads the synced network state)
 #endif
 #include "config_picker.h"
 #include "led_cal.h"

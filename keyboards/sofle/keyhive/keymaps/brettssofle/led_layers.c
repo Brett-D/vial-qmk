@@ -32,9 +32,6 @@
 #    define BRIGHT_EE_CHECK 0x5B
 #    define FX_SYNC_MS 2000
 #    define FX_DIM_STEP 24 // per frame, background dim in / out
-#    ifdef WPM_ENABLE
-#        include "wpm.h"
-#    endif
 
 _Static_assert(LAYERS_EE_OFFSET + 8 <= EECONFIG_KB_DATA_SIZE, "raise EECONFIG_KB_DATA_SIZE");
 _Static_assert(1 + LED_MAP_COUNT + 1 <= BRIGHT_EE_OFFSET && BRIGHT_EE_OFFSET + 2 <= 78, "key-press brightness overlaps the LED map or the OLED page");
@@ -397,9 +394,7 @@ bool led_fx_background(effect_params_t *params) {
     }
     fx_bg_ctx_t c = {.t = g_rgb_timer, .hue = rgb_matrix_get_hue(), .sat = rgb_matrix_get_sat(), .val = rgb_matrix_get_val(), .spd = rgb_matrix_get_speed(),
                      .n = g_last_hit_tracker.count, .hx = hx, .ht = ht};
-#    ifdef WPM_ENABLE
-    c.wpm = get_current_wpm();
-#    endif
+    c.wpm = fx_typing_wpm(c.n, ht); // from the presses both halves see (QMK's WPM counts on the left only)
     for (uint8_t i = led_min; i < led_max; i++) {
         RGB_MATRIX_TEST_LED_FLAGS();
         fx_hsv_t o   = fx_background(fx.base, &c, g_led_config.point[i].x, g_led_config.point[i].y);

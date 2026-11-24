@@ -132,10 +132,11 @@ static void tp_press_step(bool touch, uint8_t z, bool scrolling) {
         }
     } else if (z < trackpad_press_release_z() && timer_elapsed(press.down_timer) >= TRACKPAD_PRESS_MIN_MS) {
         tp_press_set(false);
+        press.above = 0; // the next press needs TRACKPAD_PRESS_DEBOUNCE high samples again
     }
 }
 
-static void tp_gesture_step(bool touch, uint16_t motion) {
+static void tp_gesture_step(bool touch, uint16_t motion, bool wheel) {
     if (touch && !tp.touching) {
         tp.touching  = true;
         tp.cancelled = false;
@@ -148,7 +149,7 @@ static void tp_gesture_step(bool touch, uint16_t motion) {
     }
 
     tp.moved += motion;
-    if (tp.moved > TRACKPAD_MOVE_THRESHOLD) {
+    if (tp.moved > TRACKPAD_MOVE_THRESHOLD || wheel) { // any ring scroll: not a tap
         tp.cancelled = true;
     }
 
@@ -212,7 +213,7 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     bool     touch  = auto_mouse_activation((report_mouse_t){0});
     uint16_t motion = tp_abs(mouse_report.x) + tp_abs(mouse_report.y) + tp_abs(mouse_report.h) + tp_abs(mouse_report.v);
 
-    tp_gesture_step(touch, motion);
+    tp_gesture_step(touch, motion, mouse_report.h != 0 || mouse_report.v != 0);
     uint8_t z = trackpad_z_update(touch);
     // Ring scroll reports wheel motion; don't let a firm press click mid-scroll.
     tp_press_step(touch, z, mouse_report.h != 0 || mouse_report.v != 0);

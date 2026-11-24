@@ -46,8 +46,18 @@ static void half_set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 static void half_flush(void) {
-    if (led_fx_frame_begin(config_mode_led_cal_busy())) {
-        uint8_t first = is_keyboard_left() ? 0 : HALF_LEDS;
+    bool    cal   = config_mode_led_cal_busy();
+    uint8_t first = is_keyboard_left() ? 0 : HALF_LEDS;
+    if (!cal) {
+        // LEDs mapped to nothing (led_map.c) are skipped by every effect: keep them dark,
+        // or one that was lit when the map changed would stay lit.
+        for (int i = 0; i < WS2812_LED_COUNT; i++) {
+            if (g_led_config.flags[first + i] == LED_FLAG_NONE && (frame[i][0] | frame[i][1] | frame[i][2])) {
+                half_set_color(i, 0, 0, 0);
+            }
+        }
+    }
+    if (led_fx_frame_begin(cal)) {
         for (int i = 0; i < WS2812_LED_COUNT; i++) {
             uint8_t rgb[3] = {frame[i][0], frame[i][1], frame[i][2]};
             led_fx_pixel(first + i, rgb);

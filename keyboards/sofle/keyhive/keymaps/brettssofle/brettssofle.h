@@ -39,7 +39,8 @@ void trackpad_set_drag_scroll(bool enable);
 void oled_right_init(void);
 #endif
 
-#ifdef POINTING_DEVICE_ENABLE
+// Trackpad Z and the shared EECONFIG_USER settings (trackpad_z.c): declared and
+// built without the trackpad too (POINTING_DEVICE_ENABLE=no), Z then stays 0.
 typedef struct {
     uint8_t  z;         // live Z while touching (0-63)
     uint8_t  peak;      // highest Z of the current/last touch
@@ -57,7 +58,6 @@ void                trackpad_z_sync_task(void);
 bool                trackpad_press_enabled(void);
 uint8_t             trackpad_press_threshold(void);
 uint8_t             trackpad_press_release_z(void);
-#endif
 
 // Underglow idle timeout choice (0 = never, 1/2/5/10/30 min), saved in
 // EECONFIG_USER bits 11-13 (trackpad_z.c).

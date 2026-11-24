@@ -128,8 +128,12 @@
   };
   window.onkeydown = (e) => {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (st.g === 3) {
+      // Done: late stream keys are swallowed; Tab / Enter / Space reach Save and Use it here.
+      if (/^(Key[A-Z]|Digit[2-7]|Comma|Period)$/.test(e.code)) { e.preventDefault(); st.last = Date.now(); }
+      return;
+    }
     e.preventDefault();
-    if (st.g === 3) { st.last = Date.now(); return; }
     const c = e.code;
     if (/Enter/.test(c)) {
       if (st.g === 0) T("<p>The keyboard isn't sending (it may have given up waiting). Press <b>Esc</b> on the keyboard, open a new tab and start again: CONFIG, then P.");

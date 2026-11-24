@@ -16,9 +16,9 @@
 
 #include "brettssofle.h"
 
-#ifdef POINTING_DEVICE_ENABLE
-
-#    include "transactions.h"
+// The settings (EECONFIG_USER) and raw HID 0xF5 are built without the
+// trackpad too; only reading Z needs the Cirque driver.
+#include "transactions.h"
 
 // Cirque PACKETBYTE_5 (HostReg 0x17): Z in absolute mode.
 #    define TP_Z_REG_PACKETBYTE_5 0x17
@@ -40,8 +40,10 @@
 #        define TRACKPAD_PRESS_DEFAULT_RELEASE_Z 24
 #    endif
 
+#    ifdef POINTING_DEVICE_ENABLE
 // Public in the Cirque I2C driver.
 void RAP_ReadBytes(uint8_t address, uint8_t *data, uint8_t count);
+#    endif
 
 // EECONFIG_USER layout (shared with the config page settings):
 //   bits 0-3   version
@@ -78,7 +80,9 @@ const trackpad_z_t *trackpad_z_get(void) {
 uint8_t trackpad_z_update(bool touch) {
     if (touch) {
         uint8_t packet5 = 0;
+#    ifdef POINTING_DEVICE_ENABLE
         RAP_ReadBytes(TP_Z_REG_PACKETBYTE_5, &packet5, 1);
+#    endif
         if (!tp_z.touching) {
             tp_z.peak = 0;
             tp_z.touches++;
@@ -257,5 +261,3 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
     data[9]  = tp_config.press_release_z;
     data[10] = tp_z.pressed;
 }
-
-#endif // POINTING_DEVICE_ENABLE

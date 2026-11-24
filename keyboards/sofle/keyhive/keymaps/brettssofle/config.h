@@ -103,7 +103,7 @@
 // RPC_ID_USER_LEDFX sends the lighting settings and test ripples (led_layers.c).
 // New ids go at the end, so the existing ones keep their numbers.
 #ifdef TRACKPAD_Z_DEBUG
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX, RPC_ID_USER_TP_Z // debug id last: the others keep their numbers
 #else
 #    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
 #endif

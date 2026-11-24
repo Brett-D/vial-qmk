@@ -207,6 +207,7 @@ void netstack_start(net_tx_fn tx) {
         httpd_start();
         ready = true;
     }
+    httpd_api_reset(); // a page from an earlier network session can't use its old token
     netif_set_up(&nif);
     netif_set_link_up(&nif);
 }

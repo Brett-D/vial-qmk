@@ -338,6 +338,23 @@ typedef struct {
     uint8_t h, s, v;
 } fx_hsv_t;
 
+// Typing speed for the typing-speed meter, from the last presses (ms ago): words
+// (5 keys) per minute over the recent ones, 0 when typing stopped ~2 s ago.
+static inline uint8_t fx_typing_wpm(uint8_t n, const uint16_t *ago) {
+    uint16_t newest = 0xFFFF, oldest = 0;
+    uint8_t  cnt    = 0;
+    for (uint8_t j = 0; j < n; j++) {
+        if (ago[j] > 3000) continue;
+        cnt++;
+        if (ago[j] < newest) newest = ago[j];
+        if (ago[j] > oldest) oldest = ago[j];
+    }
+    if (cnt < 2 || newest > 2000) return 0;
+    uint16_t span = oldest - newest < 150 ? 150 : oldest - newest;
+    uint32_t wpm  = (uint32_t)(cnt - 1) * 12000 / span;
+    return wpm > 255 ? 255 : (uint8_t)wpm;
+}
+
 static inline uint8_t fx_scale(uint8_t v, uint8_t k) { return (uint8_t)((uint16_t)v * k >> 8); }
 
 // Colour (HSV) of background `id` at the LED at x, y.

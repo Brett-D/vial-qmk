@@ -203,11 +203,9 @@ void keyboard_post_init_user(void) {
 #ifdef OLED_ENABLE
     oled_right_init();
 #endif
-#ifdef POINTING_DEVICE_ENABLE
-    trackpad_z_post_init();
-#endif
+    trackpad_z_post_init(); // the EECONFIG_USER settings (LED zones / idle too), with or without the trackpad
+    pet_init(); // before the OLED page: a saved pet page needs pet_enabled()
     oled_pages_init();
-    pet_init();
 #ifdef RGB_MATRIX_ENABLE
     led_layers_init();
 #endif
