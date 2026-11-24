@@ -5,7 +5,8 @@
 // hiding the page) hands the knob back; the keyboard also takes it back by
 // itself if the page stops asking (1.5 s).
 const NAV = { on: false, idx: 0, mode: "move", pick: 0, editEl: null, lastTurn: 0 };
-function navWanted() { return S.mode === "hid" && S.state === "ready" && !S.sessionLost && !!HID.dev && document.hasFocus() && !document.hidden; }
+// Not during LED calibration: every key press, the right knob's too, is a calibration answer there.
+function navWanted() { return S.mode === "hid" && S.state === "ready" && !S.sessionLost && !!HID.dev && !CAL.on && document.hasFocus() && !document.hidden; }
 const navVisible = (el) => el && el.offsetParent !== null && !el.disabled;
 function navItems() {
   if (!S.ui) return [];
@@ -17,7 +18,7 @@ function navItems() {
     }).sort((a, b) => a.y - b.y || a.x - b.x).map((o) => o.el);
     return [...$("layers").querySelectorAll("[data-layer]"), ...keys, ...$("knobs").querySelectorAll("[data-slot]")];
   }
-  const root = S.ui.tab === 1 ? (CAL.on ? $("calView") : $("ledCtl")) : S.ui.tab === 3 ? $("petView") : $("padView");
+  const root = S.ui.tab === 1 ? $("ledCtl") : S.ui.tab === 3 ? $("petView") : $("padView");
   return [...root.querySelectorAll("input:not([type=color]), select, button, summary")].filter(navVisible); // the knob uses the swatches
 }
 function navClamp(items) {
@@ -44,7 +45,7 @@ function navTurn(n) {
     const el = NAV.editEl;
     if (!el || !navVisible(el)) { NAV.mode = "move"; return navPaint(); }
     if (el.tagName === "SELECT") {
-      el.selectedIndex = Math.max(0, Math.min(el.options.length - 1, el.selectedIndex + Math.sign(n)));
+      el.selectedIndex = Math.max(0, Math.min(el.options.length - 1, el.selectedIndex + n)); // a poll can carry several detents
     } else {
       const step = +el.step || 1, span = +el.max - +el.min;
       const mult = fast && span / step > 40 ? 4 : 1;
