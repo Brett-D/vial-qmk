@@ -5,5 +5,7 @@
 
 #pragma once
 
-void rgb_driver_dither_task(void); // housekeeping, both halves: re-sends the frame with new dither values between frames
-void rgb_driver_suspend_task(void); // housekeeping + suspend_power_down_user: LEDs dark once USB is suspended
+// Housekeeping (both halves) and suspend_power_down_user: dither re-sends
+// between frames, dark as soon as the LEDs are off, the output re-sent while
+// no frames come (a lost transfer can't stick).
+void rgb_driver_task(void);

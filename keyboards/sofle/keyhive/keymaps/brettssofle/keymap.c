@@ -223,8 +223,7 @@ void housekeeping_task_user(void) {
     if (is_keyboard_master()) {
         rgb_idle_task();
     }
-    rgb_driver_dither_task(); // smooth dim levels between frames (rgb_driver.c)
-    rgb_driver_suspend_task(); // the right half: dark once the computer sleeps
+    rgb_driver_task(); // dither re-sends; dark when off / suspended, on both halves (rgb_driver.c)
 #endif
     pet_task();
     oled_pages_task();
@@ -238,6 +237,6 @@ void housekeeping_task_user(void) {
 #ifdef RGB_MATRIX_ENABLE
 // The master's USB suspend loop (no housekeeping there).
 void suspend_power_down_user(void) {
-    rgb_driver_suspend_task();
+    rgb_driver_task();
 }
 #endif

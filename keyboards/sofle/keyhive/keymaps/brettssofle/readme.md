@@ -212,6 +212,11 @@ fade dropped off in big perceptual jumps. Now:
   sent again every ~4 ms with new dither values (the WS2812 transfer is
   DMA). Levels below ~0.2 of the lowest step stay off, so dim LEDs don't
   blink. LED calibration stays linear and undithered.
+- **off means off, on both halves** (v24): when the LEDs are off (idle
+  timeout, turned off, computer asleep) QMK sends one black frame and then
+  stops sending. The driver goes dark by itself as soon as the half's
+  RGB state says off, and while no frames come it sends the output again
+  every 250 ms, so one lost or overlaid frame can't leave a half lit.
 
 Gamma makes the Brightness slider follow what the eye sees. So that nothing
 looks dimmer after updating, the first start of v23 raises the saved

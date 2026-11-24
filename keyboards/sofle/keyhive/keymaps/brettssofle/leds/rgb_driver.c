@@ -33,6 +33,7 @@
 #ifndef FX_DITHER_MS
 #    define FX_DITHER_MS 4 // re-send period between frames (~250 Hz)
 #endif
+#define RGB_DRIVER_REFRESH_MS 250 // without flushes (effect off): the output again, so a lost transfer can't stick
 #define FX_DITHER_MIN 48 // below ~0.2 of the lowest level: off (a slow blink of the lowest level would show)
 
 static uint8_t  frame[WS2812_LED_COUNT][3];  // this frame's colours before the overlay
@@ -40,7 +41,7 @@ static uint16_t target[WS2812_LED_COUNT][3]; // what goes out, 8.8 (after the ov
 static uint8_t  err[WS2812_LED_COUNT][3];    // dither: rounding error carried to the next send
 static bool     dithering;                   // some target has a fraction: keep re-sending
 static uint16_t last_emit;
-static bool     blanked; // rgb_driver_suspend_task: the suspended output is dark
+static bool     blanked; // the output is dark because the LEDs are off
 
 int rgb_matrix_led_index(int index) {
     if (is_keyboard_left()) {
@@ -95,7 +96,26 @@ static void emit(void) {
     dithering = frac;
 }
 
+// The LEDs are off on this half (idle timeout, turned off, USB suspend). QMK
+// then sends one black frame and stops flushing: that frame could still carry
+// the key-press overlay (a suspend between a LAYERED render pass and its
+// flush), and if it got lost on the data line nothing would ever correct it.
+// Brett, v22: after idle the left half was dark, the right one stayed lit.
+static bool output_off(void) {
+    return !config_mode_led_cal_busy() && (!rgb_matrix_is_enabled() || rgb_matrix_get_suspend_state());
+}
+
+static void blank(void) {
+    memset(target, 0, sizeof target);
+    blanked = true;
+    emit();
+}
+
 static void half_flush(void) {
+    if (output_off()) {
+        blank();
+        return;
+    }
     bool     cal   = config_mode_led_cal_busy();
     uint8_t  first = is_keyboard_left() ? 0 : HALF_LEDS;
     uint32_t gk    = fx_gamma_k(RGB_MATRIX_MAXIMUM_BRIGHTNESS);
@@ -125,25 +145,19 @@ static void half_flush(void) {
     emit();
 }
 
-// keymap.c housekeeping (both halves): between frames, the same frame again with new dither values.
-void rgb_driver_dither_task(void) {
-    if (dithering && timer_elapsed(last_emit) >= FX_DITHER_MS) {
-        emit();
-    }
-}
-
-// USB suspend: QMK sends one black frame, then stops flushing. That frame can
-// come between a LAYERED render pass and its flush and so still get the
-// key-press overlay. Once suspended, blank whatever went out (once).
-// keymap.c: housekeeping (the right half keeps running) and
-// suspend_power_down_user (the master's suspend loop, no housekeeping there).
-void rgb_driver_suspend_task(void) {
-    if (!rgb_matrix_get_suspend_state() || blanked) {
+// keymap.c: housekeeping (both halves) and suspend_power_down_user (the
+// master's suspend loop, which has no housekeeping). Between frames the same
+// frame again with new dither values; dark as soon as the LEDs are off; and
+// without flushes the output again every RGB_DRIVER_REFRESH_MS.
+void rgb_driver_task(void) {
+    if (output_off() && !blanked) {
+        blank();
         return;
     }
-    memset(target, 0, sizeof target);
-    emit();
-    blanked = true;
+    uint16_t since = timer_elapsed(last_emit);
+    if ((dithering && since >= FX_DITHER_MS) || since >= RGB_DRIVER_REFRESH_MS) {
+        emit();
+    }
 }
 
 const rgb_matrix_driver_t rgb_matrix_driver = {
