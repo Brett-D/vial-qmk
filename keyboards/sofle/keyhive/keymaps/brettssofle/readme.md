@@ -221,7 +221,7 @@ from the start, with the state under it: `USB conn.` → `Link up DHCP` →
 `Ready`, and the seconds so far while it waits. Windows can take up to
 ~30 s, longer the first time on a new USB port (it sets up the adapter);
 the address works as soon as it says `Ready`. After 20 s without an
-address the OLED also offers `P` = type the page instead. When network mode ends, the OLED says why for a few
+address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=type`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only, **no Enter** — press it yourself); the OLED says `Typed`. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. When network mode ends, the OLED says why for a few
 seconds (`NET off`: by key / idle 10min / P). Open **http://192.168.7.1** (or http://sofle.local where
 .local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
 serves the config page itself, gzipped from flash. The page asks for a

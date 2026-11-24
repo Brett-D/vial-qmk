@@ -104,6 +104,14 @@ static struct {
 } dl;
 static matrix_row_t dl_swallowed[MATRIX_ROWS];
 
+// Network mode's address, typed by the right knob on the NET screen
+// (config_mode.c): US layout, printable keys only, no Enter (Brett presses it).
+#define ADDR_IDLE 0xFF
+static const uint8_t addr_keys[] PROGMEM = {KC_H, KC_T, KC_T, KC_P, 0x80 | KC_SCLN, KC_SLSH, KC_SLSH, KC_1, KC_9, KC_2, KC_DOT, KC_1, KC_6, KC_8, KC_DOT, KC_7, KC_DOT, KC_1};
+_Static_assert(2 * sizeof(addr_keys) < ADDR_IDLE, "address too long");
+static uint8_t  addr_pos = ADDR_IDLE; // report index (2 per character)
+static uint32_t addr_done_at;
+
 uint8_t deliver_state(void) {
     return dl.state;
 }
@@ -180,6 +188,42 @@ void deliver_start(uint8_t kind) {
 void deliver_stop(void) {
     release_all();
     set_state(DL_OFF);
+    addr_pos = ADDR_IDLE;
+}
+
+bool deliver_type_address(void) {
+    if (dl.state != DL_OFF || addr_pos != ADDR_IDLE) {
+        return false;
+    }
+    release_all();
+    addr_pos = 0;
+    return true;
+}
+
+bool deliver_address_typing(void) {
+    return addr_pos != ADDR_IDLE;
+}
+
+uint32_t deliver_address_typed_at(void) {
+    return addr_done_at;
+}
+
+static void address_task(void) {
+    if (timer_elapsed(dl.last_report) < DL_BOOT_REPORT_MS || !endpoint_idle()) {
+        return;
+    }
+    if (addr_pos >= 2 * sizeof(addr_keys)) {
+        addr_pos     = ADDR_IDLE;
+        addr_done_at = timer_read32() | 1;
+        return;
+    }
+    uint8_t k = pgm_read_byte(&addr_keys[addr_pos / 2]);
+    if (addr_pos & 1) {
+        report(0, false); // key up
+    } else {
+        report(k & 0x7F, k & 0x80);
+    }
+    addr_pos++;
 }
 
 static const uint8_t *page_gz(void) {
@@ -293,6 +337,9 @@ static uint8_t stream_key(uint32_t pos) {
 
 void deliver_task(void) {
     if (dl.state == DL_OFF) {
+        if (addr_pos != ADDR_IDLE) {
+            address_task();
+        }
         return;
     }
     uint32_t waited = timer_elapsed32(dl.time);
@@ -377,10 +424,10 @@ bool deliver_process(keyrecord_t *record) {
         }
         return true;
     }
-    if (dl.state == DL_OFF) {
+    if (dl.state == DL_OFF && addr_pos == ADDR_IDLE) {
         return false;
     }
-    bool typing = dl.state == DL_TYPE || dl.state == DL_LOADER || dl.state == DL_STREAM;
+    bool typing = dl.state == DL_TYPE || dl.state == DL_LOADER || dl.state == DL_STREAM || addr_pos != ADDR_IDLE;
     if (is_key && ev->pressed && is_escape(row, col)) {
         deliver_stop();
         if (typing) {

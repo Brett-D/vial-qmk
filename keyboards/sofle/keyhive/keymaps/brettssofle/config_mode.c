@@ -1269,6 +1269,46 @@ static bool     net_fallback_key(keyrecord_t *record) {
 }
 #endif
 
+#ifdef NETWORK_ENABLE
+// NET screen: a right-knob click types the address into the selected address
+// bar (deliver.c, no Enter). It types on release, so holding both knobs
+// (leave network mode) or holding it doesn't type; once per click, and not
+// again for a moment after.
+#    define NET_TYPE_HOLD_MS 1000
+#    define NET_TYPE_AGAIN_MS 1500
+static bool     net_type_pending;
+static uint32_t net_type_down;
+static bool     net_type_key(keyrecord_t *record) {
+    keyevent_t *ev = &record->event;
+    if (ev->type != KEY_EVENT || ev->key.row != KNOB_R_ROW || ev->key.col != KNOB_R_COL) {
+        if (net_type_pending && ev->type == KEY_EVENT && ev->pressed) {
+            net_type_pending = false; // another key (e.g. the left knob): not a click
+        }
+        return false;
+    }
+    if (ev->pressed) {
+        if (!net_mode_active() || nav.on || cfg.state != ST_OFF || hid.state == HS_ASK || matrix_is_on(KNOB_L_ROW, KNOB_L_COL)) {
+            return false;
+        }
+        held_swallowed[KNOB_R_ROW] |= (matrix_row_t)1 << KNOB_R_COL; // not the OLED page / pet key
+        net_type_pending = true;
+        net_type_down    = timer_read32();
+        return true;
+    }
+    if (!(held_swallowed[KNOB_R_ROW] & ((matrix_row_t)1 << KNOB_R_COL)) || (!net_type_pending && !net_mode_active())) {
+        return false;
+    }
+    held_swallowed[KNOB_R_ROW] &= ~((matrix_row_t)1 << KNOB_R_COL);
+    uint32_t typed = deliver_address_typed_at();
+    if (net_type_pending && net_mode_active() && timer_elapsed32(net_type_down) < NET_TYPE_HOLD_MS && !matrix_is_on(KNOB_L_ROW, KNOB_L_COL) &&
+        !deliver_address_typing() && (!typed || timer_elapsed32(typed) > NET_TYPE_AGAIN_MS)) {
+        deliver_type_address();
+    }
+    net_type_pending = false;
+    return true;
+}
+#endif
+
 bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
 #ifdef RGB_MATRIX_ENABLE
     if (led_cal_process(record)) {
@@ -1279,7 +1319,7 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
         return false; // typing the config page into the browser
     }
 #ifdef NETWORK_ENABLE
-    if (net_fallback_key(record)) {
+    if (net_fallback_key(record) || net_type_key(record)) {
         return false;
     }
 #endif
@@ -1539,7 +1579,8 @@ static void oled_sync_task(void) {
         now.dl_pct = deliver_seconds_left(); // the OLED counts down instead
     }
 #ifdef NETWORK_ENABLE
-    now.net = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) : 0;
+    uint32_t typed = deliver_address_typed_at();
+    now.net        = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) | (typed && timer_elapsed32(typed) < 2500 ? 0x40 : 0) : 0; // 0x40: v22 "Typed"
     uint32_t ago;
     uint8_t  why = net_last_exit(&ago);
     now.net_bye  = !now.net && why && ago < CONFIG_NET_BYE_MS ? why : 0;
@@ -1606,10 +1647,12 @@ bool config_mode_oled_task(void) {
             }
         }
         if ((oled_state.net & 0x0F) != NET_READY) {
-            oled_set_cursor(0, 11);
+            oled_set_cursor(0, 10);
             oled_write(get_u8_str(oled_state.net_secs, ' ') + 1, false); // waiting time: Windows can take ~30 s
             oled_write_P(PSTR("s"), false);
         }
+        oled_set_cursor(0, 11);
+        oled_write_P(oled_state.net & 0x40 ? PSTR("Typed     ") : PSTR("Knob =type"), oled_state.net & 0x40); // the right knob types the address
         oled_set_cursor(0, 13);
         oled_write_P(PSTR("CONFG=exit "), false);
         return true;
