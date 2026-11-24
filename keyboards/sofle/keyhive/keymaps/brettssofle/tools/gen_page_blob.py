@@ -28,7 +28,7 @@ import re
 import sys
 from pathlib import Path
 
-from paths import GEN, PAGE
+from paths import GEN, PAGE, write
 OUT = GEN / "config_page_blob.h"
 
 # Report rates used for the time estimate (deliver.c).
@@ -257,7 +257,7 @@ def main():
         gz = int(re.search(r"#define CONFIG_PAGE_GZ_LEN (\d+)", old).group(1))
         lgz = int(re.search(r"#define CONFIG_LIGHT_GZ_LEN (\d+)", old).group(1))
     if old != text:
-        OUT.write_text(text, encoding="utf-8", newline="\n")
+        write(OUT, text)
     print(f"config_page_blob.h: full page {raw} -> {small} minified -> {gz} gzipped, light page {lgz} gzipped; "
           f"address {boot} + loader {loader} keys; typing ~{boot_s:.0f} s + light ~{light_s:.0f} s (full ~{full_s:.0f} s){'' if old != text else ' (unchanged)'}", file=sys.stderr)
 

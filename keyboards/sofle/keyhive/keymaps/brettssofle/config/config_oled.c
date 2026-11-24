@@ -97,10 +97,14 @@ void oled_sync_task(void) {
 }
 
 #ifdef OLED_ENABLE
-// Config mode, CONF?, a web session, network mode or a typed delivery is on
-// screen: the OLED stays on even without key presses (each has its own timeout).
+// CONF?, keyboard-only config mode or a typed delivery is on screen, or the
+// NET address while the computer is still getting it: the OLED stays on even
+// without key presses (each of those ends by itself). A connected page (web
+// session) doesn't keep it on: that can last for hours.
+#    define NET_OLED_ON_SECS 120
 bool config_mode_oled_busy(void) {
-    return oled_state.state != ST_OFF || oled_state.hid == HS_ASK || oled_state.hid == HS_ACTIVE || oled_state.net || oled_state.dl;
+    bool net_wait = oled_state.net && (oled_state.net & 0x0F) != NET_READY && oled_state.net_secs < NET_OLED_ON_SECS && oled_state.hid != HS_ACTIVE;
+    return oled_state.state != ST_OFF || oled_state.hid == HS_ASK || oled_state.dl || net_wait;
 }
 
 bool config_mode_oled_task(void) {

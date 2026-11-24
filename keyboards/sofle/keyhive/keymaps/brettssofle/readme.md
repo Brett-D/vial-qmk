@@ -454,7 +454,7 @@ Before the first build:
    No 7-Zip? `python -m pip install py7zr` and then
    `python -c "import py7zr; py7zr.SevenZipFile('lib/chibios/ext/lwip-2.1.2.7z').extractall('lib/chibios/ext')"`.
    Or build without network mode: add `NETWORK_ENABLE=no`.
-2. **Python 3** must be on the PATH (it is in the QMK environment and the
+2. **Python 3.9 or newer** must be on the PATH (it is in the QMK environment and the
    Docker image): every build runs `tools/gen.py`, which writes everything
    generated into `generated/` (not in git): the pet art, the keycode picker,
    `sofle-config.html` / `sofle-light.html` (the pages you open from disk)

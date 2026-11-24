@@ -60,8 +60,9 @@ void ask_key(uint8_t row, uint8_t col) {
         return;
     }
     if (hid.state == HS_ASK) {
-        hid.state = yes ? HS_ACTIVE : HS_DENIED;
-        hid.time  = timer_read32();
+        hid.state     = yes ? HS_ACTIVE : HS_DENIED;
+        hid.time      = timer_read32();
+        hid.led_dirty = false;
     } else if (yes) {
         bridge_start();
     } else {
@@ -89,6 +90,32 @@ static bool is_write_command(const uint8_t *d) {
         default:
             return false;
     }
+}
+
+#ifdef RGB_MATRIX_ENABLE
+// Back to the saved lighting (the page's Undo, or a session ending unsaved).
+static void hid_led_revert(void) {
+    led_layers_revert();
+    rgb_matrix_reload_from_eeprom();
+    fx_settings_t s;
+    led_fx_get(&s);
+    led_fx_set(&s); // the mode that goes with them
+    zones_load();
+    zones_apply_flags(zones.zone);
+    hid.led_dirty = false;
+}
+#endif
+
+// The page closed or stopped polling: previews it didn't save are undone, or
+// a later save (a lighting key, Vial, keyboard-only mode) would keep them.
+void hid_session_end(void) {
+#ifdef RGB_MATRIX_ENABLE
+    if (hid.state == HS_ACTIVE && hid.led_dirty) {
+        hid_led_revert();
+    }
+#endif
+    hid.state     = HS_NONE;
+    hid.led_dirty = false;
 }
 
 static void cfg_raw_hid(uint8_t *data) {
@@ -119,13 +146,7 @@ static void cfg_raw_hid(uint8_t *data) {
             return;
         case CMD_LED_REVERT:
             if (hid_writes_allowed()) {
-                led_layers_revert();
-                rgb_matrix_reload_from_eeprom();
-                fx_settings_t s;
-                led_fx_get(&s);
-                led_fx_set(&s); // the mode that goes with them
-                zones_load();
-                zones_apply_flags(zones.zone);
+                hid_led_revert();
             }
             break;
         case CMD_LEDFX: {
@@ -137,8 +158,10 @@ static void cfg_raw_hid(uint8_t *data) {
                                    .speed = data[9], .width = data[10], .radius = data[11], .fade = data[12], .echoes = data[13], .dim = data[14],
                                    .bright = data[15] & 0x80 ? data[15] & 0x7F : s.bright}; // v21 pages set bit 7; older ones keep it
                 ok = (n.base || !data[3]) && led_fx_set(&n); // refused: led_fx_table.h doesn't allow it
+                hid.led_dirty |= ok;
             } else if (arg == 2 && ok) {
-                led_fx_save();
+                led_fx_save(); // the page's last save step (after VIA's lighting save)
+                hid.led_dirty = false;
             } else if (arg == 3 && ok) {
                 led_layers_revert();
                 led_fx_get(&s);
@@ -157,13 +180,17 @@ static void cfg_raw_hid(uint8_t *data) {
                 zones.hue  = data[3];
                 zones.sat  = data[4];
                 zones_apply_flags(zones.zone);
+                hid.led_dirty = true;
             }
             break;
         case CMD_LAYERS: {
             uint8_t base = led_mode_of(data[2]), react = data[3] == LED_LAYERS_KEEP ? LED_LAYERS_KEEP : led_mode_of(data[3]);
             bool    ok   = hid_writes_allowed() && (base || !data[2]) && (react || !data[3]) && led_layers_apply(base, react, data[4], data[5]);
             if (ok && data[6]) {
-                led_layers_save();
+                led_layers_save(); // the light page's save (after VIA's lighting save)
+                hid.led_dirty = false;
+            } else {
+                hid.led_dirty |= ok;
             }
             break;
         }
@@ -171,6 +198,7 @@ static void cfg_raw_hid(uint8_t *data) {
             if (hid_writes_allowed()) {
                 rgb_matrix_set_speed_noeeprom(data[2]);
                 rgb_matrix_sethsv_noeeprom(data[3], data[4], data[5]);
+                hid.led_dirty = true;
             }
             break;
         case CMD_SAVE_ZONE:
@@ -215,6 +243,7 @@ static void cfg_raw_hid(uint8_t *data) {
                 } else {
                     rgb_matrix_disable_noeeprom();
                 }
+                hid.led_dirty = true;
             }
             break;
 #endif
@@ -253,7 +282,7 @@ static void cfg_raw_hid(uint8_t *data) {
             hid_request();
             break;
         case CMD_END:
-            hid.state = HS_NONE;
+            hid_session_end();
             break;
     }
     uint32_t ask_left = hid.state == HS_ASK ? CONFIG_MODE_ASK_MS - timer_elapsed32(hid.time) : 0;

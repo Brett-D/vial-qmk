@@ -11,6 +11,8 @@ GEN.mkdir(exist_ok=True)
 
 
 def write(path, text):
-    """Writes text (LF) only if it changed, so a build doesn't recompile what didn't."""
+    """Writes text (LF) only if it changed, so a build doesn't recompile what didn't.
+    open() rather than Path.write_text(newline=...), which needs Python 3.10."""
     if not path.exists() or path.read_text(encoding="utf-8") != text:
-        path.write_text(text, encoding="utf-8", newline="\n")
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)

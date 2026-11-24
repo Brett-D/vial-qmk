@@ -194,9 +194,11 @@ extern matrix_row_t held_swallowed[MATRIX_ROWS];
 // Web (raw HID) session.
 typedef struct {
     uint8_t  state;
-    uint32_t time; // ask start / last poll / deny time
+    bool     led_dirty; // lighting previewed and not saved (undone when the session ends)
+    uint32_t time;      // ask start / last poll / deny time
 } hid_session_t;
 extern hid_session_t hid;
+void hid_session_end(void); // config_hid.c: closes the web session (unsaved lighting undone)
 
 // Right knob driving the focused config page (web session): its turns and
 // presses are reported to the page instead of acting normally.

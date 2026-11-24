@@ -1079,7 +1079,7 @@ void config_mode_task(void) {
     if (hid.state == HS_ASK && timer_elapsed32(hid.time) >= CONFIG_MODE_ASK_MS) {
         hid.state = HS_TIMEOUT;
     } else if (hid.state == HS_ACTIVE && timer_elapsed32(hid.time) >= CONFIG_HID_SESSION_IDLE_MS) {
-        hid.state = HS_NONE; // the page stopped polling
+        hid_session_end(); // the page stopped polling
     }
     if (cfg.state == ST_ASK && timer_elapsed32(cfg.ask_time) >= CONFIG_MODE_ASK_MS) {
         cfg.state = ST_OFF;
