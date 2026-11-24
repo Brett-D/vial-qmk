@@ -99,11 +99,13 @@
 // #define TRACKPAD_Z_DEBUG
 // RPC_ID_USER_CFG mirrors config mode to the right OLED (config_mode.c);
 // RPC_ID_USER_LEDMAP sends the measured LED map to the right half (led_map.c);
-// RPC_ID_USER_VIEW sends the right OLED's page and its values (oled_pages.c).
+// RPC_ID_USER_VIEW sends the right OLED's page and its values (oled_pages.c);
+// RPC_ID_USER_LEDFX sends the lighting settings and test ripples (led_layers.c).
+// New ids go at the end, so the existing ones keep their numbers.
 #ifdef TRACKPAD_Z_DEBUG
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_TP_Z, RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
 #else
-#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW
+#    define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
 #endif
 
 // Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE

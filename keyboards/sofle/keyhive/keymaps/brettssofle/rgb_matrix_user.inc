@@ -1,13 +1,16 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// LAYERED: the whole-keyboard effect, then the key-press effect drawn on top
-// in its own colour (led_layers.c). This file is part of rgb_matrix.c, so the
-// built-in effect functions are callable here.
+// LAYERED: the background (one of QMK's effects, or ours from led_fx_core.h);
+// the key-press overlay is composited over it at flush (led_layers.c,
+// rgb_driver.c). This file is part of rgb_matrix.c, so the built-in effect
+// functions are callable here.
 
 RGB_MATRIX_EFFECT(LAYERED)
 
 #ifdef RGB_MATRIX_CUSTOM_EFFECT_IMPLS
+
+bool led_fx_background(effect_params_t *params); // led_layers.c: our own backgrounds (or dark)
 #    include "led_layers.h"
 
 #    define LAYER_EFFECT(name) \
@@ -95,32 +98,27 @@ static bool layered_run(uint8_t mode, effect_params_t *params) {
 #    ifdef ENABLE_RGB_MATRIX_SOLID_MULTISPLASH
         LAYER_EFFECT(SOLID_MULTISPLASH)
 #    endif
-        default: {
-            // No whole-keyboard effect: dark underneath.
-            RGB_MATRIX_USE_LIMITS(led_min, led_max);
-            for (uint8_t i = led_min; i < led_max; i++) {
-                rgb_matrix_set_color(i, 0, 0, 0);
-            }
-            return rgb_matrix_check_finished_leds(led_max);
-        }
+        default:
+            return led_fx_background(params); // ours, or dark
     }
 }
 
 static bool LAYERED(effect_params_t *params) {
-    uint8_t base, react, hue, sat;
-    led_layers_get(&base, &react, &hue, &sat);
-    bool more = layered_run(base, params);
-    if (react) {
-        // The key-press layer in its own colour, blended over the base.
-        hsv_t saved            = rgb_matrix_config.hsv;
-        rgb_matrix_config.hsv.h = hue;
-        rgb_matrix_config.hsv.s = sat;
-        rgb_driver_overlay(true);
-        layered_run(react, params);
-        rgb_driver_overlay(false);
-        rgb_matrix_config.hsv = saved;
+    // A new background inside LAYERED starts like a new effect (QMK only does
+    // that when the mode changes): init for one whole frame (all render passes).
+    static uint8_t last_base = 0xFF, reinit;
+    uint8_t        base      = led_fx_base();
+    if (base != last_base) {
+        last_base = base;
+        reinit    = 2;
     }
-    return more;
+    if (reinit && params->iter == 0) {
+        reinit--;
+    }
+    if (reinit) {
+        params->init = true;
+    }
+    return layered_run(base, params);
 }
 
 #endif

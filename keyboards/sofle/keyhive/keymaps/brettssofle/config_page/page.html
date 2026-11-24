@@ -75,6 +75,9 @@
   .btns { display:flex; gap:8px; margin-top:10px; align-items:center; }
   .sw { width:22px; height:22px; padding:0; border-radius:50%; margin:1px; border:2px solid var(--line); vertical-align:middle; }
 .sw.on { border-color:#fff; } .cpick input[type=color] { width:44px; height:28px; padding:0 2px; vertical-align:middle; margin-right:4px; }
+.fxPrev { margin:4px 0 10px; } #fxCanvas { width:100%; max-width:600px; background:#0c0d10; border-radius:8px; cursor:pointer; display:block; }
+.fxH { margin:14px 0 4px; font-size:14px; } .fxNote { margin:2px 0 6px; } .fxNote.warn { color:var(--warn); }
+#fxSec.off .row { opacity:.45; } #fxSec.off select, #fxSec.off input { pointer-events:none; }
 .swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
   .badge { font-size:11px; padding:1px 8px; border-radius:99px; background:#4a3a17; color:#ffd58f; display:none; }
   .badge.show { display:inline-block; }
@@ -187,18 +190,34 @@
         <div class="rows" id="ledRows"></div>
         <div class="ctl hidden" id="ledCtl">
           <div class="row"><span>Lights</span><label><input type="checkbox" id="ledOn"> on</label><span></span></div>
-          <div class="row"><span>Whole keyboard</span><select id="ledBase"></select><span></span></div>
-          <div class="row"><span>When you press keys</span><select id="ledReact"></select><span></span></div>
-          <div class="row rxRow"><span>Key-press colour</span><span class="cpick" data-h="rxHue" data-s="rxSat"></span><span></span></div>
-          <div class="row rxRow"><span>Key-press hue</span><input type="range" id="rxHue" min="0" max="255"><span class="v"><span id="rxHueV"></span><span class="swatch" id="rxSwatch"></span></span></div>
-          <div class="row rxRow"><span>Key-press saturation</span><input type="range" id="rxSat" min="0" max="255"><span class="v" id="rxSatV"></span></div>
-          <div class="small dim" id="ledLayerNote" style="margin:-2px 0 6px"></div>
+          <div class="fxPrev"><canvas id="fxCanvas" width="600" height="230" title="Click a key: a test ripple, here and on the keyboard"></canvas>
+            <div class="small dim">Preview: <b>click a key</b> for a test ripple (it also runs on the keyboard), or <button id="fxDemo" class="small">play a demo</button>. <span id="fxApprox"></span></div></div>
+          <h3 class="fxH">Background</h3>
+          <div class="row"><span>Effect</span><select id="ledBase"></select><span></span></div>
           <div class="row"><span>Colour</span><span class="cpick" data-h="ledHue" data-s="ledSat"></span><span></span></div>
           <div class="small dim" style="margin:-2px 0 6px">Pick a colour or a swatch (brightness is its own slider); hue and saturation below are the fine controls. The keys show colours a little differently from the screen.</div>
           <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
           <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
           <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
           <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="255"><span class="v" id="ledSpeedV"></span></div>
+          <div id="fxSec">
+            <h3 class="fxH">On key press</h3>
+            <div class="small fxNote hidden" id="fxSolo">This effect reacts to keys itself, so it's used on its own.</div>
+            <div class="row"><span>Effect</span><select id="fxEffect"></select><span></span></div>
+            <div class="row fxOn"><span>Colour</span><select id="fxColour"><option value="0">Fixed (pick below)</option><option value="1">Opposite of the background</option><option value="2">Rainbow by distance</option><option value="3">Random per press</option></select><span></span></div>
+            <div class="row fxOn rxRow"><span>Key-press colour</span><span class="cpick" data-h="rxHue" data-s="rxSat"></span><span></span></div>
+            <div class="row fxOn rxRow"><span>Key-press hue</span><input type="range" id="rxHue" min="0" max="255"><span class="v"><span id="rxHueV"></span><span class="swatch" id="rxSwatch"></span></span></div>
+            <div class="row fxOn rxRow"><span>Key-press saturation</span><input type="range" id="rxSat" min="0" max="255"><span class="v" id="rxSatV"></span></div>
+            <div class="row fxOn"><span>Over the background</span><select id="fxBlend"><option value="0">Replace (always clear)</option><option value="1">Add (lightens)</option><option value="2">Tint (keeps its brightness)</option></select><span></span></div>
+            <div class="row fxOn"><span>Speed</span><input type="range" id="fxSpeed" min="0" max="15"><span class="v" id="fxSpeedV"></span></div>
+            <div class="row fxOn"><span>Band width</span><input type="range" id="fxWidth" min="0" max="15"><span class="v" id="fxWidthV"></span></div>
+            <div class="row fxOn"><span>Reach</span><input type="range" id="fxRadius" min="0" max="15"><span class="v" id="fxRadiusV"></span></div>
+            <div class="row fxOn"><span>Fade</span><input type="range" id="fxFade" min="0" max="15"><span class="v" id="fxFadeV"></span></div>
+            <div class="row fxOn fxEchoRow"><span>Echo rings</span><input type="range" id="fxEchoes" min="0" max="3"><span class="v" id="fxEchoesV"></span></div>
+            <div class="row fxOn"><span>Dim background while active</span><input type="range" id="fxDim" min="0" max="7"><span class="v" id="fxDimV"></span></div>
+            <div class="small fxNote warn hidden" id="fxWarn"></div>
+          </div>
+          <h3 class="fxH">Underglow and power</h3>
           <div class="row"><span>LED zones</span><select id="ledZone"></select><span></span></div>
           <div class="row ugRow"><span>Underglow colour</span><span class="cpick" data-h="ugHue" data-s="ugSat"></span><span></span></div>
           <div class="row ugRow"><span>Underglow hue</span><input type="range" id="ugHue" min="0" max="255"><span class="v"><span id="ugHueV"></span><span class="swatch" id="ugSwatch"></span></span></div>
@@ -333,6 +352,7 @@ const SLOT_NAMES = ["Turn left", "Turn right", "Press"];
 const HS = { NONE:0, ASK:1, ACTIVE:2, DENIED:3, TIMEOUT:4 };
 
 // mode: null (not connected) | "bridge" (keyboard-only) | "hid" (WebHID, mouse)
+/*__FX_CORE__*/
 const S = {
   mode: null, state: "idle", nonce: 0, ready: null, ui: null, keymap: [], enc: [], led: null, tp: null, tpz: null,
   frames: 0, missed: 0, lastSeq: null, zHist: [], peaks: [], wasTouching: false, modeEffects: [], bridgeOn: false,
@@ -655,12 +675,110 @@ async function hidLoadLed() {
   const st = await cmd([0xf6, 0x00, 1]); readStatus(st);
   const m = await cmd([0x08, 0x41]); // VialRGB mode: id, speed, h, s, v
   const id = m[2] | (m[3] << 8);
-  const cur = st[11]; // current effect (VialRGB id; ledLayeredId = whole keyboard + key presses)
-  const layered = cur === DATA.ledLayeredId, keyFx = DATA.ledReact.includes(cur) || DATA.ledSolo.includes(cur);
+  const cur = st[11]; // current effect (VialRGB id; ledLayeredId = background + key-press effect, or one of ours)
+  const f = await cmd([0xf6, 0x1c, 0]); // v20 lighting: base, effect, blend, colour, hue, sat, speed, width, reach, fade, echoes, dim
+  const layered = cur === DATA.ledLayeredId;
   S.led = { enable: S.ledInfo.enabled, mode: id || cur, hue: m[5], sat: m[6], val: m[7], speed: m[4], idle: S.ledInfo.idle, max: S.ledInfo.max,
             zone: st[12], ugHue: st[13], ugSat: st[14],
-            base: layered ? st[26] : keyFx ? 0 : cur, react: layered ? st[27] : keyFx ? cur : 0, rxHue: st[28], rxSat: st[29], dirty: 0 };
+            base: layered ? f[3] : cur, fxEffect: layered ? f[4] : 0, fxBlend: f[5], fxColour: f[6], rxHue: f[7], rxSat: f[8],
+            fxSpeed: f[9], fxWidth: f[10], fxRadius: f[11], fxFade: f[12], fxEchoes: f[13], fxDim: f[14], dirty: 0 };
   S.ledSent = { ...S.led };
+}
+// Lighting combinations (led_fx_table.h, the firmware checks the same).
+const FXK = DATA.fxTable.kinds;
+function fxInfo(base) { // kind and main hue of a background (VialRGB id or ours)
+  const T = DATA.fxTable;
+  for (const [i, , label, kind, hue] of T.backgrounds) if (base === T.ownBg + i) return { kind, hue, label, own: true };
+  for (const [i, , label, kind, hue] of T.solos) if (base === T.ownSolo + i) return { kind, hue, label, own: true };
+  for (const [i, , label, kind, hue] of T.qmk) if (base === i) return { kind, hue, label };
+  return { kind: FXK.BG, hue: 255, label: DATA.ledEffects[base] || "" };
+}
+const FX_FIELDS = ["base", "fxEffect", "fxBlend", "fxColour", "rxHue", "rxSat", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim"];
+const fxBytes = (l) => [0xf6, 0x1c, 1, l.base, l.fxEffect, l.fxBlend, l.fxColour, l.rxHue, l.rxSat, l.fxSpeed, l.fxWidth, l.fxRadius, l.fxFade, l.fxEchoes, l.fxDim];
+// Old backups / pages: QMK key-press effects -> the nearest overlay (as led_layers.c: effect_of_react).
+// ---- LED preview: our backgrounds and every key-press effect use the FX core,
+// the keyboard's own maths, composited as led_fx_pixel does; QMK's
+// backgrounds are approximated (noted under the preview).
+const PV = { ev: [], dim: 255, demo: 0, last: 0 };
+const PV_W = 600, PV_H = 230, pvX = (x) => 20 + x * 560 / 224, pvY = (y) => 20 + y * 190 / 64;
+function pvQmkBase(id, x, y, t, l) {
+  const n = (DATA.ledEffects[id] || "").toLowerCase(), V = l.val, h = l.hue, s = l.sat, sp = (l.speed + 32) / 128;
+  const hs = (k) => FX.hash32(k >>> 0);
+  if (/digital rain/.test(n)) return FX.background(FX.B.CODE_RAIN, { t, hue: 85, sat: 255, val: V, spd: l.speed + 64, wpm: 0, n: 0, hx: [], ht: [] }, x, y);
+  if (/raindrop|jellybean|pixel rain/.test(n)) { const k = hs(x * 31 + y * 7 + Math.floor(t * sp / 900) * 977); return { h: /jelly/.test(n) ? k & 255 : (h + ((k & 63) - 32)) & 255, s: /jelly/.test(n) ? 255 : s, v: /pixel/.test(n) && k >>> 30 ? 0 : V }; }
+  if (/breath/.test(n)) return { h, s, v: Math.floor(V * FX.sin8(Math.floor(t * sp / 16)) / 255) };
+  if (/rainbow|cycle|spiral|pinwheel|swirl|band/.test(n)) return { h: (h + x + Math.floor(t * sp / 20)) & 255, s, v: V };
+  if (/gradient/.test(n)) return { h: (h + (x >> 1)) & 255, s, v: V };
+  if (/heatmap|reactive/.test(n)) return { h, s, v: 0 };
+  return { h, s, v: V };
+}
+function pvFire(row, col) {
+  const led = DATA.fxLeds.find((d) => d[2] & 1 && d[3] === row && d[4] === col);
+  if (!led) return;
+  PV.ev.push({ x: led[0], y: led[1], born: performance.now() });
+  if (PV.ev.length > 8) PV.ev.shift(); // the keyboard remembers the last 8 presses
+}
+function pvFrame(now) {
+  const cv = $("fxCanvas"), l = S.led;
+  if (!cv || !l || S.mode !== "hid" || !cv.offsetParent) return;
+  const g = cv.getContext("2d"), t = Math.floor(now) >>> 0;
+  const info = fxInfo(l.base), solo = !!(info.kind & FXK.SOLO), effect = solo ? 0 : l.fxEffect;
+  const s = { base: l.base, effect, blend: l.fxBlend, colour: l.fxColour, hue: l.rxHue, sat: l.rxSat, speed: l.fxSpeed, width: l.fxWidth, radius: l.fxRadius, fade: l.fxFade, echoes: l.fxEchoes, dim: l.fxDim };
+  const p = FX.prepare(s), V = Math.max(1, l.val);
+  if (PV.demo && now >= PV.demo) { const keys = DATA.fxLeds.filter((d) => d[2] & 1); const k = keys[(FX.hash32(t) >>> 8) % keys.length]; pvFire(k[3], k[4]); PV.demo = PV.demoLeft-- > 0 ? now + 450 : 0; }
+  const ev = [];
+  for (const e of PV.ev) { const el = Math.min(65535, Math.floor(now - e.born)); const x = FX.event(p, e.x, e.y, el, (Math.floor(e.born) >>> 0)); if (FX.alive(p, x)) ev.push(x); }
+  PV.ev = PV.ev.filter((e) => now - e.born < 6000);
+  const want = effect && ev.length ? 255 - l.fxDim * 28 : 255;
+  PV.dim = PV.dim < want ? Math.min(want, PV.dim + 24) : Math.max(want, PV.dim - 24);
+  const ctx = { t, hue: l.hue, sat: l.sat, val: l.val, spd: l.speed, wpm: Math.min(120, PV.ev.filter((e) => now - e.born < 5000).length * 12),
+                n: PV.ev.length, hx: PV.ev.map((e) => e.x), ht: PV.ev.map((e) => Math.min(65535, Math.floor(now - e.born))) };
+  g.fillStyle = "#0c0d10"; g.fillRect(0, 0, PV_W, PV_H);
+  for (const [x, y, flag] of DATA.fxLeds) {
+    let rgb = [0, 0, 0];
+    if (l.enable && l.base) {
+      const o = l.base >= DATA.fxTable.ownBg ? FX.background(l.base, ctx, x, y) : pvQmkBase(l.base, x, y, t, l);
+      rgb = FX.hsv2rgb(o.h, o.s, o.v);
+    }
+    if (l.enable && effect) {
+      if (PV.dim !== 255) rgb = rgb.map((v) => (v * PV.dim) >> 8);
+      let best = 0, bj = 0;
+      ev.forEach((e, j) => { const a = FX.intensity(p, e, x, y); if (effect === FX.E.HEAT) best += a; else if (a > best) { best = a; bj = j; } });
+      if (best) { const top = FX.hsv2rgb(FX.hue(p, ev[bj], l.hue, x, y), FX.sat(p), l.val); FX.blend(s.blend, rgb, top, Math.min(255, best), l.val); }
+    }
+    const k = 255 / V, cx = pvX(x), cy = pvY(y);
+    g.fillStyle = `rgb(${rgb.map((v) => Math.min(255, Math.round(v * k))).join(",")})`;
+    if (flag & 1) { g.fillRect(cx - 15, cy - 15, 30, 30); g.strokeStyle = "#2a2d35"; g.strokeRect(cx - 15.5, cy - 15.5, 31, 31); }
+    else { g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.fill(); }
+  }
+  $("fxApprox").textContent = l.base && l.base < DATA.fxTable.ownBg ? "(QMK backgrounds are approximated here; key-press effects are exact.)" : "";
+}
+(function pvLoop(now) { try { if (!PV.loopOff && now - PV.last > 30) { PV.last = now; pvFrame(now); } } catch (e) { /* preview only */ } requestAnimationFrame(pvLoop); })(0);
+$("fxCanvas").addEventListener("click", async (ev) => {
+  const r = ev.target.getBoundingClientRect(), mx = (ev.clientX - r.left) * PV_W / r.width, my = (ev.clientY - r.top) * PV_H / r.height;
+  let best = null, bd = 1e9;
+  for (const d of DATA.fxLeds) { if (!(d[2] & 1)) continue; const dx = pvX(d[0]) - mx, dy = pvY(d[1]) - my, q = dx * dx + dy * dy; if (q < bd) { bd = q; best = d; } }
+  if (!best || bd > 30 * 30) return;
+  pvFire(best[3], best[4]);
+  if (S.mode === "hid" && HID.dev && HID.dev.opened) { try { await cmd([0xf6, 0x1c, 4, best[3], best[4]]); } catch (e) { /* preview still runs */ } }
+});
+$("fxDemo").addEventListener("click", () => { PV.demoLeft = 7; PV.demo = performance.now(); });
+function ledsFromOldBackup(x) { // v19 and older: base + react (VialRGB ids)
+  if (x.react === undefined || x.fxEffect !== undefined) return x;
+  const y = { ...x };
+  delete y.react;
+  if (x.react === 255) return y; // light page: "keep the key-press effect"
+  if (DATA.ledSolo.includes(x.react)) { y.base = x.react; y.fxEffect = 0; } else y.fxEffect = fxOfReact(x.react);
+  return y;
+}
+function fxOfReact(react) {
+  const n = (DATA.ledEffects[react] || "").toLowerCase(), E = FX.E;
+  if (!react) return 0;
+  if (/simple/.test(n)) return E.GLOW;
+  if (/wide/.test(n)) return E.SPLASH;
+  if (/cross/.test(n)) return E.CROSS;
+  if (/nexus/.test(n)) return E.NEXUS;
+  return E.RING;
 }
 async function hidLoadTp() {
   const d = await cmd([0xf5, 0x00]);
@@ -731,10 +849,12 @@ async function flushLed() {
       // Snapshot first: sliders keep changing S.led while a command is in flight.
       const l = { ...S.led }, s = S.ledSent;
       if (l.enable && s.enable !== 1) { await send([0xf6, 0x05, 1]); s.enable = 1; continue; }
-      if (["base", "react", "rxHue", "rxSat"].some((k) => l[k] !== s[k])) {
-        // Effects: whole keyboard + key presses (VialRGB ids, 0 = none), key-press colour.
-        await send([0xf6, 0x14, l.base, l.react, l.rxHue, l.rxSat, 0]);
-        Object.assign(s, { base: l.base, react: l.react, rxHue: l.rxHue, rxSat: l.rxSat });
+      if (FX_FIELDS.some((k) => l[k] !== s[k])) {
+        // Background + key-press effect and its settings (0xF6 0x1C 1); [15] = 0: not allowed together.
+        const d = await cmd(fxBytes(l));
+        if (d[0] === 0xff) throw new Error("refused — reconnect");
+        for (const k of FX_FIELDS) s[k] = l[k];
+        if (!d[15]) toast("The keyboard didn't take that combination", true);
         continue;
       }
       if (["hue", "sat", "val", "speed"].some((k) => l[k] !== s[k])) {
@@ -756,10 +876,11 @@ async function flushLed() {
 function ledInput() {
   const l = S.led;
   l.enable = $("ledOn").checked ? 1 : 0;
-  l.base = +$("ledBase").value; l.react = +$("ledReact").value;
-  if (DATA.ledSolo.includes(l.react)) l.base = 0; // paints every key: can't go over a whole-keyboard effect
-  if (!l.base && !l.react) l.enable = 0;          // nothing chosen = lights off
+  l.base = +$("ledBase").value; l.fxEffect = +$("fxEffect").value;
+  if (fxInfo(l.base).kind & FXK.SOLO) l.fxEffect = 0; // reacts to keys itself: used on its own
+  if (!l.base && !l.fxEffect) l.enable = 0;          // nothing chosen = lights off
   l.rxHue = +$("rxHue").value; l.rxSat = +$("rxSat").value;
+  for (const k of ["fxBlend", "fxColour", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim"]) l[k] = +$(k).value;
   l.hue = +$("ledHue").value; l.sat = +$("ledSat").value;
   l.val = +$("ledVal").value; l.speed = +$("ledSpeed").value; l.idle = +$("ledIdle").value;
   l.zone = +$("ledZone").value; l.ugHue = +$("ugHue").value; l.ugSat = +$("ugSat").value;
@@ -774,7 +895,7 @@ async function ledSave() {
     if (d[0] === 0xff) throw new Error("refused");
     await cmd([0xf6, 0x01, S.led.idle]);
     await cmd([0xf6, 0x07]);
-    await cmd([0xf6, 0x14, S.led.base, S.led.react, S.led.rxHue, S.led.rxSat, 1]);
+    await cmd([0xf6, 0x1c, 2]);
     await hidLoadLed();
     toast("Lighting saved");
   } catch (e) { toast("Not saved: " + e.message, true); }
@@ -786,22 +907,31 @@ async function ledRevert() {
   render();
 }
 function buildLedSelects() {
-  const name = (id) => DATA.ledEffects[id] || "Effect " + id;
-  const isKey = (id) => DATA.ledReact.includes(id) || DATA.ledSolo.includes(id);
-  const base = $("ledBase"), react = $("ledReact");
-  base.innerHTML = ""; react.innerHTML = "";
+  const name = (id) => DATA.ledEffects[id] || "Effect " + id, T = DATA.fxTable;
+  const base = $("ledBase"), fx = $("fxEffect");
+  const group = (label, items) => { const g = document.createElement("optgroup"); g.label = label; items.forEach((o) => g.appendChild(o)); if (items.length) base.appendChild(g); };
+  const opt = (label, id, tip) => { const o = new Option(label, id); if (tip) o.title = tip; return o; };
+  base.innerHTML = ""; fx.innerHTML = "";
   base.add(new Option("Off (dark)", 0));
-  react.add(new Option("None", 0));
+  const qmkBg = [], solo = [];
   for (const id of S.effects) {
-    if (!id || id === DATA.ledLayeredId || id === DATA.ledDirectId) continue; // Direct: Vial's computer-controlled mode
-    if (isKey(id)) react.add(new Option(name(id) + (DATA.ledSolo.includes(id) ? " (whole keyboard)" : ""), id));
-    else base.add(new Option(name(id), id));
+    if (!id || id === DATA.ledLayeredId || id === DATA.ledDirectId || id >= DATA.fxTable.ownBg || DATA.ledReact.includes(id)) continue; // key-press effects: "On key press" now
+    const k = fxInfo(id).kind;
+    if (k & FXK.SOLO) solo.push(opt(name(id), id, "Reacts to keys itself, so it's used on its own"));
+    else qmkBg.push(opt(name(id), id, k & FXK.DARK ? "Dark / sparse: pick a key-press colour that stands out" : ""));
   }
+  group("Backgrounds", qmkBg);
+  group("More backgrounds", T.backgrounds.map(([i, , label, k]) => opt(label, T.ownBg + i, k & FXK.DARK ? "Dark / sparse: pick a key-press colour that stands out" : "")));
+  T.solos.forEach(([i, , label]) => solo.push(opt(label, T.ownSolo + i, "Reacts to keys itself, so it's used on its own")));
+  group("On their own (react to keys themselves)", solo);
+  fx.add(new Option("None", 0));
+  T.overlays.forEach(([i, , label]) => fx.add(new Option(label, i)));
   $("ledZone").innerHTML = DATA.ledZones.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledIdle").innerHTML = DATA.ledIdle.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledVal").max = S.ledInfo.max;
 }
-["ledOn", "ledBase", "ledReact", "rxHue", "rxSat", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat"].forEach((id) => $(id).addEventListener("input", ledInput));
+["ledOn", "ledBase", "fxEffect", "rxHue", "rxSat", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat",
+ "fxBlend", "fxColour", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim"].forEach((id) => $(id).addEventListener("input", ledInput));
 // Mouse wiggler (Trackpad tab): applies at once, not saved.
 async function wgInput() {
   try { readStatus(await cmd([0xf6, 0x16, $("wgOn").checked ? 1 : 0, +$("wgEvery").value])); toast($("wgOn").checked ? "Mouse wiggler on" : "Mouse wiggler off"); }
@@ -1512,16 +1642,30 @@ function renderLeds(ui) {
   if (!l) { $("ledRows").innerHTML = "<div class='dim'>Loading…</div>"; return; }
   if (hid) {
     $("ledOn").checked = !!l.enable;
-    setIfIdle("ledBase", l.base); setIfIdle("ledReact", l.react); setIfIdle("rxHue", l.rxHue); setIfIdle("rxSat", l.rxSat);
-    const both = !!(l.base && l.react);
-    document.querySelectorAll(".rxRow").forEach((r) => r.classList.toggle("hidden", !both));
-    $("ledBase").disabled = DATA.ledSolo.includes(l.react);
+    setIfIdle("ledBase", l.base); setIfIdle("fxEffect", l.fxEffect); setIfIdle("rxHue", l.rxHue); setIfIdle("rxSat", l.rxSat);
+    for (const k of ["fxBlend", "fxColour", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim"]) setIfIdle(k, l[k]);
+    const info = fxInfo(l.base), solo = !!(info.kind & FXK.SOLO), on = !!l.fxEffect && !solo;
+    $("fxSec").classList.toggle("off", solo);
+    $("fxSolo").classList.toggle("hidden", !solo);
+    $("fxEffect").title = solo ? "This effect reacts to keys itself, so it's used on its own" : "";
+    document.querySelectorAll("#fxSec .fxOn").forEach((r) => r.classList.toggle("hidden", !on));
+    document.querySelectorAll(".rxRow").forEach((r) => r.classList.toggle("hidden", !on || l.fxColour !== 0));
+    document.querySelectorAll("#fxSec .fxEchoRow").forEach((r) => r.classList.toggle("hidden", !on || l.fxEffect !== FX.E.WAVE));
     $("rxHueV").textContent = Math.round(l.rxHue / 256 * 360) + "°";
     $("rxSwatch").style.background = hsvToCss(l.rxHue, l.rxSat, 255);
     $("rxSatV").textContent = Math.round(l.rxSat / 255 * 100) + "%";
-    $("ledLayerNote").textContent = both ? "Key presses light up in the key-press colour and fade back into the whole-keyboard effect. Hue / saturation below colour the whole keyboard."
-      : DATA.ledSolo.includes(l.react) ? "This one lights the whole keyboard by itself, so it can't be combined."
-      : !l.base && !l.react ? "Nothing chosen: the lights are off." : "";
+    const pct = (v, n) => Math.round(v / n * 100) + "%";
+    $("fxSpeedV").textContent = Math.round((30 + l.fxSpeed * 15) / 14) + " keys/s";
+    $("fxWidthV").textContent = pct(l.fxWidth, 15); $("fxRadiusV").textContent = Math.round((24 + l.fxRadius * 16) / 14) + " keys";
+    $("fxFadeV").textContent = pct(l.fxFade, 15); $("fxEchoesV").textContent = l.fxEchoes + 2 + " rings"; $("fxDimV").textContent = l.fxDim ? "−" + pct(l.fxDim * 28, 255) : "no";
+    // Soft warnings (led_fx_table.h: dark backgrounds, own colours); nothing is blocked.
+    const warn = [];
+    if (on && info.kind & FXK.DARK && l.fxBlend === 2) warn.push("Tint keeps the background's brightness: over a dark background the key-press effect is hard to see. Try Replace.");
+    const mainHue = info.hue === 255 ? l.hue : info.hue;
+    if (on && l.fxColour === 0 && l.rxSat > 120 && Math.abs(((l.rxHue - mainHue + 384) % 256) - 128) > 104) warn.push("The key-press colour is close to the background's: try \"Opposite of the background\" or another colour.");
+    if (on && l.fxColour === 1 && info.kind & FXK.OWNHUE) warn.push("This background has its own colours, so \"Opposite\" follows the colour setting, not what you see: a fixed colour may stand out better.");
+    $("fxWarn").textContent = warn.join(" ");
+    $("fxWarn").classList.toggle("hidden", !warn.length);
     setIfIdle("ledHue", l.hue); setIfIdle("ledSat", l.sat); setIfIdle("ledVal", l.val);
     setIfIdle("ledSpeed", l.speed); setIfIdle("ledIdle", l.idle);
     $("ledHueV").textContent = Math.round(l.hue / 256 * 360) + "°";
@@ -1776,7 +1920,8 @@ setInterval(() => { if (S.mode === "hid" && S.ui && S.ui.tab === 3 && S.pet) dra
 // trackpad press-to-click and the wiggler. Restore shows what would change and
 // writes it back through the confirmed session (WebHID or the network API).
 const BACKUP_FORMAT = "sofle-config-backup", BACKUP_VERSION = 1;
-const LED_FIELDS = { enable: "Lights on", base: "Whole-keyboard effect", react: "Key-press effect", rxHue: "Key-press hue", rxSat: "Key-press saturation",
+const LED_FIELDS = { enable: "Lights on", base: "Background", fxEffect: "On key press", fxBlend: "Key press over the background", fxColour: "Key-press colour mode",
+  rxHue: "Key-press hue", rxSat: "Key-press saturation", fxSpeed: "Key-press speed", fxWidth: "Band width", fxRadius: "Reach", fxFade: "Fade", fxEchoes: "Echo rings", fxDim: "Dim background",
   hue: "Hue", sat: "Saturation", val: "Brightness", speed: "Speed", idle: "Turn off after", zone: "LED zones", ugHue: "Underglow hue", ugSat: "Underglow saturation" };
 const TP_FIELDS = { enable: "Press-to-click", threshold: "Press threshold (Z)", release: "Release Z" };
 
@@ -1843,10 +1988,12 @@ function backupDiff(b) {
     if (b.encoders[l][e][cw] !== S.enc[l][e][cw]) enc.push({ l, e, cw, from: S.enc[l][e][cw], to: b.encoders[l][e][cw] });
   out.push({ id: "encoders", title: "Knobs", n: enc.length, data: enc,
     lines: enc.slice(0, 6).map((k) => `${name(k.l)} ${k.e ? "right" : "left"} knob ${k.cw ? "turn right" : "turn left"}: ${kcName(k.from) || "(none)"} → ${kcName(k.to) || "(none)"}`) });
+  if (b.leds) b.leds = ledsFromOldBackup(b.leds);
   const led = b.leds ? Object.keys(LED_FIELDS).filter((k) => b.leds[k] !== undefined && b.leds[k] !== S.led[k]) : [];
-  const fx = (v) => (v ? DATA.ledEffects[v] || "effect " + v : "none");
+  const fx = (v) => (v ? fxInfo(v).label || "effect " + v : "none");
+  const ov = (v) => (v ? (DATA.fxTable.overlays.find((o) => o[0] === v) || [0, 0, "effect " + v])[2] : "none");
   out.push({ id: "leds", title: "Lighting", n: led.length, data: b.leds,
-    lines: led.map((k) => `${LED_FIELDS[k]}: ${k === "base" || k === "react" ? fx(S.led[k]) + " → " + fx(b.leds[k]) : k === "zone" ? DATA.ledZones[S.led[k]] + " → " + DATA.ledZones[b.leds[k]] : k === "idle" ? DATA.ledIdle[S.led[k]] + " → " + DATA.ledIdle[b.leds[k]] : S.led[k] + " → " + b.leds[k]}`) });
+    lines: led.map((k) => `${LED_FIELDS[k]}: ${k === "base" ? fx(S.led[k]) + " → " + fx(b.leds[k]) : k === "fxEffect" ? ov(S.led[k]) + " → " + ov(b.leds[k]) : k === "zone" ? DATA.ledZones[S.led[k]] + " → " + DATA.ledZones[b.leds[k]] : k === "idle" ? DATA.ledIdle[S.led[k]] + " → " + DATA.ledIdle[b.leds[k]] : S.led[k] + " → " + b.leds[k]}`) });
   const mapNow = S.backupMap || null;
   let mapLines = [], mapN = 0;
   if (b.ledMap === undefined) { /* not in the backup */ }
@@ -1933,7 +2080,7 @@ async function restoreApply() {
       await ok([0x09]);
       await ok([0xf6, 0x01, S.led.idle]);
       await ok([0xf6, 0x07]);
-      await ok([0xf6, 0x14, S.led.base, S.led.react, S.led.rxHue, S.led.rxSat, 1]);
+      await ok([0xf6, 0x1c, 2]);
     }
     if (want.has("ledMap")) {
       prog("LED map…");

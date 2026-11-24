@@ -228,4 +228,7 @@ void housekeeping_task_user(void) {
     oled_pages_task();
     wiggler_task();
     config_mode_task();
+#ifdef RGB_MATRIX_ENABLE
+    led_fx_task(); // lighting settings / test ripples to the right half
+#endif
 }

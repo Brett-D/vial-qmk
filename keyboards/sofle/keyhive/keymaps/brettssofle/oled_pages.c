@@ -111,6 +111,9 @@ void oled_pages_task(void) {
         user_config_get_led_zone(&now.led_zone, &hue, &sat);
         if (now.led_mode == led_layers_mode()) {
             led_layers_get(&now.led_base, &now.led_react, &hue, &sat);
+        fx_settings_t s;
+        led_fx_get(&s);
+        now.led_react = s.effect ? 0x80 | s.effect : 0; // v20: the overlay, not an rgb_matrix mode
         }
     }
 #endif
@@ -132,7 +135,19 @@ void oled_pages_task(void) {
 #ifdef OLED_ENABLE
 
 // Two lines (10 characters) per effect.
+// Our own effects and the key-press overlays (0x80 | effect), 10 characters = 2 OLED lines.
+static const char *const own_names[] = {"Aurora    ", "Fire      ", "Starfield ", "Ocean     ", "Comet     ", "Lava lamp ", "Candle    ", "Sunrise   ", "Breathe gr", "Code rain "};
+static const char *const solo_names[] = {"Typing spd", "Typing VU "};
+static const char *const fx_names[]   = {"None      ", "Ring      ", "Echo rings", "Splash    ", "Key glow  ", "Cross     ", "Nexus     ",
+                                         "Shockwave ", "Sparks    ", "Lightning ", "Rain drops", "Key trail ", "Heat      "};
+_Static_assert(sizeof(own_names) / sizeof(own_names[0]) == FX_OWN_BG_COUNT && sizeof(solo_names) / sizeof(solo_names[0]) == FX_OWN_SOLO_COUNT &&
+                   sizeof(fx_names) / sizeof(fx_names[0]) == FX_EFFECT_COUNT,
+               "oled_pages.c: a name for every effect in led_fx_table.h");
+
 static const char *effect_name(uint8_t mode) {
+    if (mode >= 0x80 && mode < 0x80 + FX_EFFECT_COUNT) return fx_names[mode & 0x7F];
+    if (mode >= FX_OWN_BG && mode < FX_OWN_BG + FX_OWN_BG_COUNT) return own_names[mode - FX_OWN_BG];
+    if (mode >= FX_OWN_SOLO && mode < FX_OWN_SOLO + FX_OWN_SOLO_COUNT) return solo_names[mode - FX_OWN_SOLO];
     switch (mode) {
 #    ifdef RGB_MATRIX_ENABLE
         case RGB_MATRIX_SOLID_COLOR: return "Solidcolor";
@@ -311,8 +326,10 @@ static void page_leds(void) {
     }
     if (view.led_mode == led_layers_mode()) {
         oled_write(view.led_base ? effect_name(view.led_base) : "Dark      ", false);
-        oled_write_P(PSTR("  +  "), false);
-        oled_write(effect_name(view.led_react), false);
+        if (view.led_react) {
+            oled_write_P(PSTR("  +  "), false);
+            oled_write(effect_name(view.led_react), false);
+        }
     } else {
         oled_write(effect_name(view.led_mode), false);
         oled_write_P(PSTR("     "), false);

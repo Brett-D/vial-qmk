@@ -102,7 +102,8 @@ enum cfg_hid_cmd {
     CMD_MAP_RESET   = 0x0D, // back to the built-in map
     CMD_CAL_TEST    = 0x0E, // light the mapped LED of each pressed key (ends with CMD_CAL_END)
     CMD_NAV         = 0x12, // arg 1: page focused, the right knob drives it (events returned + cleared); 0: release it
-    CMD_LAYERS      = 0x14, // whole-keyboard effect, key-press effect (VialRGB ids, 0 = none), key-press hue, sat, save
+    CMD_LAYERS      = 0x14, // whole-keyboard effect, key-press effect (VialRGB ids, 0 = none, 0xFF = keep), key-press hue, sat, save
+    CMD_LEDFX       = 0x1C, // v20 lighting (led_layers.c): 0 get, 1 set (preview), 2 save, 3 revert, 4 test ripple at row, col
     CMD_LOOK        = 0x15, // speed, hue, sat, val (preview; saved by VIA lighting save)
     CMD_WIGGLE      = 0x16, // mouse wiggler: on, interval index (not saved)
     CMD_DIAG        = 0x17, // crash record, stack use, why network mode ended (diag.c); arg 1 = clear
@@ -337,6 +338,9 @@ static uint8_t led_effect_of(uint8_t mode) {
     if (mode == led_layers_mode()) {
         return LED_LAYERS_VIALRGB_ID;
     }
+    if (mode >= FX_OWN_BG && mode < LED_LAYERS_VIALRGB_ID) {
+        return mode; // our own effects keep their ids (led_fx_table.h)
+    }
     for (uint8_t i = 0; i < sizeof(supported_modes) / sizeof(supported_modes[0]); i++) {
         if (pgm_read_word(&supported_modes[i].qmk_id) == mode) {
             return pgm_read_word(&supported_modes[i].vialrgb_id);
@@ -346,7 +350,14 @@ static uint8_t led_effect_of(uint8_t mode) {
 }
 
 // VialRGB id -> rgb_matrix mode (0 = none / unknown).
+static bool led_is_own(uint8_t id) { // our backgrounds / standalone effects (led_fx_table.h)
+    return (id >= FX_OWN_BG && id < FX_OWN_BG + FX_OWN_BG_COUNT) || (id >= FX_OWN_SOLO && id < FX_OWN_SOLO + FX_OWN_SOLO_COUNT);
+}
+
 static uint8_t led_mode_of(uint8_t id) {
+    if (id >= FX_OWN_BG && id < LED_LAYERS_VIALRGB_ID) {
+        return led_is_own(id) ? id : 0;
+    }
     for (uint8_t i = 0; id && i < sizeof(supported_modes) / sizeof(supported_modes[0]); i++) {
         if (pgm_read_word(&supported_modes[i].vialrgb_id) == id) {
             return pgm_read_word(&supported_modes[i].qmk_id);
@@ -383,6 +394,10 @@ static void zones_color(uint8_t *hue, uint8_t *sat) {
 }
 
 static bool map_commit_ok;
+
+bool config_mode_led_cal_busy(void) {
+    return (is_keyboard_master() ? led_cal_code() : oled_state.cal) != 0;
+}
 
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     if (led_cal_indicators(led_min, led_max, is_keyboard_master() ? led_cal_code() : oled_state.cal)) {
@@ -758,10 +773,35 @@ static void cfg_raw_hid(uint8_t *data) {
             if (hid_writes_allowed()) {
                 led_layers_revert();
                 rgb_matrix_reload_from_eeprom();
+                fx_settings_t s;
+                led_fx_get(&s);
+                led_fx_set(&s); // the mode that goes with them
                 zones_load();
                 zones_apply_flags(zones.zone);
             }
             break;
+        case CMD_LEDFX: {
+            fx_settings_t s;
+            led_fx_get(&s);
+            bool ok = hid_writes_allowed();
+            if (arg == 1 && ok) {
+                fx_settings_t n = {.base = led_mode_of(data[3]), .effect = data[4], .blend = data[5], .colour = data[6], .hue = data[7], .sat = data[8],
+                                   .speed = data[9], .width = data[10], .radius = data[11], .fade = data[12], .echoes = data[13], .dim = data[14]};
+                ok = (n.base || !data[3]) && led_fx_set(&n); // refused: led_fx_table.h doesn't allow it
+            } else if (arg == 2 && ok) {
+                led_fx_save();
+            } else if (arg == 3 && ok) {
+                led_layers_revert();
+                led_fx_get(&s);
+                led_fx_set(&s);
+            } else if (arg == 4 && ok) {
+                led_fx_fire(data[3], data[4]);
+            }
+            led_fx_get(&s);
+            uint8_t reply[13] = {led_effect_of(s.base), s.effect, s.blend, s.colour, s.hue, s.sat, s.speed, s.width, s.radius, s.fade, s.echoes, s.dim, (uint8_t)(arg == 0 || ok)};
+            memcpy(&data[3], reply, sizeof(reply)); // [15] = done (0 = refused)
+            return;
+        }
         case CMD_SET_ZONE: // preview: zone, underglow hue, underglow sat
             if (hid_writes_allowed()) {
                 zones.zone = data[2] < ZONE_COUNT ? data[2] : ZONE_ALL;
@@ -771,7 +811,7 @@ static void cfg_raw_hid(uint8_t *data) {
             }
             break;
         case CMD_LAYERS: {
-            uint8_t base = led_mode_of(data[2]), react = led_mode_of(data[3]);
+            uint8_t base = led_mode_of(data[2]), react = data[3] == LED_LAYERS_KEEP ? LED_LAYERS_KEEP : led_mode_of(data[3]);
             bool    ok   = hid_writes_allowed() && (base || !data[2]) && (react || !data[3]) && led_layers_apply(base, react, data[4], data[5]);
             if (ok && data[6]) {
                 led_layers_save();
@@ -889,7 +929,9 @@ static void cfg_raw_hid(uint8_t *data) {
         uint8_t base, react, hue, sat;
         led_layers_get(&base, &react, &hue, &sat);
         data[26] = led_effect_of(base);
-        data[27] = led_effect_of(react);
+        fx_settings_t s;
+        led_fx_get(&s);
+        data[27] = s.effect ? LED_LAYERS_KEEP : 0; // v20 overlays aren't rgb_matrix modes: 0xF6 0x1C has them
         data[28] = hue;
         data[29] = sat;
     }

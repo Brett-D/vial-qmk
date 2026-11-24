@@ -106,6 +106,8 @@ function cmd(bytes) {
 async function ok(bytes) { const d = await cmd(bytes); if (d[0] === 0xff) throw new Error("refused - confirm on the keyboard again"); return d; }
 
 async function connect() {
+  if (S.connecting) return; // a double click: one connection at a time (one reply slot)
+  S.connecting = true;
   try {
     let dev = (await navigator.hid.getDevices()).find((d) => d.productId === DATA.usb.pid);
     if (!dev) dev = (await navigator.hid.requestDevice({ filters: [{ vendorId: DATA.usb.vid, productId: DATA.usb.pid, usagePage: 0xff60, usage: 0x61 }] }))[0];
@@ -127,11 +129,13 @@ async function connect() {
   } catch (e) {
     say(e.name === "NotAllowedError" || e.name === "SecurityError" ? "The browser blocked USB access." :
         /open|busy/i.test(e.message) ? "Couldn't open the keyboard: close Vial / other config tabs and try again." : "Couldn't connect: " + esc(e.message), true);
-  }
+  } finally { S.connecting = false; }
 }
 addEventListener("pagehide", () => { if (S.dev) S.dev.sendReport(0, Uint8Array.of(0xf6, 0x11, ...new Array(30).fill(0))); });
 
-async function load() {
+// One read at a time; callers share it (a restore waits for a read in progress).
+function load() { return S.loadP || (S.loadP = loadNow().finally(() => { S.loadP = null; })); }
+async function loadNow() {
   const L = (await cmd([0x11]))[1], R_ = DATA.rows, C = DATA.cols, total = L * R_ * C * 2, b = [];
   for (let off = 0; off < total; off += 28) { const n = Math.min(28, total - off), d = await cmd([0x12, off >> 8, off & 255, n]); b.push(...d.slice(4, 4 + n)); }
   S.keymap = [...Array(L)].map((_, l) => [...Array(R_)].map((_, r) => [...Array(C)].map((_, c) => { const i = ((l * R_ + r) * C + c) * 2; return b[i] << 8 | b[i + 1]; })));
@@ -143,7 +147,7 @@ async function load() {
     more = false;
     for (let i = 2; i + 1 < 32; i += 2) { const id = d[i] | d[i + 1] << 8; if (id === 0xffff) break; if (id > gt) { sup.add(id); gt = id; more = true; } }
   }
-  $("lFx").innerHTML = `<option value="0">None (key presses only)</option>` + DATA.ledBase.filter(([id]) => sup.has(id)).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
+  $("lFx").innerHTML = `<option value="0">None (key presses only)</option>` + DATA.ledBase.filter(([id]) => sup.has(id) || id >= 0xc0).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
   const st = await cmd([0xf6, 0x00, 1]), m = await cmd([0x08, 0x41]);
   S.max = st[6];
   // st[11] is the running effect; when it is the layered one, st[26] / st[27] are its whole-keyboard / key-press parts.
@@ -358,6 +362,7 @@ $("bFile").onchange = async () => {
   let b;
   try { b = JSON.parse(await $("bFile").files[0].text()); } catch (x) { return say("Can't read that file.", true); }
   if (b.format !== "sofle-config-backup" || b.rows !== DATA.rows || b.cols !== DATA.cols) return say("This isn't a backup of this keyboard.", true);
+  if (S.loadP) await S.loadP;
   const keys = [], L = Math.min(b.keymap.length, S.keymap.length);
   for (let l = 0; l < L; l++) for (let r = 0; r < DATA.rows; r++) for (let c = 0; c < DATA.cols; c++) if (b.keymap[l][r][c] !== S.keymap[l][r][c]) keys.push([l, r, c, b.keymap[l][r][c]]);
   const enc = [];

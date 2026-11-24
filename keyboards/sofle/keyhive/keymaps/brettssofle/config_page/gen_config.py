@@ -128,6 +128,37 @@ def parse_vialrgb_effects():
     names[LAYERED_ID] = "Whole keyboard + key presses"
     return names
 
+def parse_fx():
+    """The lighting effects (led_fx_table.h), the sine table (led_fx_core.h)
+    and the LED layout (rgb_layout.c): the page's preview uses the same
+    tables as the firmware (FX core in fx_core.js)."""
+    table = (KEYMAP_DIR / "led_fx_table.h").read_text(encoding="utf-8")
+    kinds = {k: int(v) for k, v in re.findall(r"#define FXK_(\w+) (\d+)", table)}
+
+    def rows(macro):
+        body = table[table.index(f"#define {macro}(X)"):]
+        body = body[:body.index("\n\n") if "\n\n" in body else len(body)]
+        out = []
+        for i, name_c, label, kind, hue in re.findall(r'X\((\d+), (\w+), "([^"]+)", ([A-Z_ |]+), (\d+)\)', body):
+            out.append([int(i), name_c, label, sum(kinds[k.strip()[4:]] for k in kind.split("|")), int(hue)])
+        return out
+
+    core = (KEYMAP_DIR / "led_fx_core.h").read_text(encoding="utf-8")
+    sin = [int(v) for v in re.search(r"fx_sin_q\[65\] = \{([^}]*)\}", core).group(1).replace("\n", " ").split(",")]
+    lay = (KEYMAP_DIR / "rgb_layout.c").read_text(encoding="utf-8")
+    blocks = lay[lay.index("#define LED_CONFIG_DEFAULT"):].split("}, { \\")
+    matrix = [[int(v) if v.strip() != "NO_LED" else None for v in row.split(",") if v.strip()] for row in re.findall(r"\{([^{}]*NO_LED[^{}]*)\}", blocks[0])]
+    points = [[int(a), int(b)] for a, b in re.findall(r"\{\s*(\d+),\s*(\d+)\}", blocks[1])]
+    flags = [1 if f == "KEYLIGHT" else 2 for f in re.findall(r"LED_FLAG_(\w+)", blocks[2])]
+    key = {led: [r, cc] for r, row in enumerate(matrix) for cc, led in enumerate(row) if led is not None}
+    leds = [[x, y, flags[i]] + key.get(i, []) for i, (x, y) in enumerate(points)]
+    assert len(sin) == 65 and len(leds) == 74, (len(sin), len(leds))
+    fx = {"kinds": kinds, "ownBg": int(re.search(r"#define FX_OWN_BG (0x\w+)", table).group(1), 16),
+          "ownSolo": int(re.search(r"#define FX_OWN_SOLO (0x\w+)", table).group(1), 16),
+          "backgrounds": rows("FX_OWN_BACKGROUNDS"), "solos": rows("FX_OWN_SOLOS"), "overlays": rows("FX_OVERLAYS"), "qmk": rows("FX_QMK_FLAGS")}
+    return fx, sin, leds
+
+
 LED_IDLE_LABELS = ["Never", "1 min", "2 min", "5 min", "10 min", "30 min"]
 
 
@@ -233,6 +264,11 @@ def main():
     layout = [{"r": k["matrix"][0], "c": k["matrix"][1], "x": k["x"], "y": k["y"], "h": k.get("h", 1)}
               for k in kb["layouts"]["LAYOUT"]["layout"]]
 
+    fx_table, fx_sin, fx_leds = parse_fx()
+    led_effects = parse_vialrgb_effects()
+    for rows_ in (fx_table["backgrounds"], fx_table["solos"]):
+        for idx, _, label, _, _ in rows_:
+            led_effects[(fx_table["ownBg"] if rows_ is fx_table["backgrounds"] else fx_table["ownSolo"]) + idx] = label
     data = {
         "pickerHash": phash,
         "rows": vial["matrix"]["rows"],
@@ -244,7 +280,8 @@ def main():
         "names": {str(k): v for k, v in sorted(names.items())},
         "layout": layout,
         "layerNames": LAYER_NAMES,
-        "ledEffects": parse_vialrgb_effects(),
+        "ledEffects": led_effects,
+        "fxTable": fx_table, "fxSin": fx_sin, "fxLeds": fx_leds,
         "ledReact": [vialrgb_effect_enum().index(n) for n in REACT_EFFECTS],
         "ledSolo": [vialrgb_effect_enum().index(n) for n in SOLO_EFFECTS],
         "ledLayeredId": LAYERED_ID,
@@ -259,6 +296,7 @@ def main():
     }
     template = (HERE / "page.html").read_text(encoding="utf-8")
     page = template.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+    page = page.replace("/*__FX_CORE__*/", (HERE / "fx_core.js").read_text(encoding="utf-8"))
     (HERE / "sofle-config.html").write_text(page, encoding="utf-8", newline="\n")
     print(f"picker: {len(picker)} keycodes, {len(cats)} categories, hash 0x{phash:04X}; page {len(page.encode())} bytes")
 
@@ -272,7 +310,7 @@ def main():
         "ledZones": data["ledZones"], "ledIdle": data["ledIdle"],
         # Names of the other effects, for keyboard-only mode (its Effect field can be any of them).
         "ledOther": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) in skip and int(i)],
-        "ledBase": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) not in skip],
+        "ledBase": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) not in skip and int(i) < data["fxTable"]["ownSolo"]],
         "ranges": {k: data["ranges"][k] for k in ["QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO", "QK_MOMENTARY",
                                                   "QK_TOGGLE_LAYER", "QK_ONE_SHOT_LAYER", "QK_LAYER_TAP_TOGGLE"]},
     }

@@ -128,6 +128,67 @@ The built-in map in `rgb_layout.c` is derived from keyhive's rgblight
 `config.h` sets the 74-LED count and 37/37 split (`sofle/info.json`'s 72-LED
 Sofle RGB values would otherwise win).
 
+### Lighting: background + key-press effect (v20)
+
+The LEDs are drawn in layers, every frame, on each half:
+
+1. **Background** — a whole-keyboard effect: QMK's (solid, gradient,
+   rainbow, breathing, raindrops, digital rain, …) or one of ours:
+   aurora, fire (rising embers), starfield, ocean waves, comet sweep, lava
+   lamp, candle, sunrise, breathing gradient, code rain.
+2. **On key press** — each press starts its own event (the last 8 are kept)
+   that runs over the background: ring ripple, echo rings, splash (filled),
+   key glow, cross (row + column), nexus, shockwave with trail, sparks,
+   lightning (to a random key), rain splash, key trail (afterglow), heat
+   (spreads and cools down).
+   - *Colour*: fixed (picker), opposite of the background, rainbow by
+     distance, random per press.
+   - *Over the background*: **Replace** (default: always clearly visible),
+     **Add** (lightens), **Tint** (keeps the background's brightness).
+   - *Speed*, *band width*, *reach*, *fade*, *echo rings* (echo rings only) and
+     *dim background while active* (the background dims a little while a
+     ripple runs, so it stands out).
+3. **Underglow** zone as before (follow / solid / off).
+
+The background keeps animating underneath; the key-press layer is
+composited once per frame when the LEDs are sent (`rgb_driver.c` →
+`led_fx_pixel`), so effects that repaint everything (digital rain) can't
+wipe it. Positions are the LEDs' real x/y (`rgb_layout.c`), so rings are
+round and cross between the halves: both halves see every press (the
+split mirrors the key events) and run the same maths (`led_fx_core.h`);
+the left half sends the settings to the right (`RPC_ID_USER_LEDFX`).
+
+**Combinations** (`led_fx_table.h`, one table for the firmware and the
+pages): *standalone* effects react to keys themselves (typing heatmap,
+QMK's solid reactive, our typing-speed meter and typing VU meter) and are
+used on their own — the page greys out "On key press" and says why, and the
+keyboard refuses a key-press effect with them, also over raw HID. *Dark*
+backgrounds (digital rain, code rain, starfield, comet, …) get a soft
+warning when the key-press colour is close to the background's or Tint is
+chosen; nothing is blocked.
+
+**Page**: LEDs tab → *Background* and *On key press* sections, and a
+preview of the keyboard with the same maths (`config_page/fx_core.js`, a
+line-for-line port, checked value for value against the C by
+`harness/fx/fx_match.py`); QMK's own backgrounds are approximated there.
+Click a key in the preview for a test ripple — it also runs on the
+keyboard. Settings are kept in EEPROM (8 bytes, `led_layers.c`; v6–v19
+settings are converted) and are in backups.
+
+Raw HID: `0xF6 0x1C` op 0 get, 1 set (preview), 2 save, 3 revert, 4 fire
+(row, col); set/reply bytes 3–14 = background (VialRGB id, or 0xC0+ ours /
+0xD0+ standalone), effect, blend, colour mode, hue, sat, speed, width,
+reach, fade, echoes, dim; reply byte 15 = accepted. The v6–v19 command
+`0xF6 0x14` still works (light page).
+
+Cost (v20): about +5.5 KB of flash for the engine and +8.6 KB for the
+bigger full page stored on the keyboard (46.4 → 55.0 KB gzipped): 205.4 →
+219.5 KB in all, of 16 MB; about 0.6 KB of RAM. Per frame and half, on the RP2040
+(counted in an emulator, `harness/fxbench`): our backgrounds 0.09–0.2 ms;
+key-press effects ~0.08 ms per live press, up to 0.56–0.8 ms with 8
+presses running at once (fast typing), ~0.95 ms on the first frame of a new
+press (distances are then cached per press).
+
 ## Config mode
 
 Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad press-to-click from
@@ -192,9 +253,9 @@ from the HTML at every build) and can type either into any browser:
 
 | | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
 |---|---|---|
-| has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, layered effects, pet, wiggler, knob control, keyboard-only mode, help, …) |
-| gzipped | 12.1 KB | 46.4 KB |
-| typing (one clean pass) | ~22 s address + loader, then ~92 s | ~22 s, then ~353 s |
+| has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, background + key-press effects with the preview, pet, wiggler, knob control, keyboard-only mode, help, …) |
+| gzipped | 12.3 KB | 55.0 KB |
+| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~22 s, then ~419 s |
 | when done | opens in the same tab in keyboard-only mode; **Save for mouse mode next time** | Save as / Use it here |
 
 The full page is also served by network mode (quicker, and the mouse works
