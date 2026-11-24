@@ -4,7 +4,7 @@
 // The lighting engine's maths (led_layers.c), as pure integer functions so
 // the host tests can run them and the config page's preview ("FX core" in
 // page.html) can match them value for value. Change both together;
-// harness/fx checks that they agree. No division in the per-LED path: the
+// The development test harness (outside this repo) checks that they agree. No division in the per-LED path: the
 // reciprocals are worked out once per frame (fx_prepare / fx_event_prepare).
 //
 // Geometry is RGB Matrix LED space (x 0-224, y 0-64), with y scaled by 5/4

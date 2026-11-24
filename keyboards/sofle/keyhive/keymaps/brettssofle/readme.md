@@ -177,7 +177,8 @@ chosen; nothing is blocked.
 **Page**: LEDs tab → *Background* and *On key press* sections, and a
 preview of the keyboard with the same maths (`config_page/fx_core.js`, a
 line-for-line port, checked value for value against the C by
-`harness/fx/fx_match.py`); QMK's own backgrounds are approximated there.
+checked value for value against the C by the development test harness,
+which is kept outside this repository); QMK's own backgrounds are approximated there.
 Click a key in the preview for a test ripple — it also runs on the
 keyboard. Settings are kept in EEPROM (8 bytes, `led_layers.c`; v6–v19
 settings are converted) and are in backups.
@@ -195,7 +196,7 @@ to the right half as an 11th RPC byte (a v20 right half reads the first 10). The
 Cost (v20): about +5.5 KB of flash for the engine and +8.6 KB for the
 bigger full page stored on the keyboard (46.4 → 55.0 KB gzipped): 205.4 →
 219.5 KB in all, of 16 MB; about 0.6 KB of RAM. Per frame and half, on the RP2040
-(counted in an emulator, `harness/fxbench`): our backgrounds 0.09–0.2 ms;
+(instructions counted in an emulator): our backgrounds 0.09–0.2 ms;
 key-press effects ~0.08 ms per live press, up to 0.56–0.8 ms with 8
 presses running at once (fast typing), ~0.95 ms on the first frame of a new
 press (distances are then cached per press).
@@ -415,6 +416,28 @@ with the `rp2040_ce` converter (`promicro_rp2040` is deprecated):
 ```sh
 make sofle/keyhive:brettssofle CONVERT_TO=rp2040_ce
 ```
+
+Before the first build:
+
+1. **Extract lwIP** (USB network mode uses it; ChibiOS ships it as an
+   archive). From the repository root:
+
+   ```sh
+   7z x lib/chibios/ext/lwip-2.1.2.7z -olib/chibios/ext
+   ```
+
+   No 7-Zip? `python -m pip install py7zr` and then
+   `python -c "import py7zr; py7zr.SevenZipFile('lib/chibios/ext/lwip-2.1.2.7z').extractall('lib/chibios/ext')"`.
+   Or build without network mode: add `NETWORK_ENABLE=no`.
+2. **Python 3** must be on the PATH (it is in the QMK environment and the
+   Docker image): every build regenerates `config_page_blob.h` (the pages
+   the keyboard types and serves, gzipped) from `config_page/sofle-config.html`
+   and `sofle-light.html`. That file is not in git.
+
+After editing `config_page/page.html`, `light.html` or `gen_config.py`,
+rerun `python keyboards/sofle/keyhive/keymaps/brettssofle/config_page/gen_config.py`
+(it writes `sofle-config.html` / `sofle-light.html`, which are committed:
+they are also the files you open from disk). Pet art: `gen_pet_art.py`.
 
 Without a local QMK environment, use Docker from the repository root (PowerShell):
 

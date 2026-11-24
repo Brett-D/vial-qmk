@@ -51,6 +51,9 @@ OPT_DEFS += -DPET_ENABLE
 # regenerated from sofle-config.html / sofle-light.html at every build so they never drift.
 CONFIG_PAGE_BLOB_GEN := $(shell python3 $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1 || python $(BRETTS_DIR)/config_page/gen_page_blob.py 2>&1)
 $(info $(CONFIG_PAGE_BLOB_GEN))
+ifeq ($(wildcard $(BRETTS_DIR)/config_page_blob.h),)
+    $(error config_page_blob.h was not generated (needs Python 3): $(CONFIG_PAGE_BLOB_GEN))
+endif
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
     SRC += rgb_driver.c rgb_layout.c led_map.c led_cal.c led_layers.c
 endif

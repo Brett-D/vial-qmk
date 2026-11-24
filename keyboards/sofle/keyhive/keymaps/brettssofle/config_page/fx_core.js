@@ -2,7 +2,7 @@
 // The lighting engine's maths, line for line as led_fx_core.h (the firmware):
 // integer arithmetic only (Math.imul / >>> for 32-bit unsigned, Math.trunc
 // for C's division), the sine table from the same header (DATA.fxSin), so
-// the preview shows what the LEDs do. harness/fx/fx_match.py checks that the
+// the preview shows what the LEDs do. The development test harness (outside this repo) checks that the
 // two agree value for value.
 const FX = (() => {
   const T = DATA.fxTable, SIN = DATA.fxSin;
