@@ -224,6 +224,7 @@ void housekeeping_task_user(void) {
         rgb_idle_task();
     }
     rgb_driver_dither_task(); // smooth dim levels between frames (rgb_driver.c)
+    rgb_driver_suspend_task(); // the right half: dark once the computer sleeps
 #endif
     pet_task();
     oled_pages_task();
@@ -233,3 +234,10 @@ void housekeeping_task_user(void) {
     led_fx_task(); // lighting settings / test ripples to the right half
 #endif
 }
+
+#ifdef RGB_MATRIX_ENABLE
+// The master's USB suspend loop (no housekeeping there).
+void suspend_power_down_user(void) {
+    rgb_driver_suspend_task();
+}
+#endif

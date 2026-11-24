@@ -51,7 +51,7 @@ static __attribute__((noreturn)) void reboot_now(void) {
 __attribute__((used, noreturn)) void diag_fault(uint32_t *frame, uint32_t exc_return) {
     uintptr_t f  = (uintptr_t)frame;
     uint32_t  pc = 0, lr = 0, psr = 0;
-    if (!(f & 3) && f >= 0x20000000u && f + 32 <= 0x20042000u) {
+    if (!(f & 3) && f >= 0x20000000u && f <= 0x20042000u - 32) { // whole frame in SRAM (no wrap-around)
         lr  = frame[5];
         pc  = frame[6];
         psr = frame[7];
@@ -63,7 +63,9 @@ __attribute__((used, noreturn)) void diag_fault(uint32_t *frame, uint32_t exc_re
     reboot_now();
 }
 
-// Overrides ChibiOS's weak handler (which just spins).
+// Overrides ChibiOS's weak handler (which just spins). diag_fault runs on a
+// fresh stack (the top of the interrupt stack): the fault may have come from
+// a bad stack pointer, and the faulting context is not resumed anyway.
 __attribute__((naked)) void HardFault_Handler(void) {
     __asm volatile(
         "movs r0, #4      \n"
@@ -75,6 +77,8 @@ __attribute__((naked)) void HardFault_Handler(void) {
         "1:               \n"
         "mrs  r0, msp     \n" // in an interrupt
         "2:               \n"
+        "ldr  r2, =__main_stack_end__ \n"
+        "mov  sp, r2      \n"
         "ldr  r2, =diag_fault \n"
         "bx   r2          \n"
         ".ltorg           \n");

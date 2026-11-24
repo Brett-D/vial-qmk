@@ -40,6 +40,7 @@ static uint16_t target[WS2812_LED_COUNT][3]; // what goes out, 8.8 (after the ov
 static uint8_t  err[WS2812_LED_COUNT][3];    // dither: rounding error carried to the next send
 static bool     dithering;                   // some target has a fraction: keep re-sending
 static uint16_t last_emit;
+static bool     blanked; // rgb_driver_suspend_task: the suspended output is dark
 
 int rgb_matrix_led_index(int index) {
     if (is_keyboard_left()) {
@@ -120,6 +121,7 @@ static void half_flush(void) {
             target[i][ch] = cal ? o[ch] & 0xFF00 : fx_gamma16(o[ch], RGB_MATRIX_MAXIMUM_BRIGHTNESS, gk);
         }
     }
+    blanked = false;
     emit();
 }
 
@@ -128,6 +130,20 @@ void rgb_driver_dither_task(void) {
     if (dithering && timer_elapsed(last_emit) >= FX_DITHER_MS) {
         emit();
     }
+}
+
+// USB suspend: QMK sends one black frame, then stops flushing. That frame can
+// come between a LAYERED render pass and its flush and so still get the
+// key-press overlay. Once suspended, blank whatever went out (once).
+// keymap.c: housekeeping (the right half keeps running) and
+// suspend_power_down_user (the master's suspend loop, no housekeeping there).
+void rgb_driver_suspend_task(void) {
+    if (!rgb_matrix_get_suspend_state() || blanked) {
+        return;
+    }
+    memset(target, 0, sizeof target);
+    emit();
+    blanked = true;
 }
 
 const rgb_matrix_driver_t rgb_matrix_driver = {

@@ -39,6 +39,7 @@ _Static_assert(1 + LED_MAP_COUNT + 1 <= BRIGHT_EE_OFFSET && BRIGHT_EE_OFFSET + 2
 
 static fx_settings_t fx;
 static bool          gamma_done; // v23 conversion of the brightness settings done (EEPROM)
+static bool          pre_gamma;  // lighting saved by v6-v22 firmware: the brightness needs converting
 static uint32_t      remote_at; // right half: last RPC_ID_USER_LEDFX (newer than the old sync)
 
 static const fx_settings_t fx_default = {.base = 0, .effect = FX_RING, .blend = FX_REPLACE, .colour = FX_OPPOSITE, .hue = 0, .sat = 0,
@@ -240,6 +241,7 @@ static void load(void) {
     uint8_t p[8];
     eeconfig_read_kb_datablock(p, LAYERS_EE_OFFSET, sizeof(p));
     fx_settings_t s;
+    bool          record = true;
     if (unpack(p, &s) && valid(&s)) {
         fx = s;
     } else if (p[0] == LAYERS_EE_OLD && p[5] == (uint8_t)(LAYERS_EE_OLD + p[1] + p[2] + p[3] + p[4])) {
@@ -251,13 +253,18 @@ static void load(void) {
         fx.hue    = p[3];
         fx.sat    = p[4];
     } else {
-        fx = fx_default;
+        fx     = fx_default;
+        record = false;
     }
     uint8_t b[2]; // v21; before: the background's brightness
     eeconfig_read_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
     bool ok    = (b[0] ^ BRIGHT_EE_CHECK) == b[1];
     fx.bright  = ok && (b[0] & 0x7F) <= 100 ? b[0] & 0x7F : 0;
     gamma_done = ok && (b[0] & BRIGHT_EE_GAMMA);
+    // v21/v22 (brightness record without the gamma bit) or v6-v20 (lighting
+    // record only). Nothing saved at all is a new or reset block: its settings
+    // are new already (converting them could raise a converted brightness twice).
+    pre_gamma = ok ? !gamma_done : record;
 }
 
 void led_fx_save(void) {
@@ -397,8 +404,11 @@ static void gamma_convert(void) {
 void led_layers_init(void) {
     if (is_keyboard_master()) {
         load();
-        if (!gamma_done) {
+        if (!gamma_done && pre_gamma) {
             gamma_convert();
+        } else if (!gamma_done) {
+            gamma_done = true; // nothing to convert: just mark it
+            led_fx_save();
         }
     } else {
         fx = fx_default;
