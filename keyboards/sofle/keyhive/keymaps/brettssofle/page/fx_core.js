@@ -187,6 +187,25 @@ const FX = (() => {
     const y = G[i] + Math.floor((G[i + 1] - G[i]) * (t & 1023) / 1024);
     return Math.floor(y * top / 65536);
   }
+  // v25b: the output curve (fx_curve16): 0 Balanced (DATA.fxToe), 1 Linear, 2 Smooth (gamma 2.2).
+  const CURVE = { BALANCED: 0, LINEAR: 1, SMOOTH: 2 };
+  function curve16(c, x, capv, k) {
+    const top = capv * 256;
+    if (x > top) x = top;
+    if (c === CURVE.LINEAR) return x;
+    const G = c === CURVE.SMOOTH ? DATA.fxGamma : DATA.fxToe;
+    const t = Math.min(65535, Math.floor(x * k / 65536)), i = t >> 10;
+    const y = G[i] + Math.floor((G[i + 1] - G[i]) * (t & 1023) / 1024);
+    return Math.floor(y * top / 65536);
+  }
+  // A brightness set for curve `from`, as the level giving the same full-level light with curve `to` (led_fx.c gamma_convert).
+  function curveConvert(from, to, v, capv) {
+    if (!v || !capv) return v;
+    const k = gammaK(capv), light = curve16(from, Math.min(v, capv) * 256, capv, k) >> 8;
+    let x = 0;
+    while (x < capv && curve16(to, x * 256, capv, k) + 128 < light * 256) x++; // within half a level
+    return x;
+  }
   // QMK's hsv_to_rgb (quantum/color.c, without the CIE curve).
   function hsv2rgb(h, s, v) {
     if (!s) return [v, v, v];
@@ -274,5 +293,5 @@ const FX = (() => {
     }
     return o;
   }
-  return { E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
+  return { CURVE, curve16, curveConvert, E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
 })();

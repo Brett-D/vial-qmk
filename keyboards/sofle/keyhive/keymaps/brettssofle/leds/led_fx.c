@@ -31,7 +31,10 @@
 #    define LAYERS_EE_MAGIC 0x4D
 #    define BRIGHT_EE_OFFSET 76 // v21 key-press brightness + check, between the LED map (0-75) and the OLED page
 #    define BRIGHT_EE_CHECK 0x5B
-#    define BRIGHT_EE_GAMMA 0x80 // v23: brightness settings converted for the gamma output (bit 7 of the value byte)
+#    define BRIGHT_EE_GAMMA 0x80 // v23: brightness settings converted for the output curve (bit 7 of the value byte)
+// v25b: the output curve, in the check byte: b[1] = b[0] ^ CHECK ^ code. Code 0
+// = v23-v25's gamma 2.2 (no choice then): moved to Balanced once.
+#    define CURVE_CODE_LEGACY 0
 #    define FX_SYNC_MS 2000
 
 _Static_assert(LAYERS_EE_OFFSET + 8 <= EECONFIG_KB_DATA_SIZE, "raise EECONFIG_KB_DATA_SIZE");
@@ -40,10 +43,11 @@ _Static_assert(1 + LED_MAP_COUNT + 1 <= BRIGHT_EE_OFFSET && BRIGHT_EE_OFFSET + 2
 static fx_settings_t fx;
 static bool          gamma_done; // v23 conversion of the brightness settings done (EEPROM)
 static bool          pre_gamma;  // lighting saved by v6-v22 firmware: the brightness needs converting
+static uint8_t       from_curve; // the curve the saved brightness was set for (converted to fx.curve once)
 static uint32_t      remote_at; // right half: last RPC_ID_USER_LEDFX (newer than the old sync)
 
 static const fx_settings_t fx_default = {.base = 0, .effect = FX_RING, .blend = FX_REPLACE, .colour = FX_OPPOSITE, .hue = 0, .sat = 0,
-                                         .speed = 8, .width = 4, .radius = 8, .fade = 6, .echoes = 0, .dim = 2};
+                                         .speed = 8, .width = 4, .radius = 8, .fade = 6, .echoes = 0, .dim = 2, .bright = 0, .curve = FX_CURVE_BALANCED};
 
 /* ---- packing (EEPROM and RPC) ---- */
 
@@ -216,7 +220,7 @@ void led_fx_get(fx_settings_t *s) {
 static bool valid(const fx_settings_t *s) {
     bool solo = led_layers_is_solo(s->base);
     return (!s->base || led_layers_is_base(s->base) || solo) && !(solo && s->effect) && s->effect < FX_EFFECT_COUNT && s->blend < FX_BLEND_COUNT && s->colour < FX_COLOUR_COUNT &&
-           s->speed < 16 && s->width < 16 && s->radius < 16 && s->fade < 16 && s->echoes < 4 && s->dim < 8 && s->bright <= 100 && (s->base || s->effect);
+           s->speed < 16 && s->width < 16 && s->radius < 16 && s->fade < 16 && s->echoes < 4 && s->dim < 8 && s->bright <= 100 && s->curve < FX_CURVE_COUNT && (s->base || s->effect);
 }
 
 // Ours are drawn by LAYERED; QMK's run as themselves when there's no key-press effect.
@@ -258,13 +262,18 @@ static void load(void) {
     }
     uint8_t b[2]; // v21; before: the background's brightness
     eeconfig_read_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
-    bool ok    = (b[0] ^ BRIGHT_EE_CHECK) == b[1];
-    fx.bright  = ok && (b[0] & 0x7F) <= 100 ? b[0] & 0x7F : 0;
-    gamma_done = ok && (b[0] & BRIGHT_EE_GAMMA);
-    // v21/v22 (brightness record without the gamma bit) or v6-v20 (lighting
-    // record only). Nothing saved at all is a new or reset block: its settings
-    // are new already (converting them could raise a converted brightness twice).
-    pre_gamma = ok ? !gamma_done : record;
+    uint8_t code = b[0] ^ b[1] ^ BRIGHT_EE_CHECK; // v25b: the curve
+    bool    ok   = code <= FX_CURVE_COUNT;
+    fx.bright    = ok && (b[0] & 0x7F) <= 100 ? b[0] & 0x7F : 0;
+    gamma_done   = ok && (b[0] & BRIGHT_EE_GAMMA) && code != CURVE_CODE_LEGACY;
+    // What the saved brightness was set for: v23-v25 gamma 2.2 (code 0), the
+    // chosen curve (v25b), or linear (v6-v22: a brightness record without the
+    // gamma bit, or only the lighting record). Nothing saved at all is a new or
+    // reset block: its settings are new already (converting them could raise a
+    // converted brightness twice).
+    fx.curve   = ok && code != CURVE_CODE_LEGACY ? code - 1 : FX_CURVE_BALANCED;
+    from_curve = ok && (b[0] & BRIGHT_EE_GAMMA) ? (code == CURVE_CODE_LEGACY ? FX_CURVE_SMOOTH : fx.curve) : FX_CURVE_LINEAR;
+    pre_gamma  = ok ? !gamma_done : record;
 }
 
 void led_fx_save(void) {
@@ -272,7 +281,7 @@ void led_fx_save(void) {
     pack(&fx, p);
     eeconfig_update_kb_datablock(p, LAYERS_EE_OFFSET, sizeof(p));
     uint8_t v    = fx.bright | (gamma_done ? BRIGHT_EE_GAMMA : 0);
-    uint8_t b[2] = {v, v ^ BRIGHT_EE_CHECK};
+    uint8_t b[2] = {v, (uint8_t)(v ^ BRIGHT_EE_CHECK ^ (fx.curve + 1))};
     eeconfig_update_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
 }
 
@@ -336,6 +345,7 @@ static void remote_handler(uint8_t in_len, const void *in_data, uint8_t out_len,
     fx_settings_t  s;
     if (in_len >= 10 && unpack(p, &s)) {
         s.bright  = in_len >= 11 && p[10] <= 100 ? p[10] : 0; // v21; a v20 left half: the background's
+        s.curve   = in_len >= 12 && p[11] < FX_CURVE_COUNT ? p[11] : FX_CURVE_SMOOTH; // v25b; v23-v25 left halves: gamma 2.2
         fx        = s;
         remote_at = timer_stamp32();
         if (p[8] < MATRIX_ROWS && p[9] < MATRIX_COLS) {
@@ -358,42 +368,54 @@ void led_fx_task(void) {
     if (!is_keyboard_master() || !is_transport_connected()) {
         return;
     }
-    static uint8_t  sent[9];
+    static uint8_t  sent[10];
     static uint32_t sent_at;
-    uint8_t         p[11];
+    uint8_t         p[12];
     pack(&fx, p);
     p[8]  = fire_row < 0 ? 0xFF : fire_row;
     p[9]  = fire_col < 0 ? 0xFF : fire_col;
     p[10] = fx.bright; // v21 (a v20 right half reads the first 10)
-    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
+    p[11] = fx.curve;  // v25b
+    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent[9] == p[11] && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
         return;
     }
     if (transaction_rpc_send(RPC_ID_USER_LEDFX, sizeof(p), p)) {
         memcpy(sent, p, 8);
         sent[8]  = p[10];
+        sent[9]  = p[11];
         sent_at  = timer_stamp32();
         fire_row = fire_col = -1;
     }
 }
 
-// v23 sends the LEDs through gamma 2.2 (rgb_driver.c). Once, the saved
-// brightness settings are raised so a full-level LED gives exactly the light it
-// gave before (same look, same power); from then on the sliders follow what
-// the eye sees.
-static uint8_t gamma_inverse(uint8_t v) {
+// The LEDs go out through an output curve (rgb_driver.c; v23: gamma 2.2,
+// v25b: a choice, Balanced by default). When the saved brightness was set for
+// another curve (v6-v22: linear; v23-v25: gamma 2.2), it is converted once so a
+// full-level LED gives exactly the light it gave before (same peak, same
+// power); from then on the sliders follow the curve.
+static uint8_t curve_level(uint8_t c, uint8_t v) {
+    return fx_curve16(c, (uint16_t)v << 8, RGB_MATRIX_MAXIMUM_BRIGHTNESS, fx_gamma_k(RGB_MATRIX_MAXIMUM_BRIGHTNESS)) >> 8;
+}
+
+static uint8_t curve_inverse(uint8_t c, uint8_t light) {
     uint32_t k = fx_gamma_k(RGB_MATRIX_MAXIMUM_BRIGHTNESS);
     uint8_t  x = 0;
-    while (x < RGB_MATRIX_MAXIMUM_BRIGHTNESS && fx_gamma16((uint16_t)x << 8, RGB_MATRIX_MAXIMUM_BRIGHTNESS, k) < ((uint16_t)v << 8)) x++;
+    while (x < RGB_MATRIX_MAXIMUM_BRIGHTNESS && fx_curve16(c, (uint16_t)x << 8, RGB_MATRIX_MAXIMUM_BRIGHTNESS, k) + 128 < ((uint16_t)light << 8)) x++; // within half a level
     return x;
+}
+
+static uint8_t convert_level(uint8_t v) {
+    return v ? curve_inverse(fx.curve, curve_level(from_curve, v > RGB_MATRIX_MAXIMUM_BRIGHTNESS ? RGB_MATRIX_MAXIMUM_BRIGHTNESS : v)) : 0;
 }
 
 static void gamma_convert(void) {
     uint8_t v = rgb_matrix_get_val();
     if (v) {
-        rgb_matrix_sethsv(rgb_matrix_get_hue(), rgb_matrix_get_sat(), gamma_inverse(v));
+        uint8_t n = convert_level(v);
+        rgb_matrix_sethsv(rgb_matrix_get_hue(), rgb_matrix_get_sat(), n ? n : 1);
     }
     if (fx.bright) {
-        uint8_t x = gamma_inverse(fx_overlay_v(fx.bright, 0, RGB_MATRIX_MAXIMUM_BRIGHTNESS));
+        uint8_t x = convert_level(fx_overlay_v(fx.bright, 0, RGB_MATRIX_MAXIMUM_BRIGHTNESS));
         uint8_t b = (uint8_t)(((uint16_t)x * 100 + RGB_MATRIX_MAXIMUM_BRIGHTNESS / 2) / RGB_MATRIX_MAXIMUM_BRIGHTNESS);
         fx.bright = b ? (b > 100 ? 100 : b) : 1;
     }
@@ -414,6 +436,10 @@ void led_layers_init(void) {
         fx = fx_default;
         transaction_register_rpc(RPC_ID_USER_LEDFX, remote_handler);
     }
+}
+
+uint8_t led_fx_curve(void) {
+    return fx.curve < FX_CURVE_COUNT ? fx.curve : FX_CURVE_BALANCED;
 }
 
 uint8_t led_fx_base(void) {

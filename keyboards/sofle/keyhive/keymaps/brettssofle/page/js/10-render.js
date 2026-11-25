@@ -182,6 +182,7 @@ function renderLeds(ui) {
     $("ledOn").checked = !!l.enable;
     setIfIdle("ledBase", l.base); setIfIdle("fxEffect", l.fxEffect); setIfIdle("rxHue", l.rxHue); setIfIdle("rxSat", l.rxSat);
     for (const k of ["fxBlend", "fxColour", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim"]) setIfIdle(k, l[k]);
+    setIfIdle("ledCurve", l.curve || 0);
     $("fxBrightSame").checked = !l.fxBright;
     if (l.fxBright) setIfIdle("fxBright", l.fxBright);
     const info = fxInfo(l.base), solo = !!(info.kind & FXK.SOLO), on = !!l.fxEffect && !solo;

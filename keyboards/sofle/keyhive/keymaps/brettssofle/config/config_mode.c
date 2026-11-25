@@ -786,7 +786,7 @@ static bool     net_type_key(keyrecord_t *record) {
     }
     held_swallowed[KNOB_R_ROW] &= ~((matrix_row_t)1 << KNOB_R_COL);
     uint32_t typed = deliver_address_typed_at();
-    if (net_type_pending && net_mode_active() && timer_elapsed32(net_type_down) < NET_TYPE_HOLD_MS && !matrix_is_on(KNOB_L_ROW, KNOB_L_COL) &&
+    if (net_type_pending && net_mode_active() && hid.state != HS_ASK && timer_elapsed32(net_type_down) < NET_TYPE_HOLD_MS && !matrix_is_on(KNOB_L_ROW, KNOB_L_COL) &&
         !deliver_address_typing() && (!typed || timer_elapsed32(typed) > NET_TYPE_AGAIN_MS)) {
         deliver_type_address();
     }
@@ -796,6 +796,17 @@ static bool     net_type_key(keyrecord_t *record) {
 #endif
 
 bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // A web page asking for a session (CONF? Web): its answer comes first, so
+    // nothing else can take the key (v24, Brett: in network mode the right
+    // knob did nothing while the address it had typed was still going out).
+    if (hid.state == HS_ASK && record->event.type == KEY_EVENT && record->event.key.row < MATRIX_ROWS && record->event.pressed) {
+        held_swallowed[record->event.key.row] |= (matrix_row_t)1 << record->event.key.col;
+#    ifdef NETWORK_ENABLE
+        net_type_pending = false; // a click that started before: never types now
+#    endif
+        ask_key(record->event.key.row, record->event.key.col);
+        return false;
+    }
 #ifdef RGB_MATRIX_ENABLE
     if (led_cal_process(record)) {
         return false; // LED calibration / test: the page reads the key instead

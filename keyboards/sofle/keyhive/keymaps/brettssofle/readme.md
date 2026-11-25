@@ -204,9 +204,10 @@ fade dropped off in big perceptual jumps. Now:
   (smoothstep, `fx_smooth8`), and every ring eases out over the last fifth
   of its reach instead of stopping dead;
 - the key-press layer is composited in 8.8 fixed point (`fx_blend16`);
-- the output goes through **gamma 2.2** (`fx_gamma16`, after the cap and
-  scaled to it, so the cap is still the most an LED gives and power is
-  unchanged), so the fade looks even to the eye;
+- the output goes through a **brightness curve** (`fx_curve16`, after the
+  cap and scaled to it, so the cap is still the most an LED gives and power
+  is unchanged). v23-v25 used gamma 2.2 for everything; since v25b it's a
+  choice on the LEDs tab (see below), **Balanced** by default;
 - **temporal dithering** (`rgb_driver.c`): each channel carries its
   rounding error into the next send, and between frames (60 Hz) the frame is
   sent again every ~4 ms with new dither values (the WS2812 transfer is
@@ -218,13 +219,28 @@ fade dropped off in big perceptual jumps. Now:
   RGB state says off, and while no frames come it sends the output again
   every 250 ms, so one lost or overlaid frame can't leave a half lit.
 
-Gamma makes the Brightness slider follow what the eye sees. So that nothing
-looks dimmer after updating, the first start of v23 raises the saved
-Brightness and key-press brightness once so a full-level LED gives exactly
-the light it gave before (for example 30 % → 58 %). A flag in bit 7 of
-EEPROM byte 76 marks that as done. Backups from v23 carry `"gamma": 1`; older
-backups get the same conversion when restored. Effects' dim phases (the bottom of
-a breath, the tail of a fade) are darker than before, as gamma intends.
+**Brightness curve** (v25b, LEDs tab, "Brightness curve"). Brett: "why are
+some of the LED configurations so dim?" Gamma 2.2 kept the peak but darkened
+every level below it, so mid-tones, mixed colours (orange, pastels), gradients,
+breathing and sparse effects lost 15-60 % of their light compared with v22
+(measured per effect with the real rgb_matrix + driver: aurora 24 → 14 %,
+ocean 36 → 19 %, candle 41 → 23 %, pastel solid 66 → 48 % of full). The
+choices:
+
+- **Balanced** (default): linear above a quarter of the cap, so effects are
+  as bright as v22 (within ~2 % for most; pixel rain and starfield, made of
+  dim pixels, ~15-30 % less), with a soft toe below (`fx_toe_q`: ¼ f(4u),
+  f(t) = 2t² − t³) so the dim end still fades smoothly; dithering as above;
+- **Linear**: v22's output (with the dithering);
+- **Smooth**: v23-v25's gamma 2.2.
+
+The curve is stored in the check byte of the key-press brightness record
+(EEPROM 76-77: `b[1] = b[0] ^ 0x5B ^ code`, code 0 = v23-v25's gamma, 1-3 =
+Balanced / Linear / Smooth), synced to the right half in the lighting RPC, and
+saved in backups (`"curve"`). The first start of v25b moves a v23-v25 keyboard
+from gamma to Balanced with the same full-level light (e.g. a Brightness of
+79 % that v23 raised from v22's 60 % goes back to 60 %); a v22 keyboard keeps
+its values. Backups without a curve get the same conversion when restored.
 
 Cost (v23): +1.9 KB flash (tables and the dither stage), ~0.4 KB RAM. Per
 frame and half: the output stage 0.05 ms, each dither re-send 0.02 ms;
@@ -254,7 +270,7 @@ from the start, with the state under it: `USB conn.` → `Link up DHCP` →
 `Ready`, and the seconds so far while it waits. Windows can take up to
 ~30 s, longer the first time on a new USB port (it sets up the adapter);
 the address works as soon as it says `Ready`. After 20 s without an
-address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=type`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only, **no Enter** — press it yourself); the OLED says `Typed`. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. When network mode ends, the OLED says why for a few
+address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=type`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only, **no Enter** — press it yourself); the OLED says `Typed`. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. While a page asks for a session (`CONF? Web`), the right knob or Enter always answers it first and never types (v25b: in v22-v25 the answer was lost while the address was still being typed, or when the computer was slow to collect it; address typing now also gives up after 1 s without the computer reading the keyboard). When network mode ends, the OLED says why for a few
 seconds (`NET off`: by key / idle 10min / P). Open **http://192.168.7.1** (or http://sofle.local where
 .local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
 serves the config page itself, gzipped from flash. The page asks for a

@@ -73,6 +73,14 @@ main { padding:14px 16px; max-width:1100px; }
   </section>
 </main>
 <script>
+// Brightness from an older backup (v22-: linear, v23-v25: gamma 2.2) for the keyboard's
+// Balanced output curve (led_fx_core.h fx_toe_q), with the same full-level light.
+function toBalanced(v, max, gamma) {
+  const light = gamma ? Math.pow(v / max, 2.2) : v / max, bal = (u) => (u >= 0.25 ? u : 0.25 * (2 * (4 * u) ** 2 - (4 * u) ** 3));
+  let x = 1;
+  while (x < max && bal(x / max) < light - 1e-9) x++;
+  return x;
+}
 const DATA = /*__DATA__*/null;
 const $ = (id) => document.getElementById(id);
 const S = { dev: null, keymap: [], enc: [], ui: { tab: 0, layer: 0, sel: null }, queue: Promise.resolve() };
@@ -351,7 +359,7 @@ if (B.on) {
 $("bSave").onclick = () => {
   const b = { format: "sofle-config-backup", version: 1, created: new Date().toISOString(), keyboard: "Keyhive Sofle (brettssofle)", pickerHash: DATA.pickerHash,
               layers: S.keymap.length, rows: DATA.rows, cols: DATA.cols, keymap: S.keymap, encoders: S.enc,
-              leds: { enable: S.led.on, base: S.led.fx, react: S.led.react, rxHue: S.led.rh, rxSat: S.led.rs, hue: S.led.h, sat: S.led.s, val: S.led.v, speed: S.led.speed, gamma: 1 },
+              leds: { enable: S.led.on, base: S.led.fx, react: S.led.react, rxHue: S.led.rh, rxSat: S.led.rs, hue: S.led.h, sat: S.led.s, val: S.led.v, speed: S.led.speed, gamma: 1, curve: 0 }, // curve: this page can't read it, the keyboard's default (Balanced)
               trackpad: { enable: S.tp.on, threshold: S.tp.thr, release: S.tp.rel } };
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(b, null, 1)], { type: "application/json" }));
@@ -371,7 +379,7 @@ $("bFile").onchange = async () => {
   try {
     for (const [l, r, c, v] of keys) await setKey(l, r, c, v);
     for (const [l, n, i, v] of enc) await setEnc(l, n, i, v);
-    if (b.leds) { const x = b.leds; if (x.gamma !== 1 && x.val && S.max) x.val = Math.min(S.max, Math.round(S.max * Math.pow(x.val / S.max, 1 / 2.2))); Object.assign(S.led, { on: x.enable, fx: x.base || S.led.fx, react: x.react ?? S.led.react, rh: x.rxHue ?? S.led.rh, rs: x.rxSat ?? S.led.rs, h: x.hue, s: x.sat, v: x.val, speed: x.speed }); await ledSend(); await $("lSave").onclick(); }
+    if (b.leds) { const x = b.leds; if (x.curve === undefined && x.val && S.max) x.val = toBalanced(x.val, S.max, x.gamma === 1); Object.assign(S.led, { on: x.enable, fx: x.base || S.led.fx, react: x.react ?? S.led.react, rh: x.rxHue ?? S.led.rh, rs: x.rxSat ?? S.led.rs, h: x.hue, s: x.sat, v: x.val, speed: x.speed }); await ledSend(); await $("lSave").onclick(); }
     if (b.trackpad) { const t = b.trackpad; await ok([0xf5, 0x01, t.enable ? 1 : 0, t.threshold, t.release]); }
     await load();
     $("bOut").textContent = "Restored.";

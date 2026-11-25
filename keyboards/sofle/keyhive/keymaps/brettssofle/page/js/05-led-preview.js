@@ -53,10 +53,10 @@ function pvFrame(now) {
       }
     }
     FX.cap16(rgb, l.max || 255);
-    // The keyboard applies gamma 2.2 (FX.gamma16) to these values; a screen does the
-    // same to the colours it is given, so showing them before gamma looks like the LEDs.
-    const k = 255 / 256 / Math.max(V, l.max || 0, 1), cx = pvX(x), cy = pvY(y);
-    g.fillStyle = `rgb(${rgb.map((v) => Math.min(255, Math.round(v * k))).join(",")})`;
+    // The keyboard sends these values through its output curve (FX.curve16); a screen
+    // applies gamma 2.2 to the colours it is given, so show curve^(1/2.2): the light the LEDs give.
+    const cap = l.max || 255, gk = FX.gammaK(cap), cx = pvX(x), cy = pvY(y);
+    g.fillStyle = `rgb(${rgb.map((v) => Math.min(255, Math.round(255 * Math.pow(FX.curve16(l.curve || 0, Math.round(v), cap, gk) / (cap * 256), 1 / 2.2)))).join(",")})`;
     if (flag & 1) { g.fillRect(cx - 15, cy - 15, 30, 30); g.strokeStyle = "#2a2d35"; g.strokeRect(cx - 15.5, cy - 15.5, 31, 31); }
     else { g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.fill(); }
   }
@@ -72,15 +72,16 @@ $("fxCanvas").addEventListener("click", async (ev) => {
   if (S.mode === "hid" && HID.dev && HID.dev.opened) { try { await cmd([0xf6, 0x1c, 4, best[3], best[4]]); } catch (e) { /* preview still runs */ } }
 });
 $("fxDemo").addEventListener("click", () => { PV.demoLeft = 7; PV.demo = performance.now(); });
-// Before v23 the LEDs had no gamma: the same light needs a higher brightness now
-// (the keyboard converted its own settings once, the same way).
-const gammaUp = (v, max) => (v && max ? Math.min(max, Math.round(max * Math.pow(v / max, 1 / 2.2))) : v);
+// Brightness values are for an output curve: v22 and older linear, v23-v25 gamma 2.2,
+// v25b the backup's own (leds.curve). Older ones move to Balanced with the same
+// full-level light (the keyboard converted its own settings once, the same way).
 function ledsFromOldBackup(x) { // v19 and older: base + react (VialRGB ids); v22 and older: no gamma
-  if (x.gamma !== 1) {
-    x = { ...x, gamma: 1 };
+  if (x.curve === undefined) {
+    const from = x.gamma === 1 ? FX.CURVE.SMOOTH : FX.CURVE.LINEAR, to = FX.CURVE.BALANCED;
+    x = { ...x, gamma: 1, curve: to };
     const max = S.led && S.led.max ? S.led.max : 100;
-    if (x.val !== undefined) x.val = gammaUp(x.val, max);
-    if (x.fxBright) x.fxBright = Math.max(1, gammaUp(x.fxBright, 100));
+    if (x.val) x.val = Math.max(1, FX.curveConvert(from, to, x.val, max));
+    if (x.fxBright) x.fxBright = Math.max(1, Math.min(100, Math.floor((FX.curveConvert(from, to, Math.floor(x.fxBright * max / 100), max) * 100 + (max >> 1)) / max)));
   }
   if (x.react === undefined || x.fxEffect !== undefined) return x;
   const y = { ...x };

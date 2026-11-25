@@ -25,6 +25,8 @@ enum fx_effect {
 };
 enum fx_blend { FX_REPLACE, FX_ADD, FX_TINT, FX_BLEND_COUNT };
 enum fx_colour { FX_FIXED, FX_OPPOSITE, FX_RAINBOW, FX_RANDOM, FX_COLOUR_COUNT };
+// LED output curve (rgb_driver.c, fx_curve16): v25b's balanced default, v22's linear, v23's gamma 2.2.
+enum fx_curve { FX_CURVE_BALANCED, FX_CURVE_LINEAR, FX_CURVE_SMOOTH, FX_CURVE_COUNT };
 enum fx_own_bg {
 #define FX_ENUM(id, NAME, name, kind, hue) FXB_##NAME = FX_OWN_BG + id,
     FX_OWN_BACKGROUNDS(FX_ENUM)
@@ -51,6 +53,7 @@ typedef struct {
     uint8_t echoes; // 0-3: extra rings (echo rings)
     uint8_t dim;    // 0-7: background brightness while a ripple runs (0 = no change)
     uint8_t bright; // v21: key-press brightness, 1-100 % of the cap (0 = the background's brightness)
+    uint8_t curve;  // v25b: LED output curve (fx_curve)
 } fx_settings_t;
 
 // Worked out once per frame from the settings.
@@ -134,6 +137,26 @@ static inline uint16_t fx_gamma16(uint16_t x, uint8_t cap, uint32_t k) {
     if (t > 65535) t = 65535;
     uint8_t  i = (uint8_t)(t >> 10);
     uint32_t y = fx_gamma_q[i] + (((uint32_t)(fx_gamma_q[i + 1] - fx_gamma_q[i]) * (t & 1023)) >> 10);
+    return (uint16_t)(y * top >> 16);
+}
+
+// v25b "Balanced" curve: linear above a quarter of the cap (as bright as v22,
+// whose effects were made for linear LEDs), a soft toe below it so the dim end
+// still fades smoothly: 1/4 f(4u), f(t) = 2t^2 - t^3 (same level and slope at
+// the knee). v23's gamma 2.2 for everything made mid-tones, mixed colours and
+// sparse effects much darker (Brett: "why are some LED configurations so dim").
+static const uint16_t fx_toe_q[65] = {0,124,480,1044,1792,2700,3744,4900,6144,7452,8800,10164,11520,12844,14112,15300,16384,17408,18432,19456,20480,21504,22528,23552,24576,25600,26624,27648,28672,29696,30720,31744,32768,33791,34815,35839,36863,37887,38911,39935,40959,41983,43007,44031,45055,46079,47103,48127,49151,50175,51199,52223,53247,54271,55295,56319,57343,58367,59391,60415,61439,62463,63487,64511,65535};
+
+// x: linear light in 8.8 (0 .. cap * 256) through curve c (k = fx_gamma_k(cap)); the cap stays the most an LED gives.
+static inline uint16_t fx_curve16(uint8_t c, uint16_t x, uint8_t cap, uint32_t k) {
+    uint32_t top = (uint32_t)cap << 8;
+    if (x > top) x = (uint16_t)top;
+    if (c == FX_CURVE_LINEAR) return x;
+    const uint16_t *q = c == FX_CURVE_SMOOTH ? fx_gamma_q : fx_toe_q;
+    uint32_t        t = (uint32_t)x * k >> 16;
+    if (t > 65535) t = 65535;
+    uint8_t  i = (uint8_t)(t >> 10);
+    uint32_t y = q[i] + (((uint32_t)(q[i + 1] - q[i]) * (t & 1023)) >> 10);
     return (uint16_t)(y * top >> 16);
 }
 

@@ -14,9 +14,10 @@
 // LED of this half: effects that repaint every LED on each render pass
 // (digital rain) can't wipe it, and the frame itself is never overwritten.
 //
-// v23, smooth output: the composite is 8.8 fixed point, then gamma 2.2 (scaled
-// to the brightness cap, so the cap is still the most an LED gives and power is
-// unchanged), then temporal dithering: each channel keeps its rounding error
+// v23, smooth output: the composite is 8.8 fixed point, then the output curve
+// (v25b: Balanced = linear above a quarter of the cap with a soft toe below,
+// Linear = v22, Smooth = v23's gamma 2.2; scaled to the brightness cap, so the
+// cap is still the most an LED gives and power is unchanged), then temporal dithering: each channel keeps its rounding error
 // and adds it to the next send, and between frames (every 16 ms) the frame is
 // sent again every ~4 ms with new dither values (the WS2812 transfer is DMA,
 // ~1.1 ms for 37 LEDs). So a fade has ~256 steps per level instead of the
@@ -119,6 +120,7 @@ static void half_flush(void) {
     bool     cal   = config_mode_led_cal_busy();
     uint8_t  first = is_keyboard_left() ? 0 : HALF_LEDS;
     uint32_t gk    = fx_gamma_k(RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+    uint8_t  curve = led_fx_curve();
     if (!cal) {
         // LEDs mapped to nothing (led_map.c) are skipped by every effect: keep them dark,
         // or one that was lit when the map changed would stay lit.
@@ -138,7 +140,7 @@ static void half_flush(void) {
         }
         fx_cap16(o, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
         for (uint8_t ch = 0; ch < 3; ch++) {
-            target[i][ch] = cal ? o[ch] & 0xFF00 : fx_gamma16(o[ch], RGB_MATRIX_MAXIMUM_BRIGHTNESS, gk);
+            target[i][ch] = cal ? o[ch] & 0xFF00 : fx_curve16(curve, o[ch], RGB_MATRIX_MAXIMUM_BRIGHTNESS, gk);
         }
     }
     blanked = false;

@@ -6,7 +6,8 @@
 const BACKUP_FORMAT = "sofle-config-backup", BACKUP_VERSION = 1;
 const LED_FIELDS = { enable: "Lights on", base: "Background", fxEffect: "On key press", fxBlend: "Key press over the background", fxColour: "Key-press colour mode",
   rxHue: "Key-press hue", rxSat: "Key-press saturation", fxSpeed: "Key-press speed", fxWidth: "Band width", fxRadius: "Reach", fxFade: "Fade", fxEchoes: "Echo rings", fxDim: "Dim background", fxBright: "Key-press brightness (0 = background's)",
-  hue: "Hue", sat: "Saturation", val: "Brightness", speed: "Speed", idle: "Turn off after", zone: "LED zones", ugHue: "Underglow hue", ugSat: "Underglow saturation" };
+  hue: "Hue", sat: "Saturation", val: "Brightness", curve: "Brightness curve", speed: "Speed", idle: "Turn off after", zone: "LED zones", ugHue: "Underglow hue", ugSat: "Underglow saturation" };
+const CURVE_NAMES = ["Balanced", "Linear", "Smooth"];
 const TP_FIELDS = { enable: "Press-to-click", threshold: "Press threshold (Z)", release: "Release Z" };
 
 async function makeBackup() {
@@ -15,7 +16,7 @@ async function makeBackup() {
   readStatus(await cmd([0xf6, 0x00, 0]));
   const leds = {};
   for (const k of Object.keys(LED_FIELDS)) leds[k] = S.led[k];
-  leds.gamma = 1; // v23: brightness values for the gamma output (older backups are converted on restore)
+  leds.gamma = 1; // v23: brightness values for an output curve, v25b: the one in leds.curve (older backups are converted on restore)
   return {
     format: BACKUP_FORMAT, version: BACKUP_VERSION, created: new Date().toISOString(),
     keyboard: "Keyhive Sofle (brettssofle)", pickerHash: DATA.pickerHash,
@@ -78,7 +79,7 @@ function backupDiff(b) {
   const fx = (v) => (v ? fxInfo(v).label || "effect " + v : "none");
   const ov = (v) => (v ? (DATA.fxTable.overlays.find((o) => o[0] === v) || [0, 0, "effect " + v])[2] : "none");
   out.push({ id: "leds", title: "Lighting", n: led.length, data: b.leds,
-    lines: led.map((k) => `${LED_FIELDS[k]}: ${k === "base" ? fx(S.led[k]) + " → " + fx(b.leds[k]) : k === "fxEffect" ? ov(S.led[k]) + " → " + ov(b.leds[k]) : k === "zone" ? DATA.ledZones[S.led[k]] + " → " + DATA.ledZones[b.leds[k]] : k === "idle" ? DATA.ledIdle[S.led[k]] + " → " + DATA.ledIdle[b.leds[k]] : S.led[k] + " → " + b.leds[k]}`) });
+    lines: led.map((k) => `${LED_FIELDS[k]}: ${k === "base" ? fx(S.led[k]) + " → " + fx(b.leds[k]) : k === "fxEffect" ? ov(S.led[k]) + " → " + ov(b.leds[k]) : k === "zone" ? DATA.ledZones[S.led[k]] + " → " + DATA.ledZones[b.leds[k]] : k === "idle" ? DATA.ledIdle[S.led[k]] + " → " + DATA.ledIdle[b.leds[k]] : k === "curve" ? CURVE_NAMES[S.led[k]] + " → " + CURVE_NAMES[b.leds[k]] : S.led[k] + " → " + b.leds[k]}`) });
   const mapNow = S.backupMap || null;
   let mapLines = [], mapN = 0;
   if (b.ledMap === undefined) { /* not in the backup */ }

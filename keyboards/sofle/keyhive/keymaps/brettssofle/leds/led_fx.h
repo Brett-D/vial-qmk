@@ -25,6 +25,7 @@ void led_fx_save(void);
 void led_fx_fire(uint8_t row, uint8_t col); // a ripple from that key, on both halves
 void led_fx_task(void);                     // master: settings / test ripples to the right half
 uint8_t led_fx_base(void);
+uint8_t led_fx_curve(void); // the LED output curve (fx_curve), both halves
 
 // The v6-v19 interface: background + key-press effect as rgb_matrix modes,
 // with the key-press colour (react: 0 = none, LED_LAYERS_KEEP = unchanged).

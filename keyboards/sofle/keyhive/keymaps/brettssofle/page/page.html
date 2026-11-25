@@ -199,6 +199,8 @@
           <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
           <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
           <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
+          <div class="row"><span>Brightness curve</span><select id="ledCurve"><option value="0">Balanced (recommended)</option><option value="1">Linear (as before v23)</option><option value="2">Smooth (v23-v25)</option></select><span></span></div>
+          <div class="small dim" style="margin:-2px 0 6px">How LED levels become light. <b>Balanced</b>: as bright as before v23, with smooth fades at the dim end. <b>Linear</b>: the old output (dim fades step). <b>Smooth</b>: gamma 2.2 for everything — smoothest, but mid-tones, mixed colours and sparse effects come out much darker. The maximum brightness (power) is the same for all three.</div>
           <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="255"><span class="v" id="ledSpeedV"></span></div>
           <div id="fxSec">
             <h3 class="fxH">On key press</h3>

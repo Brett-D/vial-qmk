@@ -80,7 +80,7 @@ function ledInput() {
   for (const k of ["fxBlend", "fxColour", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim"]) l[k] = +$(k).value;
   l.fxBright = $("fxBrightSame").checked ? 0 : +$("fxBright").value;
   l.hue = +$("ledHue").value; l.sat = +$("ledSat").value;
-  l.val = +$("ledVal").value; l.speed = +$("ledSpeed").value; l.idle = +$("ledIdle").value;
+  l.val = +$("ledVal").value; l.speed = +$("ledSpeed").value; l.idle = +$("ledIdle").value; l.curve = +$("ledCurve").value;
   l.zone = +$("ledZone").value; l.ugHue = +$("ugHue").value; l.ugSat = +$("ugSat").value;
   l.dirty = 1;
   flushLed();
@@ -134,7 +134,7 @@ function buildLedSelects() {
   $("ledIdle").innerHTML = DATA.ledIdle.map((t, i) => `<option value="${i}">${t}</option>`).join("");
   $("ledVal").max = S.ledInfo.max;
 }
-["ledOn", "ledBase", "fxEffect", "rxHue", "rxSat", "ledHue", "ledSat", "ledVal", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat",
+["ledOn", "ledBase", "fxEffect", "rxHue", "rxSat", "ledHue", "ledSat", "ledVal", "ledCurve", "ledSpeed", "ledIdle", "ledZone", "ugHue", "ugSat",
  "fxBlend", "fxColour", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim", "fxBright", "fxBrightSame"].forEach((id) => $(id).addEventListener("input", ledInput));
 $("fxBrightSame").addEventListener("change", () => { if (!$("fxBrightSame").checked && S.led && !S.led.fxBright) $("fxBright").value = Math.max(1, Math.round(S.led.val / Math.max(S.led.max, 1) * 100)); ledInput(); });
 // Mouse wiggler (Trackpad tab): applies at once, not saved.

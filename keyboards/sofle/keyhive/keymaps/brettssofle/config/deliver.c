@@ -108,6 +108,7 @@ static matrix_row_t dl_swallowed[MATRIX_ROWS];
 // Network mode's address, typed by the right knob on the NET screen
 // (config_mode.c): US layout, printable keys only, no Enter (Brett presses it).
 #define ADDR_IDLE 0xFF
+#define DL_ADDR_GIVE_UP_MS 1000 // a report not collected for this long: stop typing the address
 static const uint8_t addr_keys[] PROGMEM = {KC_H, KC_T, KC_T, KC_P, 0x80 | KC_SCLN, KC_SLSH, KC_SLSH, KC_1, KC_9, KC_2, KC_DOT, KC_1, KC_6, KC_8, KC_DOT, KC_7, KC_DOT, KC_1};
 _Static_assert(2 * sizeof(addr_keys) < ADDR_IDLE, "address too long");
 static uint8_t  addr_pos = ADDR_IDLE; // report index (2 per character)
@@ -210,7 +211,14 @@ uint32_t deliver_address_typed_at(void) {
 }
 
 static void address_task(void) {
-    if (timer_elapsed(dl.last_report) < DL_BOOT_REPORT_MS || !endpoint_idle()) {
+    if (timer_elapsed(dl.last_report) < DL_BOOT_REPORT_MS) {
+        return;
+    }
+    if (!endpoint_idle()) {
+        if (timer_elapsed(dl.last_report) > DL_ADDR_GIVE_UP_MS) {
+            release_all(); // the computer stopped collecting reports: give up, or every key stays swallowed
+            addr_pos = ADDR_IDLE;
+        }
         return;
     }
     if (addr_pos >= 2 * sizeof(addr_keys)) {

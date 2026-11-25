@@ -181,7 +181,8 @@ async function hidLoadLed() {
   S.led = { enable: S.ledInfo.enabled, mode: id || cur, hue: m[5], sat: m[6], val: m[7], speed: m[4], idle: S.ledInfo.idle, max: S.ledInfo.max,
             zone: st[12], ugHue: st[13], ugSat: st[14],
             base: layered ? f[3] : cur, fxEffect: layered ? f[4] : 0, fxBlend: f[5], fxColour: f[6], rxHue: f[7], rxSat: f[8],
-            fxSpeed: f[9], fxWidth: f[10], fxRadius: f[11], fxFade: f[12], fxEchoes: f[13], fxDim: f[14], fxBright: f[16] <= 100 ? f[16] : 0, dirty: 0 };
+            fxSpeed: f[9], fxWidth: f[10], fxRadius: f[11], fxFade: f[12], fxEchoes: f[13], fxDim: f[14], fxBright: f[16] <= 100 ? f[16] : 0,
+            curve: f[17] & 0x80 ? f[17] & 0x7f : 2, dirty: 0 }; // v25b; older firmware: gamma 2.2 (v23-v25)
   S.ledSent = { ...S.led };
 }
 // Lighting combinations (led_fx_table.h, the firmware checks the same).
@@ -193,7 +194,7 @@ function fxInfo(base) { // kind and main hue of a background (VialRGB id or ours
   for (const [i, , label, kind, hue] of T.qmk) if (base === i) return { kind, hue, label };
   return { kind: FXK.BG, hue: 255, label: DATA.ledEffects[base] || "" };
 }
-const FX_FIELDS = ["base", "fxEffect", "fxBlend", "fxColour", "rxHue", "rxSat", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim", "fxBright"];
-// [15]: key-press brightness with bit 7 set (v21; without it the keyboard keeps its value).
-const fxBytes = (l) => [0xf6, 0x1c, 1, l.base, l.fxEffect, l.fxBlend, l.fxColour, l.rxHue, l.rxSat, l.fxSpeed, l.fxWidth, l.fxRadius, l.fxFade, l.fxEchoes, l.fxDim, 0x80 | (l.fxBright || 0)];
+const FX_FIELDS = ["base", "fxEffect", "fxBlend", "fxColour", "rxHue", "rxSat", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim", "fxBright", "curve"];
+// [15]: key-press brightness with bit 7 set (v21; without it the keyboard keeps its value); [16]: the output curve, the same way (v25b).
+const fxBytes = (l) => [0xf6, 0x1c, 1, l.base, l.fxEffect, l.fxBlend, l.fxColour, l.rxHue, l.rxSat, l.fxSpeed, l.fxWidth, l.fxRadius, l.fxFade, l.fxEchoes, l.fxDim, 0x80 | (l.fxBright || 0), 0x80 | (l.curve || 0)];
 // Old backups / pages: QMK key-press effects -> the nearest overlay (as led_fx.c: effect_of_react).
