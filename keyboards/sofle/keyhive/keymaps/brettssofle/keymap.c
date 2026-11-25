@@ -25,6 +25,8 @@
 #include "oled_pages.h"
 #include "config_mode.h"
 #include "rgb_driver.h"
+#include "perf.h"
+#include "display.h"
 
 // Default keymap. Everything here can be changed live in Vial.
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -211,27 +213,39 @@ void keyboard_post_init_user(void) {
     user_config_init(); // the EECONFIG_USER settings (press-to-click, LED zones / idle)
     pet_init(); // before the OLED page: a saved pet page needs pet_enabled()
     oled_pages_init();
+    display_init();
 #ifdef RGB_MATRIX_ENABLE
     led_layers_init();
 #endif
     config_mode_init();
 }
 
+// v27 loop profiler (perf.c): the scan is done (left: with the split sync).
+void matrix_scan_user(void) {
+    perf_mark(PF_SCAN);
+}
+void matrix_slave_scan_user(void) {
+    perf_mark(PF_SCAN);
+}
+
 void housekeeping_task_user(void) {
+    perf_mark(PF_TASKS); // everything since the scan that isn't timed on its own
 #ifdef RGB_MATRIX_ENABLE
     // RGB state is owned by the master and synced to the right half.
     if (is_keyboard_master()) {
         rgb_idle_task();
     }
-    rgb_driver_task(); // dither re-sends; dark when off / suspended, on both halves (rgb_driver.c)
+    PERF_SPAN(PF_DITHER, rgb_driver_task()); // dither re-sends; dark when off / suspended, on both halves (rgb_driver.c)
 #endif
-    pet_task();
-    oled_pages_task();
+    PERF_SPAN(PF_PET, pet_task());
+    PERF_SPAN(PF_SYNC, oled_pages_task());
     wiggler_task();
-    config_mode_task();
+    PERF_SPAN(PF_NET, config_mode_task());
 #ifdef RGB_MATRIX_ENABLE
-    led_fx_task(); // lighting settings / test ripples to the right half
+    PERF_SPAN(PF_SYNC, led_fx_task()); // lighting settings / test ripples to the right half
 #endif
+    PERF_SPAN(PF_SYNC, display_task()); // OLED display settings + menu to the right half, its loop profile back
+    perf_loop_end();
 }
 
 #ifdef RGB_MATRIX_ENABLE

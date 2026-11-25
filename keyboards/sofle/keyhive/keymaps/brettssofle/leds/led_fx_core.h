@@ -54,6 +54,7 @@ typedef struct {
     uint8_t dim;    // 0-7: background brightness while a ripple runs (0 = no change)
     uint8_t bright; // v21: key-press brightness, 1-100 % of the cap (0 = the background's brightness)
     uint8_t curve;  // v25b: LED output curve (fx_curve)
+    uint8_t max;    // v27: key-press effects at once, 1-8 (the newest; 0 = 8)
 } fx_settings_t;
 
 // Worked out once per frame from the settings.
@@ -705,4 +706,28 @@ static inline uint16_t fx_pet_k(uint8_t level) {
 // Its final strength at an LED: env and the strength setting (k = fx_pet_k).
 static inline uint8_t fx_pet_alpha(const fx_pet_t *g, uint8_t a, uint16_t k) {
     return (uint8_t)((uint32_t)fx_div255((uint32_t)a * g->env) * k >> 8);
+}
+
+/* ---- v27: key-press effect cap, screensaver ---- */
+
+// Of n live presses (oldest first), the first one drawn with at most max at once (0 = 8).
+static inline uint8_t fx_first_event(uint8_t n, uint8_t max) {
+    if (!max) max = 8;
+    return n > max ? (uint8_t)(n - max) : 0;
+}
+
+// The screensaver fades in and out over FX_SS_FADE_MS: its level (0 - FX_SS_FULL)
+// moves dt ms towards on / off, and the share it gets is eased (smoothstep).
+#define FX_SS_FADE_MS 1000
+#define FX_SS_FULL 4096
+static inline uint16_t fx_ss_step(uint16_t level, uint16_t dt, uint8_t on) {
+    uint32_t d = (uint32_t)dt * FX_SS_FULL / FX_SS_FADE_MS;
+    if (on) return (uint16_t)((uint32_t)level + d >= FX_SS_FULL ? FX_SS_FULL : level + d);
+    return (uint16_t)(level <= d ? 0 : level - d);
+}
+static inline uint16_t fx_ss_share(uint16_t level) { // 0-256
+    return level >= FX_SS_FULL ? 256 : fx_smooth8((uint8_t)(level >> 4));
+}
+static inline void fx_ss_mix(uint8_t px[3], const uint8_t ss[3], uint16_t k) {
+    for (uint8_t i = 0; i < 3; i++) px[i] = (uint8_t)(((uint32_t)px[i] * (256 - k) + (uint32_t)ss[i] * k) >> 8);
 }

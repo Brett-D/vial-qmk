@@ -6,8 +6,30 @@
 const BACKUP_FORMAT = "sofle-config-backup", BACKUP_VERSION = 1;
 const LED_FIELDS = { enable: "Lights on", base: "Background", fxEffect: "On key press", fxBlend: "Key press over the background", fxColour: "Key-press colour mode",
   rxHue: "Key-press hue", rxSat: "Key-press saturation", fxSpeed: "Key-press speed", fxWidth: "Band width", fxRadius: "Reach", fxFade: "Fade", fxEchoes: "Echo rings", fxDim: "Dim background", fxBright: "Key-press brightness (0 = background's)",
-  hue: "Hue", sat: "Saturation", val: "Brightness", curve: "Brightness curve", speed: "Speed", idle: "Turn off after", zone: "LED zones", ugHue: "Underglow hue", ugSat: "Underglow saturation" };
+  hue: "Hue", sat: "Saturation", val: "Brightness", curve: "Brightness curve", speed: "Speed", idle: "Turn off after", zone: "LED zones", ugHue: "Underglow hue", ugSat: "Underglow saturation",
+  fxMax: "Key-press effects at once", ssAfter: "Screensaver after", ssEffect: "Screensaver effect", ssPet: "Pet reactions over the screensaver", ssHue: "Screensaver hue",
+  ssSat: "Screensaver saturation", ssVal: "Screensaver brightness", ssSpeed: "Screensaver speed" }; // v27: fxMax, ss*
 const CURVE_NAMES = ["Balanced", "Linear", "Smooth"];
+// v27: fields this keyboard has (older firmware: no effect cap / screensaver).
+const ledFieldOk = (k) => (k === "fxMax" ? !!(S.led && S.led.fxMax) : k.startsWith("ss") ? !!(S.led && S.led.ssOk) : true);
+function ledShow(k, v) {
+  if (v === undefined) return "—";
+  switch (k) {
+    case "base": return v ? fxInfo(v).label || "effect " + v : "none";
+    case "fxEffect": return v ? (DATA.fxTable.overlays.find((o) => o[0] === v) || [0, 0, "effect " + v])[2] : "none";
+    case "zone": return DATA.ledZones[v];
+    case "idle": return DATA.ledIdle[v];
+    case "curve": return CURVE_NAMES[v];
+    case "ssAfter": return SS.after[v] ? SS.after[v] + " min" : "off";
+    case "ssEffect": return (DATA.fxTable.backgrounds.find((o) => o[0] === v) || [0, 0, "effect " + v])[2];
+    case "ssSat": return Math.round((SS.sat[v] ?? 0) / 255 * 100) + "%";
+    case "ssVal": return (SS.val[v] ?? "?") + "%";
+    case "ssSpeed": return ["normal", "slow", "fast", "fastest"][v] || v;
+    case "ssPet": return v ? "on" : "off";
+    default: return String(v);
+  }
+}
+const DISP_SLEEP = ["30 s", "1 min", "2 min", "5 min", "10 min", "30 min"];
 const TP_FIELDS = { enable: "Press-to-click", threshold: "Press threshold (Z)", release: "Release Z" };
 
 async function makeBackup() {
@@ -15,7 +37,7 @@ async function makeBackup() {
   await hidLoadTp();
   readStatus(await cmd([0xf6, 0x00, 0]));
   const leds = {};
-  for (const k of Object.keys(LED_FIELDS)) leds[k] = S.led[k];
+  for (const k of Object.keys(LED_FIELDS)) if (ledFieldOk(k)) leds[k] = S.led[k];
   leds.gamma = 1; // v23: brightness values for an output curve, v25b: the one in leds.curve (older backups are converted on restore)
   return {
     format: BACKUP_FORMAT, version: BACKUP_VERSION, created: new Date().toISOString(),
@@ -27,7 +49,7 @@ async function makeBackup() {
     ledMap: S.mapMeasured ? await calReadMap() : null, // null = the built-in map
     trackpad: { enable: S.tp.enable, threshold: S.tp.threshold, release: S.tp.release },
     wiggler: { on: S.wiggle.on, every: S.wiggle.every },
-    prefs: S.prefs ? { addrEnter: S.prefs.addrEnter } : undefined, // v26
+    prefs: S.prefs ? { addrEnter: S.prefs.addrEnter, ...(S.prefs.disp ? { disp: { ...S.prefs.disp } } : {}) } : undefined, // v26; v27: the right OLED
     pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name, species: S.pet.species, stage: S.pet.stage,
                    ...(S.pet.glowOk ? { big: S.pet.big, glow: S.pet.glow, glowLevel: S.pet.glowLevel } : {}) } : undefined, // not its stats
   };
@@ -77,11 +99,9 @@ function backupDiff(b) {
   out.push({ id: "encoders", title: "Knobs", n: enc.length, data: enc,
     lines: enc.slice(0, 6).map((k) => `${name(k.l)} ${k.e ? "right" : "left"} knob ${k.cw ? "turn right" : "turn left"}: ${kcName(k.from) || "(none)"} → ${kcName(k.to) || "(none)"}`) });
   if (b.leds) b.leds = ledsFromOldBackup(b.leds);
-  const led = b.leds ? Object.keys(LED_FIELDS).filter((k) => b.leds[k] !== undefined && b.leds[k] !== S.led[k]) : [];
-  const fx = (v) => (v ? fxInfo(v).label || "effect " + v : "none");
-  const ov = (v) => (v ? (DATA.fxTable.overlays.find((o) => o[0] === v) || [0, 0, "effect " + v])[2] : "none");
+  const led = b.leds ? Object.keys(LED_FIELDS).filter((k) => ledFieldOk(k) && b.leds[k] !== undefined && b.leds[k] !== S.led[k]) : [];
   out.push({ id: "leds", title: "Lighting", n: led.length, data: b.leds,
-    lines: led.map((k) => `${LED_FIELDS[k]}: ${k === "base" ? fx(S.led[k]) + " → " + fx(b.leds[k]) : k === "fxEffect" ? ov(S.led[k]) + " → " + ov(b.leds[k]) : k === "zone" ? DATA.ledZones[S.led[k]] + " → " + DATA.ledZones[b.leds[k]] : k === "idle" ? DATA.ledIdle[S.led[k]] + " → " + DATA.ledIdle[b.leds[k]] : k === "curve" ? CURVE_NAMES[S.led[k]] + " → " + CURVE_NAMES[b.leds[k]] : S.led[k] + " → " + b.leds[k]}`) });
+    lines: led.map((k) => `${LED_FIELDS[k]}: ${ledShow(k, S.led[k])} → ${ledShow(k, b.leds[k])}`) });
   const mapNow = S.backupMap || null;
   let mapLines = [], mapN = 0;
   if (b.ledMap === undefined) { /* not in the backup */ }
@@ -96,7 +116,14 @@ function backupDiff(b) {
   out.push({ id: "wiggler", title: "Mouse wiggler (until unplugged)", n: wg ? 1 : 0, data: b.wiggler,
     lines: wg ? [`${S.wiggle.on ? "on" : "off"} → ${b.wiggler.on ? "on" : "off"}, every ${($("wgEvery").options[b.wiggler.every] || {}).text || b.wiggler.every}`] : [] });
   const pf = b.prefs && S.prefs && b.prefs.addrEnter !== undefined && b.prefs.addrEnter !== S.prefs.addrEnter;
-  if (b.prefs && S.prefs) out.push({ id: "prefs", title: "Network mode", n: pf ? 1 : 0, data: b.prefs, lines: pf ? [`Enter after the address: ${S.prefs.addrEnter ? "on" : "off"} → ${b.prefs.addrEnter ? "on" : "off"}`] : [] });
+  const dn = S.prefs && S.prefs.disp, db = b.prefs && b.prefs.disp, dl = [];
+  if (dn && db) {
+    if (db.bright !== dn.bright) dl.push(`OLED brightness: ${dn.bright}/5 → ${db.bright}/5`);
+    if (db.sleep !== dn.sleep) dl.push(`OLED sleep after: ${DISP_SLEEP[dn.sleep]} → ${DISP_SLEEP[db.sleep]}`);
+    if (!!db.off !== dn.off) dl.push(`OLED: ${dn.off ? "off" : "on"} → ${db.off ? "off" : "on"}`);
+  }
+  if (b.prefs && S.prefs) out.push({ id: "prefs", title: "Network mode and display", n: (pf ? 1 : 0) + dl.length, data: b.prefs,
+    lines: (pf ? [`Enter after the address: ${S.prefs.addrEnter ? "on" : "off"} → ${b.prefs.addrEnter ? "on" : "off"}`] : []).concat(dl) });
   if (b.pet && S.pet) {
     const f = ["on", "canDie", "decay", "name", "species", "stage", ...(S.pet.glowOk ? ["big", "glow", "glowLevel"] : [])].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
     const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name", species: "Species", stage: "Stage", big: "Big pet", glow: "LED reactions (which)", glowLevel: "LED reaction strength" };
@@ -195,8 +222,8 @@ async function restoreApply() {
       await petSettings(b.pet);
     }
     if (want.has("prefs")) {
-      prog("Network mode…");
-      await prefsSet(b.prefs);
+      prog("Network mode and display…");
+      await prefsSet({ addrEnter: b.prefs.addrEnter ?? S.prefs.addrEnter, disp: S.prefs.disp && b.prefs.disp ? b.prefs.disp : null });
     }
     if (want.has("wiggler")) {
       prog("Mouse wiggler…");

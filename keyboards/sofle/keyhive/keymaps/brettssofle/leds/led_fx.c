@@ -26,6 +26,8 @@
 #    include "split_util.h"
 #include "brett_util.h"
 #    include "config_mode.h"
+#    include "kb_config.h"
+#    include "screensaver.h"
 
 #    define LAYERS_EE_OFFSET 80 // after the LED map (0-75) and the OLED page (78-79)
 #    define LAYERS_EE_OLD 0x4C  // v6-v19: magic, base, react, hue, sat, sum
@@ -48,7 +50,7 @@ static uint8_t       from_curve; // the curve the saved brightness was set for (
 static uint32_t      remote_at; // right half: last RPC_ID_USER_LEDFX (newer than the old sync)
 
 static const fx_settings_t fx_default = {.base = 0, .effect = FX_RING, .blend = FX_REPLACE, .colour = FX_OPPOSITE, .hue = 0, .sat = 0,
-                                         .speed = 8, .width = 4, .radius = 8, .fade = 6, .echoes = 0, .dim = 2, .bright = 0, .curve = FX_CURVE_BALANCED};
+                                         .speed = 8, .width = 4, .radius = 8, .fade = 6, .echoes = 0, .dim = 2, .bright = 0, .curve = FX_CURVE_BALANCED, .max = FX_MAX_DEFAULT};
 
 /* ---- packing (EEPROM and RPC) ---- */
 
@@ -221,7 +223,7 @@ void led_fx_get(fx_settings_t *s) {
 static bool valid(const fx_settings_t *s) {
     bool solo = led_layers_is_solo(s->base);
     return (!s->base || led_layers_is_base(s->base) || solo) && !(solo && s->effect) && s->effect < FX_EFFECT_COUNT && s->blend < FX_BLEND_COUNT && s->colour < FX_COLOUR_COUNT &&
-           s->speed < 16 && s->width < 16 && s->radius < 16 && s->fade < 16 && s->echoes < 4 && s->dim < 8 && s->bright <= 100 && s->curve < FX_CURVE_COUNT && (s->base || s->effect);
+           s->speed < 16 && s->width < 16 && s->radius < 16 && s->fade < 16 && s->echoes < 4 && s->dim < 8 && s->bright <= 100 && s->curve < FX_CURVE_COUNT && s->max >= 1 && s->max <= 8 && (s->base || s->effect);
 }
 
 // Ours are drawn by LAYERED; QMK's run as themselves when there's no key-press effect.
@@ -275,6 +277,10 @@ static void load(void) {
     fx.curve   = ok && code != CURVE_CODE_LEGACY ? code - 1 : FX_CURVE_BALANCED;
     from_curve = ok && (b[0] & BRIGHT_EE_GAMMA) ? (code == CURVE_CODE_LEGACY ? FX_CURVE_SMOOTH : fx.curve) : FX_CURVE_LINEAR;
     pre_gamma  = ok ? !gamma_done : record;
+    kb_config_t kc; // v27: the effect cap and the screensaver (EECONFIG_KB)
+    kb_config_get(&kc);
+    fx.max = kc.fx_max;
+    screensaver_load();
 }
 
 void led_fx_save(void) {
@@ -284,6 +290,11 @@ void led_fx_save(void) {
     uint8_t v    = fx.bright | (gamma_done ? BRIGHT_EE_GAMMA : 0);
     uint8_t b[2] = {v, (uint8_t)(v ^ BRIGHT_EE_CHECK ^ (fx.curve + 1))};
     eeconfig_update_kb_datablock(b, BRIGHT_EE_OFFSET, sizeof(b));
+    kb_config_t kc;
+    kb_config_get(&kc);
+    kc.fx_max = fx.max;
+    kb_config_set(&kc);
+    screensaver_save();
 }
 
 void led_layers_save(void) {
@@ -379,6 +390,10 @@ static void remote_handler(uint8_t in_len, const void *in_data, uint8_t out_len,
     if (in_len >= 10 && unpack(p, &s)) {
         s.bright  = in_len >= 11 && p[10] <= 100 ? p[10] : 0; // v21; a v20 left half: the background's
         s.curve   = in_len >= 12 && p[11] < FX_CURVE_COUNT ? p[11] : FX_CURVE_SMOOTH; // v25b; v23-v25 left halves: gamma 2.2
+        s.max     = in_len >= 17 && p[16] >= 1 && p[16] <= 8 ? p[16] : 8;            // v27; older left halves draw all 8
+        if (in_len >= 17 + SS_RPC_LEN) {
+            screensaver_unpack(&p[17]); // v27
+        }
         if (in_len >= 16 && p[12] != pg.got) { // v26: a new pet reaction (or the end of one): its age, so a resend can't restart it
             pg.got   = p[12];
             pg.type  = (p[12] & 15) < FXP_COUNT ? p[12] & 15 : FXP_NONE;
@@ -407,9 +422,9 @@ void led_fx_task(void) {
     if (!is_keyboard_master() || !is_transport_connected()) {
         return;
     }
-    static uint8_t  sent[11];
+    static uint8_t  sent[11 + 1 + SS_RPC_LEN];
     static uint32_t sent_at;
-    uint8_t         p[16];
+    uint8_t         p[17 + SS_RPC_LEN];
     if (pg.type && config_mode_leds_quiet(false)) {
         pg.type = FXP_NONE; // calibration, typed delivery, keyboard-only mode: it stops
         pg.seq  = (pg.seq + 1) & 15;
@@ -430,7 +445,10 @@ void led_fx_task(void) {
     p[13] = lv;
     p[14] = age;
     p[15] = age >> 8;
-    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent[9] == p[11] && sent[10] == p[12] && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
+    p[16] = fx.max;              // v27: key-press effects at once (a v26 right half reads the first 16)
+    screensaver_pack(&p[17]);    // v27: the screensaver's settings and whether it's on now
+    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent[9] == p[11] && sent[10] == p[12] && !memcmp(&sent[11], &p[16], 1 + SS_RPC_LEN) && sent_at &&
+        timer_elapsed32(sent_at) < FX_SYNC_MS) {
         return;
     }
     if (transaction_rpc_send(RPC_ID_USER_LEDFX, sizeof(p), p)) {
@@ -438,6 +456,7 @@ void led_fx_task(void) {
         sent[8]  = p[10];
         sent[9]  = p[11];
         sent[10] = p[12];
+        memcpy(&sent[11], &p[16], 1 + SS_RPC_LEN);
         sent_at  = timer_stamp32();
         fire_row = fire_col = -1;
     }

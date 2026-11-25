@@ -34,6 +34,7 @@
 #include "oled_pages.h"
 #include "config_mode.h"
 #include "led_fx_core.h" // enum fx_pet
+#include "perf.h"
 
 #define PET_EE_ADDR ((void *)(uintptr_t)(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1))
 #define PET_EE_SIZE 32
@@ -438,6 +439,29 @@ bool pet_press(void) {
     return true;
 }
 
+// v27: only the bytes that changed (a minute's ticking changes the age, a stat
+// or two and the check byte), not all 31. Every EEPROM write is flash
+// programming with the whole chip stopped (QMK's wear levelling on the
+// RP2040), and the smaller writes fill its log, whose rewrite stops the chip
+// for ~100 ms, about 3x less often. Runs closer than 3 bytes go as one write.
+static void save_changed(void) {
+    uint8_t        old[sizeof(p)];
+    const uint8_t *now = (const uint8_t *)&p;
+    eeprom_read_block(old, PET_EE_ADDR, sizeof(p));
+    for (uint8_t i = 0; i < sizeof(p);) {
+        if (old[i] == now[i]) {
+            i++;
+            continue;
+        }
+        uint8_t end = i + 1; // one past the last changed byte of this run
+        for (uint8_t j = end; j < sizeof(p) && j < end + 3; j++) {
+            if (old[j] != now[j]) end = j + 1;
+        }
+        eeprom_update_block(&now[i], (uint8_t *)PET_EE_ADDR + i, end - i);
+        i = end;
+    }
+}
+
 void pet_task(void) {
     if (!is_keyboard_master()) {
         return;
@@ -468,7 +492,7 @@ void pet_task(void) {
     }
     if (dirty && ((soon_t && timer_elapsed32(soon_t) >= PET_SAVE_SOON_MS) || timer_elapsed32(save_t) >= PET_SAVE_PERIOD_MS)) {
         p.sum = checksum(&p);
-        eeprom_update_block(&p, PET_EE_ADDR, sizeof(p));
+        PERF_SPAN(PF_FLASH, save_changed());
         pet_saves++;
         dirty  = false;
         soon_t = 0;

@@ -182,7 +182,10 @@ async function hidLoadLed() {
             zone: st[12], ugHue: st[13], ugSat: st[14],
             base: layered ? f[3] : cur, fxEffect: layered ? f[4] : 0, fxBlend: f[5], fxColour: f[6], rxHue: f[7], rxSat: f[8],
             fxSpeed: f[9], fxWidth: f[10], fxRadius: f[11], fxFade: f[12], fxEchoes: f[13], fxDim: f[14], fxBright: f[16] <= 100 ? f[16] : 0,
-            curve: f[17] & 0x80 ? f[17] & 0x7f : 2, dirty: 0 }; // v25b; older firmware: gamma 2.2 (v23-v25)
+            curve: f[17] & 0x80 ? f[17] & 0x7f : 2, fxMax: f[18] & 0x80 ? f[18] & 0x7f : 0, dirty: 0 }; // v25b; older firmware: gamma 2.2 (v23-v25); v27: effects at once (0 = older)
+  const sv = await cmd([0xf6, 0x20, 0]); // v27 screensaver
+  S.led.ssOk = sv[2] === 0xa3;
+  if (S.led.ssOk) Object.assign(S.led, { ssAfter: sv[3], ssEffect: sv[4], ssPet: !!(sv[5] & 1), ssHue: sv[6], ssSat: sv[7], ssVal: sv[8], ssSpeed: sv[9] });
   S.ledSent = { ...S.led };
 }
 // Lighting combinations (led_fx_table.h, the firmware checks the same).
@@ -194,7 +197,12 @@ function fxInfo(base) { // kind and main hue of a background (VialRGB id or ours
   for (const [i, , label, kind, hue] of T.qmk) if (base === i) return { kind, hue, label };
   return { kind: FXK.BG, hue: 255, label: DATA.ledEffects[base] || "" };
 }
-const FX_FIELDS = ["base", "fxEffect", "fxBlend", "fxColour", "rxHue", "rxSat", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim", "fxBright", "curve"];
-// [15]: key-press brightness with bit 7 set (v21; without it the keyboard keeps its value); [16]: the output curve, the same way (v25b).
-const fxBytes = (l) => [0xf6, 0x1c, 1, l.base, l.fxEffect, l.fxBlend, l.fxColour, l.rxHue, l.rxSat, l.fxSpeed, l.fxWidth, l.fxRadius, l.fxFade, l.fxEchoes, l.fxDim, 0x80 | (l.fxBright || 0), 0x80 | (l.curve || 0)];
+const FX_FIELDS = ["base", "fxEffect", "fxBlend", "fxColour", "rxHue", "rxSat", "fxSpeed", "fxWidth", "fxRadius", "fxFade", "fxEchoes", "fxDim", "fxBright", "curve", "fxMax"];
+// v27 screensaver (0xF6 0x20); the level tables are kb_config.c's.
+const SS_FIELDS = ["ssAfter", "ssEffect", "ssPet", "ssHue", "ssSat", "ssVal", "ssSpeed"];
+const SS = { after: [0, 1, 2, 5, 10, 15, 30], sat: [255, 219, 182, 146, 109, 73, 36, 0], val: [40, 10, 20, 30, 50, 60, 80, 100], speed: [128, 64, 192, 255] };
+const IDLE_MIN = [0, 1, 2, 5, 10, 30]; // "Turn off after no use" (user_config.c)
+const ssBytes = (l) => [0xf6, 0x20, 1, l.ssAfter, l.ssEffect, l.ssPet ? 1 : 0, l.ssHue, l.ssSat, l.ssVal, l.ssSpeed];
+// [15]: key-press brightness with bit 7 set (v21; without it the keyboard keeps its value); [16]: the output curve, the same way (v25b); [17]: effects at once (v27).
+const fxBytes = (l) => [0xf6, 0x1c, 1, l.base, l.fxEffect, l.fxBlend, l.fxColour, l.rxHue, l.rxSat, l.fxSpeed, l.fxWidth, l.fxRadius, l.fxFade, l.fxEchoes, l.fxDim, 0x80 | (l.fxBright || 0), 0x80 | (l.curve || 0), l.fxMax ? 0x80 | l.fxMax : 0];
 // Old backups / pages: QMK key-press effects -> the nearest overlay (as led_fx.c: effect_of_react).

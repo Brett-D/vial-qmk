@@ -18,6 +18,8 @@
 #include "trackpad.h"
 #include "config_mode.h"
 #include "oled_pages.h"
+#include "display.h"
+#include "perf.h"
 
 #define VIEW_EE_OFFSET 78 // after the LED map (led_map.c: 76 bytes)
 #define VIEW_EE_MAGIC 0xA5
@@ -82,7 +84,7 @@ void oled_pages_init(void) {
 // The page itself and the OLED_PAGE key: page_key.c. Saved here when changed.
 void oled_page_changed(uint8_t page) {
     uint8_t ee[2] = {VIEW_EE_MAGIC, (uint8_t)(page | (addr_no_enter ? 0x80 : 0))};
-    eeconfig_update_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee));
+    PERF_SPAN(PF_FLASH, eeconfig_update_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee)));
 }
 
 // Master: send the current page and its values (only those it shows).
@@ -362,6 +364,21 @@ static void page_leds(void) {
     write_bar(view.led_val, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
 }
 
+// "L 3ms": a half's longest loop pass (10 us units) in whole ms, rounded up.
+static void lag_line(char half, uint16_t v10) {
+    char     s[6] = {half, ' ', ' ', '-', ' ', 0};
+    uint16_t ms   = (v10 + 99) / 100;
+    if (ms > 99) {
+        memcpy(&s[1], ">99 ", 4);
+    } else if (v10) {
+        s[1] = ms >= 10 ? '0' + ms / 10 : ' ';
+        s[2] = '0' + ms % 10;
+        s[3] = 'm';
+        s[4] = 's';
+    }
+    oled_write(s, v10 >= 1000); // 10 ms or more: inverted
+}
+
 static void page_info(void) {
     static const char date[] = QMK_BUILDDATE; // "YYYY-MM-DD-hh:mm:ss"
     oled_write_P(PSTR("INFO "), true);
@@ -389,7 +406,12 @@ static void page_info(void) {
     oled_write(boots[view.boot < 5 ? view.boot : 4], view.boot == BOOT_CRASH);
     if (view.crash) {
         write_hex5(view.pc);
+        return;
     }
+    // v27: each half's longest main-loop pass over the last 10 s (perf.c), in
+    // ms: about the longest a key press can wait to be seen.
+    lag_line('L', display_left_loop());
+    lag_line('R', perf_loop_max());
 }
 
 // Last line: page number, "W" while the mouse wiggler is on.
@@ -406,6 +428,9 @@ static void footer(uint8_t page) {
 bool oled_pages_render(void) {
     static uint8_t last  = 0xFF;
     uint8_t        shown = view.crash == 2 ? 0xFE : view.page; // 0xFE: the crash banner
+    if (shown == OLED_PAGE_INFO && display_menu_showing()) {
+        shown = 0xFD; // v27: the Display menu over the INFO page
+    }
     bool entered = shown != last;
     if (entered) {
         oled_clear();
@@ -424,6 +449,9 @@ bool oled_pages_render(void) {
             page_leds();
             break;
         case OLED_PAGE_INFO:
+            if (display_menu_render()) {
+                return true; // the menu has the whole screen (no footer)
+            }
             page_info();
             break;
         case OLED_PAGE_PET:

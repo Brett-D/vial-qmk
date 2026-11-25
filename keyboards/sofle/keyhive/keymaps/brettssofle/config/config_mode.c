@@ -33,6 +33,10 @@
 //                        selected, hold the left knob and tap a key to copy.
 
 #include "config_internal.h"
+#include "display.h"
+#ifdef RGB_MATRIX_ENABLE
+#    include "screensaver.h"
+#endif
 
 // Letters for the connect check (no I/O/Q/Z/B/G/V to avoid look-alikes). One
 // letter is enough: it is only shown by the page that received the HELLO, so
@@ -450,6 +454,19 @@ bool config_mode_active(void) {
     return cfg.state != ST_OFF;
 }
 
+// Master: the right OLED shows its pages (no config, CONF?, network, delivery or calibration screen).
+bool config_mode_pages_visible(void) {
+    if (cfg.state != ST_OFF || hid.state == HS_ASK || hid.state == HS_ACTIVE || deliver_state() != DL_OFF || config_mode_led_cal_busy()) {
+        return false;
+    }
+#ifdef NETWORK_ENABLE
+    if (net_mode_active()) {
+        return false;
+    }
+#endif
+    return true;
+}
+
 void config_mode_toggle(void) {
     if (hid.state == HS_ASK) {
         return; // a web session prompt is on screen
@@ -812,6 +829,11 @@ static bool     net_type_key(keyrecord_t *record) {
 #endif
 
 bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
+#ifdef RGB_MATRIX_ENABLE
+    if (record->event.pressed) {
+        screensaver_input(); // a key or knob ends the screensaver's preview (the idle time restarts by itself)
+    }
+#endif
     // A web page asking for a session (CONF? Web): its answer comes first, so
     // nothing else can take the key (v24, Brett: in network mode the right
     // knob did nothing while the address it had typed was still going out).
@@ -879,11 +901,26 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
             held_swallowed[row] |= (matrix_row_t)1 << col;
             return false;
         }
+        // v27: the OLED is Off (Display menu or the config page): a knob press
+        // wakes it. The right knob's press is used up (the page stays); the left
+        // knob's still does its own job.
+        if (is_key && ev->pressed && is_knob(row, col) && display_is_off()) {
+            display_wake();
+            if (row == KNOB_R_ROW && col == KNOB_R_COL) {
+                held_swallowed[row] |= (matrix_row_t)1 << col;
+                return false;
+            }
+        }
 #ifdef PET_ENABLE
         if (pet_process(record, oled_page_current() == OLED_PAGE_PET)) {
             return false; // the right knob chooses care on the pet page
         }
 #endif
+        // v27: the right knob turns the Display menu on the INFO page (display.c).
+        if (IS_ENCODEREVENT(*ev) && ev->key.col == 1 && ev->pressed && oled_page_current() == OLED_PAGE_INFO && config_mode_pages_visible() &&
+            display_menu_turn(ev->type == ENCODER_CW_EVENT ? 1 : -1)) {
+            return false;
+        }
         return true;
     }
 

@@ -11,10 +11,14 @@
 // right-knob turn opens the menu (Feed / Play / Sleep / Clean / Next, wraps);
 // a tap then does the shown choice, and "Next" leaves. A 0.5-2 s hold also
 // leaves, with or without the menu.
+//
+// v27, the INFO page: the same with the Display menu (display.c): a turn opens
+// it, a tap does the shown choice, a 0.5-2 s hold leaves the page.
 
 #include "brettssofle.h"
 #include "pet.h"
 #include "oled_pages.h"
+#include "display.h"
 
 #define TAP_MS 500     // pet page: shorter = tap
 #define LEAVE_MS 1000  // other pages: a release before this changes the page
@@ -41,6 +45,7 @@ void oled_page_next(void) {
         page = (page + 1) % OLED_PAGE_COUNT; // no pet: skip its page
     }
     pet_menu_close();
+    display_menu_close();
     oled_page_changed(page);
 }
 
@@ -65,6 +70,11 @@ void oled_page_key(keyrecord_t *record) {
             return; // did the care action shown in the open menu
         }
         oled_page_next(); // tap with the menu closed, "Next", or a hold
+    } else if (page == OLED_PAGE_INFO && display_menu_open()) {
+        if (held < TAP_MS && display_menu_press()) {
+            return; // did the Display menu's choice
+        }
+        oled_page_next(); // a hold leaves the page (and closes the menu)
     } else if (held < LEAVE_MS) {
         oled_page_next();
     }

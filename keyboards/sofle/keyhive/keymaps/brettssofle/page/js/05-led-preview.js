@@ -31,6 +31,17 @@ function pvFrame(now, cv = $("fxCanvas")) {
   const ev = [];
   for (const e of PV.ev) { const el = Math.min(65535, Math.floor(now - e.born)); const x = FX.event(p, e.x, e.y, el, (Math.floor(e.born) >>> 0)); if (FX.alive(p, x)) ev.push(x); }
   PV.ev = PV.ev.filter((e) => now - e.born < 6000);
+  const shown = ev.slice(FX.firstEvent(ev.length, l.fxMax || 8)); // v27: only the newest "max effects at once"
+  // v27 screensaver preview: fades in, 10 s, fades out (screensaver.c), mixed under the key-press layer.
+  let ssK = 0, ssCtx = null;
+  if (l.ssOk && (PV.ss || PV.ssLevel)) {
+    const on = !!PV.ss && now - PV.ss.born < 10000;
+    PV.ssLevel = FX.ssStep(PV.ssLevel || 0, Math.min(100, Math.max(0, Math.floor(now - (PV.ssT || now)))), on);
+    if (!on) PV.ss = null;
+    ssK = FX.ssShare(PV.ssLevel);
+    ssCtx = { t, hue: l.ssHue, sat: SS.sat[l.ssSat], val: Math.floor(SS.val[l.ssVal] * (l.max || 255) / 100), spd: SS.speed[l.ssSpeed], wpm: 0, n: 0, hx: [], ht: [] };
+  }
+  PV.ssT = now;
   const want = effect && ev.length ? 255 - l.fxDim * 28 : 255;
   PV.dim = PV.dim < want ? Math.min(want, PV.dim + 24) : Math.max(want, PV.dim - 24);
   const ctx = { t, hue: l.hue, sat: l.sat, val: l.val, spd: l.speed, wpm: FX.typingWpm(PV.ev.map((e) => Math.min(65535, Math.floor(now - e.born)))),
@@ -45,17 +56,21 @@ function pvFrame(now, cv = $("fxCanvas")) {
       const o = l.base >= DATA.fxTable.ownBg ? FX.background(l.base, ctx, x, y) : pvQmkBase(l.base, x, y, t, l);
       rgb = FX.hsv2rgb(o.h, o.s, o.v);
     }
+    if (ssK && l.enable && !(flag & 2 && l.zone === 2)) {
+      const o = FX.background(DATA.fxTable.ownBg + l.ssEffect, ssCtx, x, y);
+      rgb = FX.ssMix(rgb, FX.hsv2rgb(o.h, o.s, o.v), ssK);
+    }
     rgb = rgb.map((v) => v * 256); // 8.8, as led_fx_pixel
     if (l.enable && effect) {
       if (PV.dim !== 255) rgb = rgb.map((v) => (v * PV.dim) >> 8);
       let best = 0, bj = 0;
-      ev.forEach((e, j) => { const a = FX.intensity(p, e, x, y); if (effect === FX.E.HEAT) best += a; else if (a > best) { best = a; bj = j; } });
+      shown.forEach((e, j) => { const a = FX.intensity(p, e, x, y); if (effect === FX.E.HEAT) best += a; else if (a > best) { best = a; bj = j; } });
       if (best) {
-        const v = FX.overlayV(s.bright, l.val, l.max || 255), top = FX.hsv2rgb(FX.hue(p, ev[bj], l.hue, x, y), FX.sat(p), v);
+        const v = FX.overlayV(s.bright, l.val, l.max || 255), top = FX.hsv2rgb(FX.hue(p, shown[bj], l.hue, x, y), FX.sat(p), v);
         FX.blend16(s.blend, rgb, top, Math.min(255, best), v);
       }
     }
-    if (pg && pg.type && l.enable && !(flag & 2 && l.zone === 2)) {
+    if (pg && pg.type && l.enable && !(flag & 2 && l.zone === 2) && !(PV.ssLevel && !l.ssPet)) { // screensaver_pet_ok
       const o = FX.petPx(pg, x, y, flag & 2 ? 1 : 0), a = FX.petAlpha(pg, o.a, FX.petK(PV.pet.level));
       if (a) { const v = FX.div255(FX.overlayV(l.fxBright || 0, l.val, l.max || 255) * o.v); FX.blend16(0, rgb, FX.hsv2rgb(o.h, o.s, v), a, v); }
     }

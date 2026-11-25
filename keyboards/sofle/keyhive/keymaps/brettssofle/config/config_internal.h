@@ -96,7 +96,9 @@ enum cfg_hid_cmd {
     CMD_PET_SET     = 0x1A, // flags (1 on, 2 can die), decay speed, name
     CMD_PET_RESTORE = 0x1B, // species, stage (restoring a backup)
     CMD_PET_GLOW    = 0x1D, // v26: the pet's LED reactions + big pet: 0 get, 1 set, 2 test
-    CMD_PREFS       = 0x1E, // v26: 0 get, 1 set: [3] bit 0 = Enter after the network address
+    CMD_PREFS       = 0x1E, // v26: 0 get, 1 set: [3] bit 0 = Enter after the network address; v27: [5]-[7] the OLED display
+    CMD_PERF        = 0x1F, // v27 loop profile (perf.h): 0 left half, 1 right half, 2 reset both
+    CMD_SSAVER      = 0x20, // v27 LED screensaver: 0 get, 1 set (preview; saved with the lighting), 2 show now, 3 stop showing
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };

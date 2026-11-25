@@ -16,8 +16,8 @@ Keymap for a Keyhive Sofle v2 with:
 | `CYCLE` (Raise + top-left) | Switches the default layer between QWERTY and Colemak-DH (saved) |
 | `CONFIG` (Raise + top-right) | Config mode: edit the keyboard from any browser with nothing installed (see [Config mode](#config-mode)) |
 | Encoders | Left: volume, press = mute. Right: page up/down, press = next OLED page (`OLED_PAGE`) |
-| LEDs | Per-key RGB Matrix with two layers: a **whole-keyboard** effect (static colour, rainbows, raindrops, …) and a **key-press** effect (reactive, splash, …) drawn on top in its own colour; presses light up and fade back into the whole-keyboard effect. Either can be off, so a single effect works too (`leds/led_fx.c`, `leds/led_fx_draw.c`, `rgb_matrix_user.inc`). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Set it all in config mode; Vial (VialRGB) can pick single effects |
-| Right OLED | Five pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime, last start), **5 pet** (see *OLED pet*; skipped when the pet is off). A **W** next to the page number means the mouse wiggler is on. Sleeps after 1 minute of no input on **either** half. Shows **CONFG** in config mode |
+| LEDs | Per-key RGB Matrix with two layers: a **whole-keyboard** effect (static colour, rainbows, raindrops, …) and a **key-press** effect (reactive, splash, …) drawn on top in its own colour; presses light up and fade back into the whole-keyboard effect. Either can be off, so a single effect works too (`leds/led_fx.c`, `leds/led_fx_draw.c`, `rgb_matrix_user.inc`). **LED zones**: effect on keys + underglow, effect on keys with a solid-colour underglow, or keys only. Turns off after 1 minute (changeable: never / 1 / 2 / 5 / 10 / 30 min) without key, knob or trackpad use; comes back on the next input. Optional **screensaver** (v27): after its own idle time the lights fade to a chosen effect until the next input. Set it all in config mode; Vial (VialRGB) can pick single effects |
+| Right OLED | Five pages, cycled with the right knob press (`OLED_PAGE`, remappable; the page is remembered): **1 status** (default layer, active layer, Caps/Num lock, mods S C A G), **2 trackpad** (live Z with bar, peak, last peak, press-to-click on/off, threshold, release Z), **3 LEDs** (effect, zone, brightness), **4 info** (build date/time, uptime, both halves' versions, last start, each half's longest main-loop pass over the last 10 s), **5 pet** (see *OLED pet*; skipped when the pet is off). A **W** next to the page number means the mouse wiggler is on. Sleeps after 1 minute of no input on **either** half (changeable). **Display menu** on the INFO page (v27): brightness, sleep time, off — see *Right OLED display*. Shows **CONFG** in config mode |
 
 ### Mouse wiggler
 
@@ -248,6 +248,89 @@ key-press effects with 8 presses at once 0.38–1.0 ms (ring 0.69 ms, echo
 rings 1.0 ms), up to ~1.2 ms on the first frame of a new press. QMK renders
 the background in 5 slices per frame with one time per frame (`g_rgb_timer`
 is latched at the start), so the slicing adds no stepping.
+
+### LED screensaver (v27)
+
+Brett: "could we also add a led mode to switch too if im not using the
+keyboard for a certain time like a screen saver?" LEDs tab → **Screensaver**:
+
+- **Screensaver after no use**: Off (default), 1, 2, 5, 10, 15 or 30 min
+  without a key, knob or trackpad input. The lights then fade (1 s, eased)
+  to the chosen effect — one of our own backgrounds (aurora, starfield,
+  ocean, candle, …) with its own hue, saturation, brightness (default 40 %
+  of the maximum) and speed — and fade back on the next input. That first
+  key is still typed.
+- **Turn off after no use** still counts from the last input: with off at
+  2 min and the screensaver at 1 min, the screensaver runs from 1 to 2 min,
+  then the lights go dark. If off comes first, there is no screensaver (the
+  page warns).
+- **Pet reactions** can still play over it (default on).
+- Not in config mode, LED calibration, typed delivery, network mode or while
+  the config page is connected; **Preview** shows it for 10 s (on the page's
+  preview and on the keyboard; any key, knob or trackpad ends it).
+- The left half decides (it sees all input) and sends the target and the
+  settings to the right half in the lighting RPC; each half fades on its own
+  clock, so they enter and leave together. It's mixed into each frame at
+  flush (`leds/screensaver.c`, `rgb_driver.c`), whatever the normal lighting
+  is, under the key-press layer, through the same curve and cap. Going dark
+  (idle-off, sleep) resets it, so waking shows the normal lighting at once.
+
+### Max effects at once (v27)
+
+LEDs tab → On key press → **Max effects at once** (1-8, default 4): only the
+newest that many presses animate; older ones end early. Each live press costs
+time on every frame for every LED (`led_fx_frame_begin`).
+
+### Right OLED display (v27)
+
+Brett: "maybe should add a brightness slider for the oled display as well or
+a menu to turn off via menu on the display and adjust brightness".
+
+- On the keyboard: on the **INFO** page, **turn the right knob** to open
+  the Display menu (on that page only, the turn isn't PgUp/PgDn). Turns move
+  between **Brite** / **Sleep** / **Off** / **Back**; a **tap** on Brite or
+  Sleep edits it (turns change it live, another tap saves); **Off** turns the
+  screen off; **Back** (or 6 s without a turn) closes it; a 0.5-2 s hold
+  leaves the page. The menu only reacts while the INFO page is really on
+  screen; CONF? confirm and the NET screen's knob come first.
+- **Off**: the screen stays off until a knob press: the right knob's press
+  only wakes it (the page doesn't change), the left knob's also does its own
+  job. Config, CONF?, network and delivery screens always show.
+- On the config page: Trackpad tab → **Display (right OLED)**.
+- Brightness 1-5 (16 / 64 / 128 / 192 / 255; 3 = before v27); sleep after
+  30 s, 1 (default), 2, 5, 10 or 30 min (no "never": OLED burn-in). Saved on
+  the left half (EECONFIG's 32-bit keyboard word, `common/kb_config.c`; 0 =
+  defaults, so an EEPROM reset gives the defaults and nothing else moves),
+  sent to the right half with `RPC_ID_USER_DISP` (`oled/display.c`), and in
+  backups.
+
+### Responsiveness (v27)
+
+Brett: "keyboard is also lagging sometimes, Im not sure if its led overload?"
+Each half times every pass of QMK's main loop (`common/perf.c`, the RP2040's
+1 MHz timer) in sections: scan + split sync, keys/knobs/trackpad (left) or
+OLED I2C (right), our LED backgrounds, the LED flush (key-press effects, pet,
+screensaver, curve, data out), OLED drawing, dither re-sends, pet, sync to the
+right half, config/network, and EEPROM writes. A key is read once per pass,
+so the longest pass is about the longest a press waits to be seen (plus the
+5 ms debounce; right-half keys also wait for the left half's next pass).
+
+- The INFO page's last lines: `L 3ms` / `R 4ms`, each half's longest pass
+  over the last 10 s (inverted from 10 ms).
+- Config page, Trackpad tab → **Responsiveness** → Measure: both halves
+  every second (longest and average pass, worst since reset and its biggest
+  section, passes over 10 ms, each section's longest), Reset, Copy.
+- Raw HID `0xF6 0x1F` (0 left, 1 right, 2 reset); the right half's numbers
+  come back in the `RPC_ID_USER_DISP` reply.
+
+What v27 changed for it (measured in an M0+ emulator, per frame and half):
+our own backgrounds only work out this half's 37 LEDs (they did all 74:
+e.g. lava lamp 0.40 → 0.20 ms); key-press effects capped at 4 (8 presses of
+echo rings 1.04 ms → 4 presses 0.62 ms); an LED send never waits for the last
+one to finish (it could busy-wait up to ~1.4 ms); and the pet's saves write
+only the bytes that changed (~5 instead of 31: every EEPROM write is flash
+programming with the whole chip stopped, and fewer log bytes make the ~100 ms
+wear-levelling rewrite ~3x rarer). The right OLED's I2C runs at QMK's 100 kHz: ~3.8 ms per 32-byte block while the screen changes (one block per pass, right half only; it doesn't hold up the split link, which the right half answers from its own thread).
 
 ## Config mode
 
@@ -503,11 +586,11 @@ To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE
 |---|---|
 | `keymap.c`, `config.h`, `rules.mk`, `vial.json` | keymap, layers, hooks (init / housekeeping / `process_record_user`), build options |
 | `brettssofle.h` | layers and custom keycodes only; each module has its own header |
-| `common/` | `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
+| `common/` | `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard word: OLED display, effect cap, screensaver), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
 | `trackpad/` | gestures and press-to-click (`trackpad.c`), Cirque Z + raw HID `0xF5` (`trackpad_z.c`), mouse wiggler |
-| `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key |
+| `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key, `display.c` (v27: brightness / sleep / off, the INFO page's Display menu, the right half's loop profile) |
 | `pet/` | the OLED pet (state, care, EEPROM record; drawing; `pet_motion.h`: where it goes and what it does) |
-| `leds/` | per-half WS2812 driver with the smooth output stage (`rgb_driver.c`), LED layout (`rgb_layout.c`, a source: `tools/gen.py rgb-layout` rewrites it), measured LED map and calibration, the lighting engine: settings / storage / split sync (`led_fx.c`), drawing (`led_fx_draw.c`), maths (`led_fx_core.h`) and the effect table (`led_fx_table.h`) |
+| `leds/` | per-half WS2812 driver with the smooth output stage (`rgb_driver.c`), LED layout (`rgb_layout.c`, a source: `tools/gen.py rgb-layout` rewrites it), measured LED map and calibration, the lighting engine: settings / storage / split sync (`led_fx.c`), drawing (`led_fx_draw.c`), maths (`led_fx_core.h`) and the effect table (`led_fx_table.h`), the screensaver (`screensaver.c`) |
 | `config/` | config mode: keyboard-only editor and keys (`config_mode.c`), web session and raw HID `0xF6` (`config_hid.c`), right-OLED sync and screens (`config_oled.c`), shared internals (`config_internal.h`), keystroke bridge, typed page delivery |
 | `net/` | USB network mode: CDC-NCM, lwIP glue, DHCP, HTTP server and JSON API |
 | `page/` | the config pages' sources: `page.html` (markup, styles) + `js/*.js` (its script, in order), `light.html`, `fx_core.js` (the engine maths for the preview), `loader.js` / `bootstrap.html` (typed delivery) |
@@ -660,8 +743,9 @@ clean), then the selected care action as a big icon with its name.
 On the config page (WebHID file mode or the network page), **Backup**
 downloads `sofle-backup-<date>.json` with every layer's keymap, the knobs,
 lighting (both effects, colours, brightness, speed, zones, underglow colour,
-idle timeout), the measured LED map, trackpad press-to-click settings and the
-wiggler. **Restore…** loads such a file and lists what would change per
+idle timeout, v27: effects at once and the screensaver), the measured LED map,
+trackpad press-to-click settings, the wiggler, the network-mode and (v27)
+right OLED display settings, and the pet's settings. **Restore…** loads such a file and lists what would change per
 section (untick what to keep); *Restore selected* writes it through the
 confirmed session, reads everything back and reports anything that didn't
 take — e.g. a Bootloader key, which Vial only accepts after unlocking. Files

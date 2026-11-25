@@ -6,6 +6,12 @@
 // session (or Vial unlock) VIA/Vial writes are refused. See config_mode.c.
 
 #include "config_internal.h"
+#include "perf.h"
+#include "display.h"
+#include "kb_config.h"
+#ifdef RGB_MATRIX_ENABLE
+#    include "screensaver.h"
+#endif
 
 /* ---------------------------------------------------------------------------
  * Web session (raw HID)
@@ -168,7 +174,8 @@ static void cfg_raw_hid(uint8_t *data) {
                 fx_settings_t n = {.base = led_mode_of(data[3]), .effect = data[4], .blend = data[5], .colour = data[6], .hue = data[7], .sat = data[8],
                                    .speed = data[9], .width = data[10], .radius = data[11], .fade = data[12], .echoes = data[13], .dim = data[14],
                                    .bright = data[15] & 0x80 ? data[15] & 0x7F : s.bright,  // v21 pages set bit 7; older ones keep it
-                                   .curve  = data[16] & 0x80 ? data[16] & 0x7F : s.curve}; // v25b, the same way
+                                   .curve  = data[16] & 0x80 ? data[16] & 0x7F : s.curve,  // v25b, the same way
+                                   .max    = data[17] & 0x80 ? data[17] & 0x7F : s.max};   // v27, the same way
                 ok = (n.base || !data[3]) && led_fx_set(&n); // refused: led_fx_table.h doesn't allow it
                 hid.led_dirty |= ok;
             } else if (arg == 2 && ok) {
@@ -182,8 +189,24 @@ static void cfg_raw_hid(uint8_t *data) {
                 led_fx_fire(data[3], data[4]);
             }
             led_fx_get(&s);
-            uint8_t reply[15] = {led_effect_of(s.base), s.effect, s.blend, s.colour, s.hue, s.sat, s.speed, s.width, s.radius, s.fade, s.echoes, s.dim, (uint8_t)(arg == 0 || ok), s.bright, (uint8_t)(0x80 | s.curve)};
-            memcpy(&data[3], reply, sizeof(reply)); // [15] = done (0 = refused), [16] = key-press brightness (v21), [17] = 0x80 | curve (v25b)
+            uint8_t reply[16] = {led_effect_of(s.base), s.effect, s.blend, s.colour, s.hue, s.sat, s.speed, s.width, s.radius, s.fade, s.echoes, s.dim, (uint8_t)(arg == 0 || ok), s.bright, (uint8_t)(0x80 | s.curve), (uint8_t)(0x80 | s.max)};
+            memcpy(&data[3], reply, sizeof(reply)); // [15] = done (0 = refused), [16] = key-press brightness (v21), [17] = 0x80 | curve (v25b), [18] = 0x80 | effects at once (v27)
+            return;
+        }
+        case CMD_SSAVER: { // v27: [3] after, [4] effect, [5] bit 0 pet reactions over it, [6] hue, [7] sat, [8] brightness, [9] speed (levels: kb_config.h)
+            ss_settings_t s;
+            screensaver_get(&s);
+            bool ok = hid_writes_allowed();
+            if (arg == 1 && ok) {
+                ss_settings_t n = {.after = data[3], .effect = data[4], .pet = data[5] & 1, .hue = data[6], .sat = data[7], .val = data[8], .speed = data[9]};
+                ok              = screensaver_set(&n);
+                hid.led_dirty |= ok;
+            } else if ((arg == 2 || arg == 3) && ok) {
+                screensaver_preview(arg == 2);
+            }
+            screensaver_get(&s);
+            uint8_t reply[10] = {0xA3, s.after, s.effect, s.pet ? 1 : 0, s.hue, s.sat, s.val, s.speed, (uint8_t)(arg == 0 || ok), screensaver_wanted() ? 1 : 0};
+            memcpy(&data[2], reply, sizeof(reply)); // [2] mark, [3]-[9] settings, [10] done, [11] showing now
             return;
         }
         case CMD_SET_ZONE: // preview: zone, underglow hue, underglow sat
@@ -291,13 +314,40 @@ static void cfg_raw_hid(uint8_t *data) {
             pet_raw_hid(data, hid_writes_allowed());
             return;
 #endif
-        case CMD_PREFS: // v26: [2] 0 get / 1 set; [3] bit 0 = Enter after the network address
+        case CMD_PREFS: { // v26: [2] 0 get / 1 set; [3] bit 0 = Enter after the network address
+            // v27: [5] 0x80 | OLED brightness 1-5, [6] 0x80 | sleep index, [7] 0x80 | off (a v26 page sends 0: unchanged)
+            uint8_t b, sl;
+            bool    o, ok = true;
+            display_get(&b, &sl, &o);
             if (arg == 1 && hid_writes_allowed()) {
                 net_addr_enter_set(data[3] & 1);
+                if (data[5] & 0x80 || data[6] & 0x80 || data[7] & 0x80) {
+                    ok = display_set(data[5] & 0x80 ? data[5] & 0x7F : b, data[6] & 0x80 ? data[6] & 0x7F : sl, data[7] & 0x80 ? data[7] & 1 : o);
+                }
+                display_get(&b, &sl, &o);
             }
             data[2] = 0xA1;
             data[3] = net_addr_enter() ? 1 : 0;
-            data[4] = arg == 1 ? (hid_writes_allowed() ? 1 : 3) : 0;
+            data[4] = arg == 1 ? (hid_writes_allowed() && ok ? 1 : 3) : 0;
+            data[5] = b;
+            data[6] = sl;
+            data[7] = o ? 1 : 0;
+            data[8] = OLED_BRIGHT_LEVELS;
+            data[9] = OLED_SLEEP_CHOICES;
+            return;
+        }
+        case CMD_PERF: // v27: [3] bit 0 = right half, bit 1 = valid; [4]... the report (perf.h)
+            memset(&data[2], 0, 30);
+            data[2] = 0xA2;
+            if (arg == 2) {
+                display_perf_reset();
+                data[3] = 2;
+            } else if (arg == 1) {
+                data[3] = 1 | (display_right_perf(&data[4]) ? 2 : 0);
+            } else {
+                perf_report(&data[4]);
+                data[3] = 2;
+            }
             return;
         case CMD_REQUEST:
             hid_request();

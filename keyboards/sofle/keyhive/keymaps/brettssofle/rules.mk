@@ -45,9 +45,9 @@ endif
 # everything tools/gen.py writes (not in git).
 EXTRAINCDIRS += $(addprefix $(BRETTS_DIR)/, common config leds oled pet trackpad generated)
 
-SRC += common/diag.c common/eeprom_layout.c common/brett_util.c common/user_config.c
+SRC += common/diag.c common/eeprom_layout.c common/brett_util.c common/user_config.c common/kb_config.c common/perf.c
 SRC += trackpad/trackpad.c trackpad/trackpad_z.c trackpad/wiggler.c
-SRC += oled/oled.c oled/oled_pages.c oled/page_key.c
+SRC += oled/oled.c oled/oled_pages.c oled/page_key.c oled/display.c
 SRC += pet/pet.c pet/pet_draw.c
 OPT_DEFS += -DPET_ENABLE
 # Config mode: keyboard-only mode (keystroke bridge), the web session over raw
@@ -62,7 +62,7 @@ ifneq ($(lastword $(BRETTS_GEN)),gen_rc=0)
     $(error generated/ could not be made (needs Python 3): $(BRETTS_GEN))
 endif
 ifeq ($(strip $(RGB_MATRIX_ENABLE)), yes)
-    SRC += leds/rgb_driver.c leds/rgb_layout.c leds/led_map.c leds/led_cal.c leds/led_fx.c leds/led_fx_draw.c
+    SRC += leds/rgb_driver.c leds/rgb_layout.c leds/led_map.c leds/led_cal.c leds/led_fx.c leds/led_fx_draw.c leds/screensaver.c
 endif
 
 # USB network config mode (net/): the keyboard re-enumerates with a CDC-NCM

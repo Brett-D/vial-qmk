@@ -29,6 +29,8 @@
 #include "led_fx.h"
 #include "config_mode.h"
 #include "rgb_driver.h"
+#include "screensaver.h"
+#include "perf.h"
 
 #define HALF_LEDS (RGB_MATRIX_LED_COUNT / 2)
 #ifndef FX_DITHER_MS
@@ -36,12 +38,17 @@
 #endif
 #define RGB_DRIVER_REFRESH_MS 250 // without flushes (effect off): the output again, so a lost transfer can't stick
 #define FX_DITHER_MIN 48 // below ~0.2 of the lowest level: off (a slow blink of the lowest level would show)
+// v27: a send started while the last one may still be going out would wait for
+// it (ws2812_flush busy-waits for the DMA): 37 LEDs x 30 us + the reset gap.
+#define WS_BUSY_US (WS2812_LED_COUNT * 30 + 300)
 
 static uint8_t  frame[WS2812_LED_COUNT][3];  // this frame's colours before the overlay
 static uint16_t target[WS2812_LED_COUNT][3]; // what goes out, 8.8 (after the overlay, cap and gamma)
 static uint8_t  err[WS2812_LED_COUNT][3];    // dither: rounding error carried to the next send
 static bool     dithering;                   // some target has a fraction: keep re-sending
 static uint16_t last_emit;
+static uint32_t last_emit_us;
+static bool     pending; // a send waits for the last one to finish (rgb_driver_task sends it)
 static bool     blanked; // the output is dark because the LEDs are off
 
 int rgb_matrix_led_index(int index) {
@@ -67,7 +74,7 @@ static void half_set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 // Sends target[] with the carried dither error.
-static void emit(void) {
+static void emit_now(void) {
     static bool seeded;
     if (!seeded) { // neighbours start out of step, so dim areas don't pulse together
         for (int i = 0; i < WS2812_LED_COUNT; i++) {
@@ -93,8 +100,24 @@ static void emit(void) {
         ws2812_set_color(i, o[0], o[1], o[2]);
     }
     ws2812_flush();
-    last_emit = timer_read();
-    dithering = frac;
+    last_emit    = timer_read();
+    last_emit_us = perf_us();
+    dithering    = frac;
+    pending      = false;
+}
+
+static bool ws_busy(void) {
+    return perf_us() - last_emit_us < WS_BUSY_US;
+}
+
+// v27: never wait for the LED data line; a send that would is made a little
+// later by rgb_driver_task (the next pass, well under a millisecond on).
+static void emit(void) {
+    if (ws_busy()) {
+        pending = true;
+        return;
+    }
+    emit_now();
 }
 
 // The LEDs are off on this half (idle timeout, turned off, USB suspend). QMK
@@ -109,10 +132,11 @@ static bool output_off(void) {
 static void blank(void) {
     memset(target, 0, sizeof target);
     blanked = true;
+    screensaver_blank(); // back from dark: the normal lighting, not a fade from the screensaver
     emit();
 }
 
-static void half_flush(void) {
+static void half_flush_body(void) {
     if (output_off()) {
         blank();
         return;
@@ -130,14 +154,19 @@ static void half_flush(void) {
             }
         }
     }
-    bool fx  = led_fx_frame_begin(cal);
-    bool pet = led_pet_frame_begin(cal); // v26: the pet's LED reaction
+    uint16_t ss  = cal ? 0 : screensaver_frame_begin(cal); // v27: its share of the frame (0 = not shown)
+    bool     fx  = led_fx_frame_begin(cal);
+    bool     pet = led_pet_frame_begin(cal); // v26: the pet's LED reaction
     for (int i = 0; i < WS2812_LED_COUNT; i++) {
         uint16_t o[3];
+        uint8_t  px[3] = {frame[i][0], frame[i][1], frame[i][2]};
+        if (ss) {
+            screensaver_pixel(first + i, px, ss);
+        }
         if (fx) {
-            led_fx_pixel(first + i, frame[i], o);
+            led_fx_pixel(first + i, px, o);
         } else {
-            for (uint8_t ch = 0; ch < 3; ch++) o[ch] = (uint16_t)frame[i][ch] << 8;
+            for (uint8_t ch = 0; ch < 3; ch++) o[ch] = (uint16_t)px[ch] << 8;
         }
         if (pet) {
             led_pet_pixel(first + i, o);
@@ -151,6 +180,12 @@ static void half_flush(void) {
     emit();
 }
 
+static void half_flush(void) {
+    perf_mark(PF_TASKS);
+    half_flush_body();
+    perf_mark(PF_FLUSH);
+}
+
 // keymap.c: housekeeping (both halves) and suspend_power_down_user (the
 // master's suspend loop, which has no housekeeping). Between frames the same
 // frame again with new dither values; dark as soon as the LEDs are off; and
@@ -161,7 +196,7 @@ void rgb_driver_task(void) {
         return;
     }
     uint16_t since = timer_elapsed(last_emit);
-    if ((dithering && since >= FX_DITHER_MS) || since >= RGB_DRIVER_REFRESH_MS) {
+    if (pending || (dithering && since >= FX_DITHER_MS) || since >= RGB_DRIVER_REFRESH_MS) {
         emit();
     }
 }

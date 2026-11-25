@@ -365,5 +365,15 @@ const FX = (() => {
   }
   const petK = (level) => 64 + Math.floor((Math.min(100, level) * 192) / 100);
   const petAlpha = (g, a, k) => (div255(a * g.env) * k) >> 8;
-  return { div255, CURVE, curve16, curveConvert, PET, PET_MS, petPrepare, petPx, petAlpha, petK, E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
+  // v27: key-press effects at once (fx_first_event) and the screensaver's fade (fx_ss_*).
+  const firstEvent = (n, max) => { if (!max) max = 8; return n > max ? n - max : 0; };
+  const SS_FADE_MS = 1000, SS_FULL = 4096;
+  function ssStep(level, dt, on) {
+    const d = Math.floor((dt * SS_FULL) / SS_FADE_MS);
+    if (on) return Math.min(SS_FULL, level + d);
+    return level <= d ? 0 : level - d;
+  }
+  const ssShare = (level) => (level >= SS_FULL ? 256 : smooth8(level >> 4));
+  const ssMix = (px, ss, k) => px.map((v, i) => (v * (256 - k) + ss[i] * k) >> 8);
+  return { firstEvent, ssStep, ssShare, ssMix, SS_FULL, div255, CURVE, curve16, curveConvert, PET, PET_MS, petPrepare, petPx, petAlpha, petK, E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
 })();

@@ -201,6 +201,20 @@ function renderLeds(ui) {
     $("fxSpeedV").textContent = Math.round((30 + l.fxSpeed * 15) / 14) + " keys/s";
     $("fxWidthV").textContent = pct(l.fxWidth, 15); $("fxRadiusV").textContent = Math.round((24 + l.fxRadius * 16) / 14) + " keys";
     $("fxFadeV").textContent = pct(l.fxFade, 15); $("fxEchoesV").textContent = l.fxEchoes + 2 + " rings"; $("fxDimV").textContent = l.fxDim ? "−" + pct(l.fxDim * 28, 255) : "no";
+    document.querySelectorAll("#fxSec .fxMaxRow").forEach((r) => r.classList.toggle("hidden", !on || !l.fxMax)); // v27
+    if (l.fxMax) { setIfIdle("fxMax", l.fxMax); $("fxMaxV").textContent = l.fxMax === 8 ? "8 (all)" : String(l.fxMax); }
+    // v27 screensaver
+    $("ssSec").classList.toggle("hidden", !l.ssOk);
+    if (l.ssOk) {
+      for (const k of ["ssAfter", "ssEffect", "ssHue", "ssSat", "ssVal", "ssSpeed"]) setIfIdle(k, l[k]);
+      if (document.activeElement !== $("ssPet")) $("ssPet").checked = !!l.ssPet;
+      $("ssHueV").textContent = Math.round(l.ssHue / 256 * 360) + "°";
+      $("ssSwatch").style.background = hsvToCss(l.ssHue, SS.sat[l.ssSat] ?? 255, 255);
+      const ssMin = SS.after[l.ssAfter] || 0, offMin = IDLE_MIN[l.idle] || 0;
+      const ssWarn = ssMin && offMin && offMin <= ssMin ? `The lights turn off after ${offMin} min without use, before the screensaver would start (${ssMin} min), so it never shows. Set "Turn off after no use" longer than ${ssMin} min, or to Never.` : "";
+      $("ssWarn").textContent = ssWarn;
+      $("ssWarn").classList.toggle("hidden", !ssWarn);
+    }
     // Soft warnings (led_fx_table.h: dark backgrounds, own colours); nothing is blocked.
     const warn = [];
     if (on && info.kind & FXK.DARK && l.fxBlend === 2) warn.push("Tint keeps the background's brightness: over a dark background the key-press effect is hard to see. Try Replace.");
@@ -254,6 +268,14 @@ function renderPad(ui) {
     if (S.wiggle) { $("wgOn").checked = S.wiggle.on; setIfIdle("wgEvery", S.wiggle.every); }
   $("netPrefs").classList.toggle("hidden", !S.prefs);
   if (S.prefs && document.activeElement !== $("netEnter")) $("netEnter").checked = S.prefs.addrEnter;
+    const disp = S.prefs && S.prefs.disp; // v27
+    $("dispPrefs").classList.toggle("hidden", !disp);
+    $("perfBox").classList.toggle("hidden", !disp);
+    if (disp) {
+      setIfIdle("dispBright", disp.bright); setIfIdle("dispSleep", disp.sleep);
+      if (document.activeElement !== $("dispOff")) $("dispOff").checked = disp.off;
+      $("dispBrightV").textContent = disp.bright + "/5" + (disp.bright === 3 ? " (default)" : "");
+    }
     setIfIdle("tpThr", t.threshold); setIfIdle("tpRel", t.release);
     $("tpThrV").textContent = t.threshold; $("tpRelV").textContent = t.release;
   } else {

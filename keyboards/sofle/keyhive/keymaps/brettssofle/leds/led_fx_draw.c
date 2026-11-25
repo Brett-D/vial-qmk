@@ -10,6 +10,9 @@
 #include "led_fx.h"
 #include "led_map.h"
 #include "config_mode.h"
+#include "rgb_driver.h"
+#include "screensaver.h"
+#include "perf.h"
 
 #ifdef RGB_MATRIX_ENABLE
 #    define FX_DIM_STEP 24 // per frame, background dim in / out
@@ -17,8 +20,14 @@
 static fx_settings_t fx; // this frame's settings (led_fx_get at frame start)
 static uint8_t       dim_now = 255;
 
+// One of our backgrounds at one LED: one copy for the LAYERED pass and the
+// screensaver (v27), instead of both inlining the whole set.
+__attribute__((noinline)) fx_hsv_t led_fx_bg_at(uint8_t id, const fx_bg_ctx_t *c, uint8_t x, uint8_t y) {
+    return fx_background(id, c, x, y);
+}
+
 // LAYERED's background pass for our own backgrounds (rgb_matrix_user.inc).
-bool led_fx_background(effect_params_t *params) {
+static bool background(effect_params_t *params) {
     RGB_MATRIX_USE_LIMITS(led_min, led_max);
     if (led_fx_base() < FX_OWN_BG) {
         for (uint8_t i = led_min; i < led_max; i++) {
@@ -37,12 +46,22 @@ bool led_fx_background(effect_params_t *params) {
                      .n = g_last_hit_tracker.count, .hx = hx, .ht = ht};
     c.wpm = fx_typing_wpm(c.n, ht); // from the presses both halves see (QMK's WPM counts on the left only)
     for (uint8_t i = led_min; i < led_max; i++) {
+        if (rgb_matrix_led_index(i) < 0) {
+            continue; // v27: the other half's LED (rgb_driver.c drops it anyway): half the work
+        }
         RGB_MATRIX_TEST_LED_FLAGS();
-        fx_hsv_t o   = fx_background(led_fx_base(), &c, g_led_config.point[i].x, g_led_config.point[i].y);
+        fx_hsv_t o   = led_fx_bg_at(led_fx_base(), &c, g_led_config.point[i].x, g_led_config.point[i].y);
         rgb_t    rgb = hsv_to_rgb((hsv_t){o.h, o.s, o.v});
         rgb_matrix_set_color(i, rgb.r, rgb.g, rgb.b);
     }
     return rgb_matrix_check_finished_leds(led_max);
+}
+
+bool led_fx_background(effect_params_t *params) {
+    perf_mark(PF_TASKS);
+    bool more = background(params);
+    perf_mark(PF_LEDBG);
+    return more;
 }
 
 // The pet gets excited when you type fast (pet_draw.c): the same typing speed as the meter.
@@ -87,19 +106,24 @@ bool led_fx_frame_begin(bool calibrating) {
     frame_v   = rgb_matrix_get_val();
     frame_hue = rgb_matrix_get_hue();
     fx_prepare(&prep, &fx);
-    bool any = false;
-    frame_n  = 0;
+    // The presses still lighting something (oldest first), then only the newest
+    // fx.max of them (v27, "Max effects at once": each one costs time per LED).
+    static fx_event_t live[LED_HITS_TO_REMEMBER];
+    uint8_t           n = 0;
     for (uint8_t j = 0; j < g_last_hit_tracker.count; j++) {
+        fx_event_prepare(&prep, &live[n], g_last_hit_tracker.x[j], g_last_hit_tracker.y[j], g_last_hit_tracker.tick[j], g_rgb_timer - g_last_hit_tracker.tick[j]);
+        if (fx_alive(&prep, &live[n])) n++;
+    }
+    bool any = n > 0;
+    frame_n  = 0;
+    for (uint8_t j = fx_first_event(n, fx.max); j < n; j++) {
         fx_event_t *e = &ev[frame_n];
-        fx_event_prepare(&prep, e, g_last_hit_tracker.x[j], g_last_hit_tracker.y[j], g_last_hit_tracker.tick[j], g_rgb_timer - g_last_hit_tracker.tick[j]);
-        if (fx_alive(&prep, e)) {
-            if (dkey[frame_n][0] != e->x || dkey[frame_n][1] != e->y5) {
-                dkey[frame_n][0] = e->x, dkey[frame_n][1] = e->y5;
-                memset(dcache[frame_n], 0xFF, FX_HALF_LEDS);
-            }
-            frame_n++; // only the presses still lighting something
-            any = true;
+        *e            = live[j];
+        if (dkey[frame_n][0] != e->x || dkey[frame_n][1] != e->y5) {
+            dkey[frame_n][0] = e->x, dkey[frame_n][1] = e->y5;
+            memset(dcache[frame_n], 0xFF, FX_HALF_LEDS);
         }
+        frame_n++;
     }
     // The background dims while a ripple runs (dim 0 = never), fading in and out.
     uint8_t want = any ? 255 - fx.dim * 28 : 255;
@@ -117,7 +141,7 @@ static bool     pet_ug_dark;
 bool led_pet_frame_begin(bool calibrating) {
     uint8_t  type, level;
     uint16_t t;
-    if (calibrating || !led_fx_pet_now(&type, &t, &level)) {
+    if (calibrating || !screensaver_pet_ok() || !led_fx_pet_now(&type, &t, &level)) {
         return false;
     }
     fx_pet_prepare(&pet_g, type, t);

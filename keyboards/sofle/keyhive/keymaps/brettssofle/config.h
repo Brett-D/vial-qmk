@@ -48,10 +48,10 @@
  * ------------------------------------------------------------------------ */
 // The stock timeout only sees the right half's own keys; oled.c uses the
 // synced activity timestamp so typing on the left / trackpad keeps it on.
+// The sleep time (default 1 min), brightness and Off are settings (v27, display.c).
 #define OLED_TIMEOUT 0
-#define OLED_SLEEP_TIMEOUT_MS 60000
 #define OLED_UPDATE_INTERVAL 50
-#define OLED_BRIGHTNESS 128
+#define OLED_BRIGHTNESS 128 // until the left half sends the brightness (level 3 = 128)
 
 /* ---------------------------------------------------------------------------
  * I2C (Cirque on the left, OLED on the right; both on GP2 SDA / GP3 SCL)
@@ -98,7 +98,9 @@
 // RPC_ID_USER_VIEW sends the right OLED's page and its values (oled_pages.c);
 // RPC_ID_USER_LEDFX sends the lighting settings and test ripples (led_fx.c).
 // New ids go at the end, so the existing ones keep their numbers.
-#define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX
+// RPC_ID_USER_DISP (v27, last so the others keep their numbers) sends the right OLED's display settings
+// and menu, and brings back the right half's loop profile (display.c).
+#define SPLIT_TRANSACTION_IDS_USER RPC_ID_USER_CFG, RPC_ID_USER_LEDMAP, RPC_ID_USER_VIEW, RPC_ID_USER_LEDFX, RPC_ID_USER_DISP
 
 // Press-to-click (latching): Z crossing the threshold for TRACKPAD_PRESS_DEBOUNCE
 // polls presses the left button; it stays held at normal touch pressure (for

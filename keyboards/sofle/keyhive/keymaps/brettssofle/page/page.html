@@ -220,6 +220,8 @@
             <div class="row fxOn"><span>Fade</span><input type="range" id="fxFade" min="0" max="15"><span class="v" id="fxFadeV"></span></div>
             <div class="row fxOn fxEchoRow"><span>Echo rings</span><input type="range" id="fxEchoes" min="0" max="3"><span class="v" id="fxEchoesV"></span></div>
             <div class="row fxOn"><span>Dim background while active</span><input type="range" id="fxDim" min="0" max="7"><span class="v" id="fxDimV"></span></div>
+            <div class="row fxOn fxMaxRow"><span>Max effects at once</span><input type="range" id="fxMax" min="1" max="8"><span class="v" id="fxMaxV"></span></div>
+            <div class="small dim fxOn fxMaxRow" style="margin:-2px 0 6px">Only the newest this many presses animate at once (older ones end early). Each one costs the keyboard time on every frame; 4 is plenty for typing.</div>
             <div class="small fxNote warn hidden" id="fxWarn"></div>
           </div>
           <h3 class="fxH">Underglow and power</h3>
@@ -228,6 +230,19 @@
           <div class="row ugRow"><span>Underglow hue</span><input type="range" id="ugHue" min="0" max="255"><span class="v"><span id="ugHueV"></span><span class="swatch" id="ugSwatch"></span></span></div>
           <div class="row ugRow"><span>Underglow saturation</span><input type="range" id="ugSat" min="0" max="255"><span class="v" id="ugSatV"></span></div>
           <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
+          <div id="ssSec" class="hidden">
+            <h3 class="fxH">Screensaver</h3>
+            <div class="row"><span>Screensaver after no use</span><select id="ssAfter"></select><span></span></div>
+            <div class="row ssOn"><span>Effect</span><select id="ssEffect"></select><span></span></div>
+            <div class="row ssOn"><span>Hue</span><input type="range" id="ssHue" min="0" max="248" step="8"><span class="v"><span id="ssHueV"></span><span class="swatch" id="ssSwatch"></span></span></div>
+            <div class="row ssOn"><span>Saturation</span><select id="ssSat"></select><span></span></div>
+            <div class="row ssOn"><span>Brightness</span><select id="ssVal"></select><span></span></div>
+            <div class="row ssOn"><span>Speed</span><select id="ssSpeed"></select><span></span></div>
+            <div class="row ssOn"><span>Pet reactions</span><label><input type="checkbox" id="ssPet"> still play over it</label><span></span></div>
+            <div class="btns"><button id="ssPreview">Preview</button><span class="dim small">Shows it here and on the keyboard for 10 s (any key, knob or trackpad ends it).</span></div>
+            <div class="small dim" style="margin:-2px 0 6px">After this long without a key, knob or trackpad, the lights fade (1 s) to this effect, and fade back on the next input (that key is still typed). <b>Turn off after no use</b> still counts from the last input, so set it longer than this (or Never) to see the screensaver. Not while the config page is connected.</div>
+            <div class="small fxNote warn hidden" id="ssWarn"></div>
+          </div>
           <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
           <div class="btns" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
             <button id="calStart">Calibrate LED positions…</button><button id="calTest">Test LED map</button><button id="mapReset">Use built-in LED map</button>
@@ -267,6 +282,19 @@
             <h2 style="margin-top:14px">Network mode</h2>
             <div class="row"><span>Typing the address</span><label><input type="checkbox" id="netEnter"> press Enter after typing <code>http://192.168.7.1</code></label><span></span></div>
             <p class="small dim">On the NET screen, a click of the right knob types the address into the address bar you have selected; with this on (the default) it also presses Enter, so the page opens. That Enter never answers the page's <b>CONF?</b> — confirm with the knob. Saved on the keyboard.</p>
+          </div>
+          <div class="hidden" id="dispPrefs">
+            <h2 style="margin-top:14px">Display (right OLED)</h2>
+            <div class="row"><span>Brightness</span><input type="range" id="dispBright" min="1" max="5"><span class="v" id="dispBrightV"></span></div>
+            <div class="row"><span>Sleep after no use</span><select id="dispSleep"><option value="0">30 seconds</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="3">5 minutes</option><option value="4">10 minutes</option><option value="5">30 minutes</option></select><span></span></div>
+            <div class="row"><span>Screen</span><label><input type="checkbox" id="dispOff"> off</label><span></span></div>
+            <p class="small dim">Also on the keyboard: on the <b>INFO</b> page, turn the right knob for the Display menu (Brite, Sleep, Off, Back; tap to choose, turn to change, tap again to save). While the screen is off, a knob press wakes it. The config, CONF? and network screens always show. Lower brightness and a short sleep help the OLED last (burn-in). Saved on the keyboard.</p>
+          </div>
+          <div class="hidden" id="perfBox">
+            <h2 style="margin-top:14px">Responsiveness</h2>
+            <div class="btns"><button id="perfRun">Measure</button><button id="perfReset">Reset</button><button id="perfCopy">Copy</button><span class="dim small" id="perfNote"></span></div>
+            <div id="perfOut" class="small"></div>
+            <p class="small dim">How long each pass of the keyboard's main loop takes, on each half (the longest over the last 10 s, and the worst since the last reset). A key is read once per pass, so the longest pass is about the longest a press can wait to be seen, plus the 5 ms debounce; keys on the right half also wait for the left half's next pass. If you notice lag, press Measure, keep using the keyboard until it happens, then Copy and send the numbers.</p>
           </div>
         </div>
         <h2 style="margin-top:14px">Live Z</h2>

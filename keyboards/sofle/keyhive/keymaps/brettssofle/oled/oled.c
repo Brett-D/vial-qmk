@@ -11,10 +11,9 @@
 #    include "brettssofle.h"
 #include "config_mode.h"
 #include "oled_pages.h"
+#include "display.h"
+#include "perf.h"
 
-#    ifndef OLED_SLEEP_TIMEOUT_MS
-#        define OLED_SLEEP_TIMEOUT_MS 60000
-#    endif
 
 static void render_default_layer(void) {
     switch (get_highest_layer(default_layer_state)) {
@@ -85,6 +84,17 @@ void oled_right_init(void) {
     }
 }
 
+static void draw(void) {
+    if (config_mode_oled_task()) {
+        return;
+    }
+    if (oled_pages_render()) {
+        return;
+    }
+    print_status_narrow();
+    oled_pages_status_footer();
+}
+
 bool oled_task_user(void) {
     if (is_keyboard_master()) {
         return false;
@@ -93,21 +103,13 @@ bool oled_task_user(void) {
     // Activity is synced from the master, so typing on either half or using
     // the trackpad keeps the screen on. Config, network and delivery screens
     // stay on regardless: the page or a long delivery isn't key activity.
-    if (last_input_activity_elapsed() > OLED_SLEEP_TIMEOUT_MS && !config_mode_oled_busy()) {
+    // v27: the sleep time, brightness and Off come from the master (display.c).
+    if (display_oled_off(config_mode_oled_busy(), last_input_activity_elapsed())) {
         oled_off();
         return false;
     }
     oled_on();
-
-    if (config_mode_oled_task()) {
-        return false;
-    }
-
-    if (oled_pages_render()) {
-        return false;
-    }
-    print_status_narrow();
-    oled_pages_status_footer();
+    PERF_SPAN(PF_OLED, draw());
     return false;
 }
 
