@@ -299,8 +299,12 @@ a menu to turn off via menu on the display and adjust brightness".
 - On the config page: Trackpad tab → **Display (right OLED)**.
 - Brightness 1-5 (16 / 64 / 128 / 192 / 255; 3 = before v27); sleep after
   30 s, 1 (default), 2, 5, 10 or 30 min (no "never": OLED burn-in). Saved on
-  the left half (EECONFIG's 32-bit keyboard word, `common/kb_config.c`; 0 =
-  defaults, so an EEPROM reset gives the defaults and nothing else moves),
+  the left half (a 32-bit settings word in EEPROM 3860–3867 with a check
+  word, `common/kb_config.c`; 0 = defaults, an EEPROM reset gives the
+  defaults; v27–v29 kept it in EECONFIG's keyboard word, which is QMK's
+  datablock version, so saving these made the LED map, lighting and OLED page
+  read as unset until their next save, which reset these; v29b moves it once
+  at start and puts the version back),
   sent to the right half with `RPC_ID_USER_DISP` (`oled/display.c`), and in
   backups.
 
@@ -387,8 +391,9 @@ remove, move), templates, a preview of what will be sent and *Record*, which
 records keys pressed while the page has focus (Esc stops). Saved in Vial's
 own format, so Vial shows and plays the same macros. The names are stored on
 the keyboard (EEPROM 3868–4063, 16 × 12 characters): that space comes off the
-end of Vial's macro buffer, now 1659 bytes instead of 1855. A macro made in
-Vial reaching into those last 196 bytes would be cut short. Assign them from
+end of Vial's macro buffer, now 1651 bytes instead of 1855 (v29b: 8 more for
+the settings word). A macro made in Vial reaching into those last 204 bytes
+would be cut short. Assign them from
 the picker's *My macros* group.
 
 **Shift pairs**: a key that sends something else with Shift held (e.g. `,`
@@ -659,7 +664,7 @@ To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE
 |---|---|
 | `keymap.c`, `config.h`, `rules.mk`, `vial.json` | keymap, layers, hooks (init / housekeeping / `process_record_user`), build options |
 | `brettssofle.h` | layers and custom keycodes only; each module has its own header |
-| `common/` | `macros` (v28: built-in macros, My macros' names), `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard word: OLED display, effect cap, screensaver), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records; v29: the right half's watchdog) |
+| `common/` | `macros` (v28: built-in macros, My macros' names), `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard settings word: OLED display, effect cap, screensaver; v29b: EEPROM 3860–3867), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records; v29: the right half's watchdog) |
 | `trackpad/` | gestures and press-to-click (`trackpad.c`), Cirque Z + raw HID `0xF5` (`trackpad_z.c`), mouse wiggler |
 | `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key, `display.c` (v27: brightness / sleep / off, the INFO page's Display menu, the right half's loop profile) |
 | `pet/` | the OLED pet (state, care, EEPROM record; drawing; `pet_motion.h`: where it goes and what it does) |

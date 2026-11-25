@@ -34,6 +34,7 @@ static uint8_t  i2c_fails;
 static uint16_t i2c_recoveries;
 static uint32_t recovered_at;
 static bool     recovering;
+static bool     init_ok = true; // v29b: false while the OLED hasn't come up (QMK's oled_task then never calls ours)
 
 static void note(bool ok) {
     if (ok) {
@@ -84,8 +85,10 @@ static void i2c_bus_clear(void) {
     palSetLineMode(I2C1_SDA_PIN, I2C1_SDA_PAL_MODE);
 }
 
-static void oled_recover_task(void) {
-    if (i2c_fails < OLED_FAILS_TO_RECOVER || recovering || (recovered_at && timer_elapsed32(recovered_at) < OLED_RECOVER_GAP_MS)) {
+// Right half, from housekeeping (not oled_task_user: QMK skips that while the
+// OLED failed to start, e.g. a restart while it held SDA low; Copilot review).
+void oled_right_task(void) {
+    if (is_keyboard_master() || (init_ok && i2c_fails < OLED_FAILS_TO_RECOVER) || recovering || (recovered_at && timer_elapsed32(recovered_at) < OLED_RECOVER_GAP_MS)) {
         return;
     }
     recovering   = true;
@@ -95,7 +98,8 @@ static void oled_recover_task(void) {
     }
     i2c_bus_clear();
     i2c_fails = 0;
-    if (oled_init(OLED_ROTATION_270)) { // the whole setup again; clears the buffer, so everything is sent
+    init_ok   = oled_init(OLED_ROTATION_270); // the whole setup again; clears the buffer, so everything is sent
+    if (init_ok) {
         uint8_t contrast[] = {0x00, 0x81, oled_get_brightness()}; // oled_init set its default contrast
         oled_send_cmd(contrast, sizeof(contrast));
     }
@@ -170,7 +174,7 @@ void oled_right_init(void) {
     // sofle.c only rotates the master's OLED (and ignores oled_init_user), so
     // re-initialise the right half's OLED in portrait for the narrow status.
     if (!is_keyboard_master()) {
-        oled_init(OLED_ROTATION_270);
+        init_ok = oled_init(OLED_ROTATION_270); // failed: oled_right_task clears the bus and retries
     }
 }
 
@@ -199,7 +203,6 @@ bool oled_task_user(void) {
     // Activity is synced from the master, so typing on either half or using
     // the trackpad keeps the screen on. Config, network and delivery screens
     // stay on regardless: the page or a long delivery isn't key activity.
-    oled_recover_task();
     // v27: the sleep time, brightness and Off come from the master (display.c).
     if (display_oled_off(config_mode_oled_busy(), last_input_activity_elapsed())) {
         oled_off();

@@ -1,7 +1,7 @@
 // Copyright 2026 Brett-D
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// EECONFIG_KB (kb_config.h): every field a code with 0 = its default.
+// The keyboard settings word (kb_config.h): every field a code with 0 = its default.
 //   bits 0-2   OLED brightness level - 1, xor 2 (default level 3)
 //   bits 3-5   OLED sleep index, xor 1 (default 1 min)
 //   bit  6     OLED off
@@ -18,16 +18,53 @@
 #include "kb_config.h"
 #include "perf.h"
 #include "eeprom.h"
-#include "nvm_eeprom_eeconfig_internal.h" // EECONFIG_KEYBOARD
+#include "eeconfig.h"
+#include "nvm_eeconfig.h"
+#include "nvm_eeprom_eeconfig_internal.h" // EECONFIG_KEYBOARD (v27-v29's spot, migrated)
 
-// The 32-bit keyboard word is always in QMK's EEPROM layout (and zeroed by an
-// EEPROM reset), but QMK only offers eeconfig_read/update_kb() to keyboards
-// without a datablock; this keymap uses the datablock, so it goes direct.
+// v29b: 8 bytes of our own (config.h, off the end of Vial's macro buffer): the
+// word and a check word. v27-v29 kept it in EECONFIG_KEYBOARD, which with a
+// datablock is QMK's datablock version: every save there made the LED map,
+// lighting, OLED page and network setting read as unset, and their next save
+// overwrote it with the version (80; Copilot review).
+#define KB_EE ((void *)(uintptr_t)BRETT_KB_CONFIG_EE_ADDR)
+#define KB_CHECK 0x6B635F31u // "kc_1"
+
+static bool kb_load(uint32_t *v) {
+    uint32_t w[2];
+    eeprom_read_block(w, KB_EE, sizeof(w));
+    *v = w[0];
+    return w[1] == (w[0] ^ KB_CHECK);
+}
 static uint32_t kb_read(void) {
-    return eeprom_read_dword(EECONFIG_KEYBOARD);
+    uint32_t v;
+    return kb_load(&v) ? v : 0; // nothing stored yet: defaults
 }
 static void kb_write(uint32_t v) {
-    eeprom_update_dword(EECONFIG_KEYBOARD, v);
+    uint32_t w[2] = {v, v ^ KB_CHECK};
+    eeprom_update_block(w, KB_EE, sizeof(w));
+}
+
+// keyboard_pre_init_user, before anything reads the datablock: move the word
+// v27-v29 left in EECONFIG_KEYBOARD and put QMK's datablock version back, so
+// the datablock (LED map, lighting, OLED page...) reads again.
+void kb_config_migrate(void) {
+    if (!eeconfig_is_enabled()) {
+        return; // a fresh / reset EEPROM: eeconfig_init() sets it all up
+    }
+    uint32_t v, old = eeprom_read_dword(EECONFIG_KEYBOARD);
+    if (!kb_load(&v)) {
+        kb_write(old == (EECONFIG_KB_DATA_VERSION) || old == 0xFFFFFFFFu ? 0 : old);
+    }
+    if (old != (EECONFIG_KB_DATA_VERSION)) {
+        eeprom_update_dword(EECONFIG_KEYBOARD, (EECONFIG_KB_DATA_VERSION));
+    }
+}
+
+// An EEPROM reset (eeconfig_init_kb_datablock) resets these too, as before.
+void eeconfig_init_kb_datablock(void) {
+    nvm_eeconfig_init_kb_datablock();
+    kb_write(0);
 }
 
 #include "led_fx_core.h" // FX_OWN_BG_COUNT

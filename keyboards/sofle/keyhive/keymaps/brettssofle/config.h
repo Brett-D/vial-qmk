@@ -14,10 +14,13 @@
 // The last 32 EEPROM bytes hold the OLED pet (pet.c): taken off the end of
 // Vial's macro buffer (1887 -> 1855 bytes), so nothing else moves. v28: the
 // 196 bytes below it hold the macros' names (common/macros.c), also taken off
-// the end of the macro buffer (1855 -> 1659 bytes).
+// the end of the macro buffer (1855 -> 1659 bytes). v29b: the 8 bytes below
+// those hold the keyboard settings word (common/kb_config.c; v27-v29 wrongly
+// kept it in EECONFIG_KEYBOARD, QMK's datablock version): 1659 -> 1651 bytes.
 #define BRETT_PET_EE_ADDR 4064
 #define BRETT_MACRO_NAMES_EE_ADDR 3868
-#define DYNAMIC_KEYMAP_EEPROM_MAX_ADDR 3867
+#define BRETT_KB_CONFIG_EE_ADDR 3860
+#define DYNAMIC_KEYMAP_EEPROM_MAX_ADDR 3859
 // Hold the four corner keys (` / ` top row and both Shifts) to unlock Vial.
 #define VIAL_UNLOCK_COMBO_ROWS { 0, 5, 3, 8 }
 #define VIAL_UNLOCK_COMBO_COLS { 0, 0, 0, 0 }

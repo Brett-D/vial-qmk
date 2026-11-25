@@ -28,6 +28,7 @@
 #include "perf.h"
 #include "display.h"
 #include "macros.h"
+#include "kb_config.h"
 
 // Default keymap. Everything here can be changed live in Vial.
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -209,6 +210,10 @@ static void rgb_idle_task(void) {
 }
 #endif
 
+void keyboard_pre_init_user(void) {
+    kb_config_migrate(); // v29b: before anything reads the datablock (kb_config.c)
+}
+
 void keyboard_post_init_user(void) {
     diag_init(); // a crash record from the previous run (diag.c)
 #ifdef OLED_ENABLE
@@ -238,6 +243,9 @@ void matrix_slave_scan_user(void) {
 void housekeeping_task_user(void) {
     perf_mark(PF_TASKS); // everything since the scan that isn't timed on its own
     diag_watchdog_feed(); // right half only (started there)
+#ifdef OLED_ENABLE
+    oled_right_task(); // right half: OLED I2C recovery (oled.c)
+#endif
 #ifdef RGB_MATRIX_ENABLE
     // RGB state is owned by the master and synced to the right half.
     if (is_keyboard_master()) {

@@ -39,6 +39,7 @@ typedef struct {
 
 void kb_config_get(kb_config_t *c);
 void kb_config_set(const kb_config_t *c); // saves (only when it changed)
+void kb_config_migrate(void);              // v29b, keyboard_pre_init_user: out of EECONFIG_KEYBOARD (QMK's datablock version)
 uint32_t kb_config_pack(const kb_config_t *c);
 void     kb_config_unpack(uint32_t raw, kb_config_t *c);
 

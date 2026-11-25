@@ -57,6 +57,9 @@ bool builtin_macro_process(uint16_t keycode, keyrecord_t *record) {
     uint8_t mods = get_mods(), weak = get_weak_mods();
     clear_mods();
     clear_weak_mods();
+#ifndef NO_ACTION_ONESHOT
+    clear_oneshot_mods(); // a pending one-shot modifier is used up, not added to the first key (OSM Ctrl + Delete line: Ctrl+Home; Copilot review)
+#endif
     send_keyboard_report();
     for (uint8_t i = 0; i < MAX_STEPS; i++) {
         uint16_t kc = pgm_read_word(&steps[keycode - BM_DEL_LINE][i]);
@@ -77,7 +80,7 @@ bool builtin_macro_process(uint16_t keycode, keyrecord_t *record) {
 #define NAMES_EE ((uint8_t *)(uintptr_t)BRETT_MACRO_NAMES_EE_ADDR)
 #define NAMES_MAGIC0 0x4D // "Mn"
 #define NAMES_MAGIC1 0x6E
-_Static_assert(BRETT_MACRO_NAMES_EE_ADDR == DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1, "the macro names sit right after Vial's macro buffer");
+_Static_assert(BRETT_KB_CONFIG_EE_ADDR == DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1 && BRETT_MACRO_NAMES_EE_ADDR == BRETT_KB_CONFIG_EE_ADDR + 8, "Vial's macro buffer, the settings word (8 bytes), then the macro names");
 _Static_assert(BRETT_MACRO_NAMES_EE_ADDR + 4 + MACRO_NAME_COUNT * MACRO_NAME_LEN <= BRETT_PET_EE_ADDR, "the macro names overlap the pet");
 
 static uint8_t names_sum(void) {

@@ -91,9 +91,10 @@ enum { EXPECTED(AS_ENUM) };
 LAYOUT_VALUES(CHECK_ACTUAL)
 
 // Not part of the mark (nothing moved when they were introduced), but pinned:
-// the pet's 32 bytes (pet.c) and, since v28, the macros' names (macros.c) sit
-// above the macro buffer, taken off its end.
-_Static_assert(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR == 3867 && BRETT_MACRO_NAMES_EE_ADDR == 3868 && BRETT_PET_EE_ADDR == 4064,
+// the pet's 32 bytes (pet.c), since v28 the macros' names (macros.c) and
+// since v29b the keyboard settings word (kb_config.c) sit above the macro
+// buffer, taken off its end.
+_Static_assert(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR == 3859 && BRETT_KB_CONFIG_EE_ADDR == 3860 && BRETT_MACRO_NAMES_EE_ADDR == 3868 && BRETT_PET_EE_ADDR == 4064,
                "the macro buffer end, the macro names or the pet moved: macros.c, pet.c and BRETT_EEPROM_LAYOUT_VERSION need a look");
 
 #define AS_VALUE(name, v) (uint32_t)(v),
