@@ -99,6 +99,7 @@ enum cfg_hid_cmd {
     CMD_PREFS       = 0x1E, // v26: 0 get, 1 set: [3] bit 0 = Enter after the network address; v27: [5]-[7] the OLED display
     CMD_PERF        = 0x1F, // v27 loop profile (perf.h): 0 left half, 1 right half, 2 reset both
     CMD_SSAVER      = 0x20, // v27 LED screensaver: 0 get, 1 set (preview; saved with the lighting), 2 show now, 3 stop showing
+    CMD_MACRO_NAME  = 0x21, // v28 names of Vial's macros: 0 get, 1 set (macros.c)
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };

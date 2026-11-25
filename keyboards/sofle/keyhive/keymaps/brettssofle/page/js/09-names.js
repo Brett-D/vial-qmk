@@ -5,11 +5,18 @@ function modsStr(m) {
   if (m & 1) parts.push("Ctl"); if (m & 2) parts.push("Sft"); if (m & 4) parts.push("Alt"); if (m & 8) parts.push("Gui");
   return (m & 0x10 ? "R" : "L") + parts.join("+");
 }
+// v28: "Ctrl+Shift+T" (R for right-hand modifiers).
+function modsName(m) {
+  return [[1, "Ctrl"], [2, "Shift"], [4, "Alt"], [8, "Win"]].filter(([b]) => m & b).map(([, n]) => (m & 0x10 ? "R" : "") + n).join("+");
+}
+// The unshifted legend of a two-legend key ("= +" -> "=").
+const legend1 = (v) => kcName(v).replace(/^(\S) \S$/, "$1");
 function kcName(v) {
   if (v === null || v === undefined) return "…";
+  if (v >= R.QK_MACRO && v < R.QK_MACRO + 16 && S.macroNames && S.macroNames[v - R.QK_MACRO]) return S.macroNames[v - R.QK_MACRO]; // v28
   const n = DATA.names[v];
   if (n !== undefined) return n;
-  if (v >= R.QK_MODS && v < R.QK_MOD_TAP) return modsStr((v >> 8) & 0x1f) + "(" + kcName(v & 0xff) + ")";
+  if (v >= R.QK_MODS && v < R.QK_MOD_TAP) return modsName((v >> 8) & 0x1f) + "+" + legend1(v & 0xff);
   if (v >= R.QK_MOD_TAP && v < R.QK_LAYER_TAP) return "MT(" + modsStr((v >> 8) & 0x1f) + "," + kcName(v & 0xff) + ")";
   if (v >= R.QK_LAYER_TAP && v < R.QK_LAYER_MOD) return "LT" + ((v >> 8) & 0xf) + "(" + kcName(v & 0xff) + ")";
   if (v >= R.QK_LAYER_MOD && v < R.QK_TO) return "LM(" + ((v >> 5) & 0xf) + "," + modsStr(v & 0x1f) + ")";

@@ -36,7 +36,7 @@
 #include "led_fx_core.h" // enum fx_pet
 #include "perf.h"
 
-#define PET_EE_ADDR ((void *)(uintptr_t)(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1))
+#define PET_EE_ADDR ((void *)(uintptr_t)BRETT_PET_EE_ADDR) // the last 32 EEPROM bytes (config.h)
 #define PET_EE_SIZE 32
 #define PET_MAGIC 0xB7
 #define PET_VERSION 3 // v26: LED reactions, big pet
@@ -101,7 +101,7 @@ typedef struct __attribute__((packed)) {
 static const uint32_t stage_at[PET_STAGE_COUNT] = {0, 10 * 4, 24 * 60 * 4, 72 * 60 * 4};
 _Static_assert(sizeof(pet_store_t) <= PET_EE_SIZE, "pet record too big");
 #ifdef TOTAL_EEPROM_BYTE_COUNT
-_Static_assert(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR + 1 + PET_EE_SIZE <= TOTAL_EEPROM_BYTE_COUNT, "the pet needs the last 32 EEPROM bytes (config.h)");
+_Static_assert(BRETT_PET_EE_ADDR + PET_EE_SIZE <= TOTAL_EEPROM_BYTE_COUNT && DYNAMIC_KEYMAP_EEPROM_MAX_ADDR < BRETT_PET_EE_ADDR, "the pet needs the last 32 EEPROM bytes (config.h)");
 #endif
 
 static pet_store_t p;

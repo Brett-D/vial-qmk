@@ -43,15 +43,17 @@ function render() {
 
   const ui = S.ui;
   renderNote();
-  setHtml($("tabs"), tabList().map((t, i) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
+  setHtml($("tabs"), tabList().map(([t, i]) => `<button type="button" class="tab ${i === ui.tab ? "on" : ""}" data-tab="${i}" ${S.mode === "hid" ? "" : "tabindex=-1"}>${t}</button>`).join(""));
   $("keysView").classList.toggle("hidden", ui.tab !== 0);
   $("ledView").classList.toggle("hidden", ui.tab !== 1);
   $("padView").classList.toggle("hidden", ui.tab !== 2);
   $("petView").classList.toggle("hidden", ui.tab !== 3);
+  $("macroView").classList.toggle("hidden", ui.tab !== 4);
   if (ui.tab === 0) { renderKeys(ui); renderPicker(ui); }
   if (ui.tab === 1) renderLeds(ui);
   if (ui.tab === 2) renderPad(ui);
   if (ui.tab === 3) renderPet();
+  if (ui.tab === 4) renderMacros();
   if (NAV.on) navPaint(false);
 }
 
@@ -83,6 +85,9 @@ function renderKeys(ui) {
     const knobSlot = isKnob && knobSel(ui) && ui.slot % 3 === 2 && (ui.slot < 3) === (k.r === KNOB_L[0]);
     const cls = ["k", isKnob ? "knob" : "", v === 1 ? "trns" : "", v === 0 ? "none" : "", selKey || knobSlot ? "sel" : "", selKey && ui.held ? "held" : ""].join(" ");
     let text = escapeHtml(v === null ? "…" : keyText(v));
+    const two = v !== null && /^(\S) (\S)$/.exec(keyText(v)), ko = v !== null && koFor(v, ui.layer);
+    if (ko) text = `<span class="ko" title="With Shift: ${escapeHtml(kcName(ko.replacement))} (shift pair)">⇧${escapeHtml(legend1(ko.replacement))}</span><br>${escapeHtml(two ? two[1] : keyText(v))}`;
+    else if (two) text = `<span class="sh">${escapeHtml(two[2])}</span><br>${escapeHtml(two[1])}`;
     if (!hid && (selKey || knobSlot) && ui.pending !== v) text += `<br><span class="new">→ ${escapeHtml(kcName(ui.pending))}</span>`;
     html += `<div class="${cls}" data-r="${k.r}" data-c="${k.c}" title="${hid ? "Click to change" : ""}" style="left:${k.x * U}px;top:${k.y * U}px;width:${U - 4}px;height:${k.h * U - 4}px">${text}</div>`;
   }
@@ -139,11 +144,19 @@ function renderPicker(ui) {
   $("list").innerHTML = rows;
 }
 
+// The picker's right-hand column: what a keycode is (v28: "Shift + =" for the shifted symbols).
+function pickHint(v) {
+  if (v === 0) return "nothing";
+  if (v === 1) return "lower layer";
+  if (v > 0x200 && v < 0x300 && DATA.names[v] !== undefined) return "Shift + " + legend1(v & 0xff);
+  if (v >= R.QK_MACRO && v < R.QK_MACRO + 16) return S.macros && S.macros[v - R.QK_MACRO] && S.macros[v - R.QK_MACRO].length ? "M" + (v - R.QK_MACRO) : "M" + (v - R.QK_MACRO) + ", empty";
+  return "";
+}
 let lastHidListKey = "";
 function renderHidList() {
   const q = $("search").value.trim().toLowerCase();
   const cur = S.ui ? currentValue(S.ui) : null;
-  const key = q + "|" + hidCat + "|" + cur;
+  const key = q + "|" + hidCat + "|" + cur + "|" + JSON.stringify(S.macroNames || []);
   if (key === lastHidListKey) return;
   lastHidListKey = key;
   $("hidCats").innerHTML = [["All", -1]].concat(DATA.cats.map((c, i) => [c, i])).map(([c, i]) =>
@@ -153,10 +166,11 @@ function renderHidList() {
     if (hidCat >= 0 && ci !== hidCat) return;
     const end = DATA.catStarts[ci + 1] || DATA.picker.length;
     const items = DATA.picker.slice(DATA.catStarts[ci], end).filter(([v, label]) =>
-      !q || (label || "").toLowerCase().includes(q) || kcName(v).toLowerCase().includes(q) || cat.toLowerCase().includes(q));
+      !q || (label || "").toLowerCase().includes(q) || kcName(v).toLowerCase().includes(q) || cat.toLowerCase().includes(q) ||
+      (DATA.kw[v] || "").includes(q) || pickHint(v).toLowerCase().includes(q));
     if (!items.length) return;
     html += `<div class="hdr">${cat}</div>` + items.map(([v, label]) =>
-      `<div class="item ${v === cur ? "cur" : ""}" data-kc="${v}"><span>${escapeHtml(label || "(none)")}</span><span class="dim small">${v === 0 ? "nothing" : v === 1 ? "lower layer" : ""}</span></div>`).join("");
+      `<div class="item ${v === cur ? "cur" : ""}" data-kc="${v}"${DATA.tips[v] ? ` title="${escapeHtml(DATA.tips[v])}"` : ""}><span>${escapeHtml(kcName(v) || label || "(none)")}</span><span class="dim small">${escapeHtml(pickHint(v))}</span></div>`).join("");
   });
   $("hidList").innerHTML = html || "<div class='dim' style='padding:8px'>No match. Use “keycode value” below for anything else.</div>";
 }
@@ -168,6 +182,16 @@ function renderAdv() {
   const kind = $("advKind").value;
   $("advLayer").classList.toggle("hidden", kind !== "lt");
   $("advMods").classList.toggle("hidden", kind === "lt");
+  const v = advValue();
+  $("advPreview").textContent = v === null ? "tick a modifier" : "→ " + kcName(v);
+}
+// v28: what the builder makes now (null: no modifier ticked).
+function advValue() {
+  const kind = $("advKind").value, base = +$("advBase").value & 0xff;
+  const mods = [...$("advMods").querySelectorAll("input:checked")].reduce((a, i) => a | +i.value, 0);
+  if (kind === "lt") return R.QK_LAYER_TAP | ((+$("advLayer").value & 0xf) << 8) | base;
+  if (!(mods & 0xf)) return null;
+  return kind === "mt" ? R.QK_MOD_TAP | ((mods & 0x1f) << 8) | base : ((mods & 0x1f) << 8) | base;
 }
 
 function setIfIdle(id, value) { const el = $(id); if (document.activeElement !== el && String(el.value) !== String(value)) el.value = value; }

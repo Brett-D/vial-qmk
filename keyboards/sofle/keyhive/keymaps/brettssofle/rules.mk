@@ -45,7 +45,7 @@ endif
 # everything tools/gen.py writes (not in git).
 EXTRAINCDIRS += $(addprefix $(BRETTS_DIR)/, common config leds oled pet trackpad generated)
 
-SRC += common/diag.c common/eeprom_layout.c common/brett_util.c common/user_config.c common/kb_config.c common/perf.c
+SRC += common/diag.c common/eeprom_layout.c common/brett_util.c common/user_config.c common/kb_config.c common/perf.c common/macros.c
 SRC += trackpad/trackpad.c trackpad/trackpad_z.c trackpad/wiggler.c
 SRC += oled/oled.c oled/oled_pages.c oled/page_key.c oled/display.c
 SRC += pet/pet.c pet/pet_draw.c

@@ -332,6 +332,54 @@ only the bytes that changed (~5 instead of 31: every EEPROM write is flash
 programming with the whole chip stopped, and fewer log bytes make the ~100 ms
 wear-levelling rewrite ~3x rarer). The right OLED's I2C runs at QMK's 100 kHz: ~3.8 ms per 32-byte block while the screen changes (one block per pass, right half only; it doesn't hold up the split link, which the right half answers from its own thread).
 
+### Keys, shortcuts, macros and shift pairs (v28)
+
+**Picker.** Symbol keys show both legends (`= +`, `- _`, `; :`, `1 !` …) on the
+keymap diagram and in the picker. *Shifted symbols* lists `+ _ { } | : " < > ?
+! @ # $ % ^ & * ( ) ~` (each one is Shift + its base key, e.g. `+` = `S(=)`).
+Search matches both legends, the names and words: *plus*, *equals*, *pipe*,
+*copy*, *lock*. *Shortcuts* holds ready-made combos (Ctrl+C/V/X/Z/Y/A/S/F,
+Ctrl+Shift+Esc, Alt+Tab, Alt+F4, Win+D/E/L/R/Tab, Win+Shift+S, Ctrl+Alt+Del,
+Ctrl+T/W, Ctrl+Shift+T, Ctrl+Tab); *Advanced → Shortcut: modifiers + key*
+builds any other one (Ctrl / Shift / Alt / Win, left or right, plus a key,
+with a preview). The diagram names them (`Ctrl+C`). The light page has the same groups and search, and keyboard-only mode the
+same groups; the macro editor and shift pairs are on the full page only.
+
+**Built-in macros** (*Macros* group; work without setting anything up;
+`common/macros.c`). Keys are sent ~6 ms apart and the modifiers you hold are
+lifted for the macro and put back after.
+
+| Key | Sends | Note |
+|---|---|---|
+| Delete line | Home, Shift+End, Shift+Right, Delete | takes the line break too; on an empty line it doesn't eat the next line's first letter (a second Delete would) |
+| Select line | Home, Shift+End | |
+| Duplicate line | Home, Shift+End, Ctrl+C, End, Enter, Ctrl+V | replaces the clipboard |
+| Delete word left / right | Ctrl+Backspace / Ctrl+Delete | |
+| New line below / above | End, Enter / Home, Enter, Up | |
+| Paste plain | Ctrl+Shift+V | most browsers and chat apps |
+| Screenshot | Win+Shift+S | Windows; Linux desktops differ |
+| Lock | Win+L | Windows; Linux desktops differ |
+| Show desktop | Win+D | Windows; Linux desktops differ |
+| Task Manager | Ctrl+Shift+Esc | Windows; Linux desktops differ |
+| Undo / Redo | Ctrl+Z / Ctrl+Y | some apps redo with Ctrl+Shift+Z |
+| Emoji | Win+. | Windows; Linux desktops differ |
+| Clipboard history | Win+V | Windows; Linux desktops differ |
+
+**My macros** (the *Macros* tab): Vial's 16 dynamic macros (M0–M15) with a
+name, a list of steps (tap / hold / release a key, type text, wait ms; insert,
+remove, move), templates, a preview of what will be sent and *Record*, which
+records keys pressed while the page has focus (Esc stops). Saved in Vial's
+own format, so Vial shows and plays the same macros. The names are stored on
+the keyboard (EEPROM 3868–4063, 16 × 12 characters): that space comes off the
+end of Vial's macro buffer, now 1659 bytes instead of 1855. A macro made in
+Vial reaching into those last 196 bytes would be cut short. Assign them from
+the picker's *My macros* group.
+
+**Shift pairs**: a key that sends something else with Shift held (e.g. `,`
+normally, `;` with Shift). They are Vial key overrides (32 slots, already in
+the EEPROM layout): trigger key with either Shift, the Shift is suppressed,
+on the layers you tick (all by default). Overrides made in Vial are listed too and kept as they are.
+
 ## Config mode
 
 Configure the keymap, knobs, LEDs (effect, colour, zones, idle-off) and trackpad press-to-click from
@@ -586,14 +634,14 @@ To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE
 |---|---|
 | `keymap.c`, `config.h`, `rules.mk`, `vial.json` | keymap, layers, hooks (init / housekeeping / `process_record_user`), build options |
 | `brettssofle.h` | layers and custom keycodes only; each module has its own header |
-| `common/` | `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard word: OLED display, effect cap, screensaver), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
+| `common/` | `macros` (v28: built-in macros, My macros' names), `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard word: OLED display, effect cap, screensaver), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
 | `trackpad/` | gestures and press-to-click (`trackpad.c`), Cirque Z + raw HID `0xF5` (`trackpad_z.c`), mouse wiggler |
 | `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key, `display.c` (v27: brightness / sleep / off, the INFO page's Display menu, the right half's loop profile) |
 | `pet/` | the OLED pet (state, care, EEPROM record; drawing; `pet_motion.h`: where it goes and what it does) |
 | `leds/` | per-half WS2812 driver with the smooth output stage (`rgb_driver.c`), LED layout (`rgb_layout.c`, a source: `tools/gen.py rgb-layout` rewrites it), measured LED map and calibration, the lighting engine: settings / storage / split sync (`led_fx.c`), drawing (`led_fx_draw.c`), maths (`led_fx_core.h`) and the effect table (`led_fx_table.h`), the screensaver (`screensaver.c`) |
 | `config/` | config mode: keyboard-only editor and keys (`config_mode.c`), web session and raw HID `0xF6` (`config_hid.c`), right-OLED sync and screens (`config_oled.c`), shared internals (`config_internal.h`), keystroke bridge, typed page delivery |
 | `net/` | USB network mode: CDC-NCM, lwIP glue, DHCP, HTTP server and JSON API |
-| `page/` | the config pages' sources: `page.html` (markup, styles) + `js/*.js` (its script, in order), `light.html`, `fx_core.js` (the engine maths for the preview), `loader.js` / `bootstrap.html` (typed delivery) |
+| `page/` | the config pages' sources: `page.html` (markup, styles) + `js/*.js` (its script, in order), `light.html` (`js/11b-macros.js`: macro editor and shift pairs), `fx_core.js` (the engine maths for the preview), `loader.js` / `bootstrap.html` (typed delivery) |
 | `tools/` | generators behind one entry point, `gen.py` (run by every build) |
 | `generated/` | everything the generators write; not in git |
 | `rgb_matrix_user.inc` | the LAYERED rgb_matrix effect (stays here: QMK looks for it in the keymap folder) |
@@ -745,7 +793,8 @@ downloads `sofle-backup-<date>.json` with every layer's keymap, the knobs,
 lighting (both effects, colours, brightness, speed, zones, underglow colour,
 idle timeout, v27: effects at once and the screensaver), the measured LED map,
 trackpad press-to-click settings, the wiggler, the network-mode and (v27)
-right OLED display settings, and the pet's settings. **Restore…** loads such a file and lists what would change per
+right OLED display settings, the pet's settings and (v28) My macros with their
+names and the key overrides (shift pairs). **Restore…** loads such a file and lists what would change per
 section (untick what to keep); *Restore selected* writes it through the
 confirmed session, reads everything back and reports anything that didn't
 take — e.g. a Bootloader key, which Vial only accepts after unlocking. Files

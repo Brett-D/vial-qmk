@@ -52,6 +52,13 @@
   .k.sel { outline:3px solid var(--acc) !important; z-index:1; } .k.held { background:#203a5a; }
   .k.knob { border-radius:50%; background:#262b35; font-size:10px; flex-direction:column; }
   .k .new { color:var(--warn); font-weight:700; }
+.k .sh { color:var(--dim); } .k .ko { color:var(--acc); font-weight:700; }
+.mcRow { display:flex; gap:8px; align-items:center; padding:4px 6px; border-bottom:1px solid var(--line); }
+.mcRow .mcName { width:120px; font-weight:700; } .mcRow .mcPrev { flex:1; color:var(--dim); font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.mcStep { display:flex; gap:6px; align-items:center; margin:3px 0; } .mcStep select, .mcStep input { max-width:260px; }
+#mcPreview { font-family:monospace; font-size:12px; background:var(--key); padding:6px 8px; border-radius:6px; margin:8px 0; white-space:pre-wrap; }
+.koRow { display:flex; gap:8px; align-items:center; padding:4px 6px; border-bottom:1px solid var(--line); } .koRow span:first-child { flex:1; }
+#mcRec.on { background:#7a2030; color:#fff; }
   .knobs { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px; }
   .knobbox { background:var(--key); border-radius:8px; padding:8px 10px; }
   .slot { display:flex; justify-content:space-between; padding:3px 6px; border-radius:5px; }
@@ -340,6 +347,33 @@
         </div>
         <p class="small dim">On the keyboard: press the right knob until the pet fills the right screen. There, turn the right knob to choose Feed / Play / Sleep / Clean, tap it to do it, and hold it about a second for the next screen. Typing counts as play, so normal use keeps the pet happy; it only gets hungry or sad, never dies, unless <b>Can die</b> is on.</p>
       </div>
+      <div id="macroView" class="panel hidden">
+        <h2>My macros</h2>
+        <p class="small dim">A macro types a sequence of keys or text with one key. Make it here, then put it on a key: Layout tab → click a key → <b>My macros</b>. Ready-made ones (Delete line, Duplicate line, Lock PC…) are in the picker's <b>Macros</b> group and need no setup. Saved on the keyboard (Vial's macros M0–M15; the names too).</p>
+        <div id="mcList"></div>
+        <div id="mcEdit" class="hidden">
+          <h3 class="fxH" id="mcTitle"></h3>
+          <div class="row"><span>Name</span><input type="text" id="mcName" maxlength="12" spellcheck="false" placeholder="e.g. Signature"><span></span></div>
+          <div id="mcSteps"></div>
+          <div class="btns">
+            <button data-add="tap">+ Tap key</button><button data-add="down">+ Hold key</button><button data-add="up">+ Release key</button>
+            <button data-add="text">+ Type text</button><button data-add="delay">+ Wait</button>
+            <button id="mcRec" title="Type on the keyboard: every key you press and release is added (Esc ends it)">● Record</button>
+          </div>
+          <div class="btns"><select id="mcTpl"></select><button id="mcUseTpl">Start from template</button></div>
+          <div class="small dim">What it sends:</div>
+          <div id="mcPreview"></div>
+          <div class="btns"><button id="mcSave" class="primary">Save</button><button id="mcCancel">Cancel</button><button id="mcClear">Clear this macro</button><span class="dim small" id="mcBytes"></span></div>
+          <p class="small dim">Text is typed as on a US layout (letters, digits, symbols, new lines). <b>Hold key</b> / <b>Release key</b> keep a key (e.g. Shift) down across steps; release it again before the end.</p>
+        </div>
+        <h2 style="margin-top:18px">Shift pairs</h2>
+        <p class="small dim">Choose what a key sends with Shift held, e.g. <code>,</code> normally and <code>;</code> with Shift. It applies wherever that key's keycode is on the keymap (the diagram shows it in blue). These are Vial's key overrides: Vial can edit them too.</p>
+        <div id="koList"></div>
+        <div class="row"><span>Key (normal output)</span><select id="koTrig"></select><span></span></div>
+        <div class="row"><span>With Shift sends</span><select id="koOut"></select><span></span></div>
+        <div class="row"><span>On layers</span><span id="koLayers"></span><span></span></div>
+        <div class="btns"><button id="koSave" class="primary">Add shift pair</button><button id="koCancel" class="hidden">Cancel</button><span class="dim small" id="koNote"></span></div>
+      </div>
     </div>
   </section>
 
@@ -353,13 +387,13 @@
         <div class="list" id="list"></div>
       </div>
       <div id="pickHid" class="hidden">
-        <input type="text" id="search" placeholder="Search keycodes (e.g. vol, F5, mouse, MO)" style="width:100%">
+        <input type="text" id="search" placeholder="Search keycodes (e.g. plus, pipe, copy, vol, F5, MO)" style="width:100%">
         <div class="cats" id="hidCats"></div>
         <div id="hidList"></div>
         <div class="adv">
           <div class="small dim">Hold/tap keys: tap sends the key, hold gives a layer or modifier.</div>
           <div class="line">
-            <select id="advKind"><option value="lt">Layer-tap: hold for layer</option><option value="mt">Mod-tap: hold for modifier</option><option value="mod">Key + modifier</option></select>
+            <select id="advKind"><option value="lt">Layer-tap: hold for layer</option><option value="mt">Mod-tap: hold for modifier</option><option value="mod">Shortcut: modifiers + key (e.g. Ctrl+Shift+T)</option></select>
             <select id="advLayer"></select>
           </div>
           <div class="line" id="advMods">
@@ -367,7 +401,7 @@
             <label><input type="checkbox" value="4"> Alt</label><label><input type="checkbox" value="8"> GUI</label>
             <label><input type="checkbox" value="16"> right-hand</label>
           </div>
-          <div class="line">tap key <select id="advBase"></select> <button id="advApply">Assign</button></div>
+          <div class="line">key <select id="advBase"></select> <button id="advApply">Assign</button> <b id="advPreview" class="small"></b></div>
           <div class="line">or keycode value <input type="text" id="rawKc" placeholder="0x5223" size="8"> <button id="rawApply">Assign</button></div>
         </div>
       </div>

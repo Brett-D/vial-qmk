@@ -33,6 +33,7 @@ const DISP_SLEEP = ["30 s", "1 min", "2 min", "5 min", "10 min", "30 min"];
 const TP_FIELDS = { enable: "Press-to-click", threshold: "Press threshold (Z)", release: "Release Z" };
 
 async function makeBackup() {
+  try { await macrosLoad(); await koLoad(); } catch (e) { log("macros: " + e.message); }
   await hidLoadLed();
   await hidLoadTp();
   readStatus(await cmd([0xf6, 0x00, 0]));
@@ -49,6 +50,8 @@ async function makeBackup() {
     ledMap: S.mapMeasured ? await calReadMap() : null, // null = the built-in map
     trackpad: { enable: S.tp.enable, threshold: S.tp.threshold, release: S.tp.release },
     wiggler: { on: S.wiggle.on, every: S.wiggle.every },
+    macros: S.macros ? S.macros.map((steps, i) => ({ name: S.macroNames[i] || "", steps })) : undefined, // v28
+    keyOverrides: S.ko || undefined, // v28: Vial's key overrides (shift pairs), every slot
     prefs: S.prefs ? { addrEnter: S.prefs.addrEnter, ...(S.prefs.disp ? { disp: { ...S.prefs.disp } } : {}) } : undefined, // v26; v27: the right OLED
     pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name, species: S.pet.species, stage: S.pet.stage,
                    ...(S.pet.glowOk ? { big: S.pet.big, glow: S.pet.glow, glowLevel: S.pet.glowLevel } : {}) } : undefined, // not its stats
@@ -76,6 +79,8 @@ function backupProblem(b) {
   if (!Array.isArray(b.keymap) || !b.keymap.every((l) => Array.isArray(l) && l.length === b.rows && l.every((r) => Array.isArray(r) && r.length === b.cols && r.every(kcOk))))
     return "The keymap in the backup is damaged.";
   if (b.encoders && !b.encoders.every((l) => l.every((e) => e.length === 2 && e.every(kcOk)))) return "The knob settings in the backup are damaged.";
+  if (b.macros && !(Array.isArray(b.macros) && b.macros.every((m) => m && Array.isArray(m.steps)))) return "The macros in the backup are damaged.";
+  if (b.keyOverrides && !Array.isArray(b.keyOverrides)) return "The shift pairs in the backup are damaged.";
   if (b.ledMap && !(Array.isArray(b.ledMap) && b.ledMap.length === NLED && b.ledMap.every((v) => Number.isInteger(v) && v >= 0 && v <= 255))) return "The LED map in the backup is damaged.";
   return null;
 }
@@ -124,6 +129,17 @@ function backupDiff(b) {
   }
   if (b.prefs && S.prefs) out.push({ id: "prefs", title: "Network mode and display", n: (pf ? 1 : 0) + dl.length, data: b.prefs,
     lines: (pf ? [`Enter after the address: ${S.prefs.addrEnter ? "on" : "off"} → ${b.prefs.addrEnter ? "on" : "off"}`] : []).concat(dl) });
+  if (b.macros && S.macros) { // v28
+    const ch = b.macros.slice(0, S.macros.length).map((m, i) => i).filter((i) => mcKeyOf(b.macros[i].steps) !== mcKeyOf(S.macros[i]) || (b.macros[i].name || "") !== (S.macroNames[i] || ""));
+    out.push({ id: "macros", title: "My macros", n: ch.length, data: b.macros,
+      lines: ch.map((i) => `M${i} ${b.macros[i].name || ""}: ${mcDescribe(S.macros[i]).slice(0, 40)} → ${mcDescribe(b.macros[i].steps).slice(0, 40)}`) });
+  }
+  if (b.keyOverrides && S.ko) {
+    const same = (x, y) => koKey(x) === koKey(y);
+    const ch = S.ko.map((k, i) => i).filter((i) => !same(S.ko[i], b.keyOverrides[i] || null));
+    const show = (k) => (koEmpty(k) ? "(none)" : `${kcName(k.trigger)} → ${kcName(k.replacement)}`);
+    out.push({ id: "keyOverrides", title: "Shift pairs", n: ch.length, data: b.keyOverrides, lines: ch.map((i) => `${show(S.ko[i])} → ${show(b.keyOverrides[i] || null)}`) });
+  }
   if (b.pet && S.pet) {
     const f = ["on", "canDie", "decay", "name", "species", "stage", ...(S.pet.glowOk ? ["big", "glow", "glowLevel"] : [])].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
     const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name", species: "Species", stage: "Stage", big: "Big pet", glow: "LED reactions (which)", glowLevel: "LED reaction strength" };
@@ -216,6 +232,20 @@ async function restoreApply() {
       prog("Trackpad…");
       const t = b.trackpad;
       await ok([0xf5, 0x01, t.enable ? 1 : 0, t.threshold, t.release]);
+    }
+    if (want.has("macros")) {
+      prog("Macros…");
+      const all = S.macros.map((st, i) => (b.macros[i] ? b.macros[i].steps : st)), names = S.macroNames.map((n, i) => (b.macros[i] ? b.macros[i].name || "" : n));
+      await macrosWrite(all, names);
+    }
+    if (want.has("keyOverrides")) {
+      prog("Shift pairs…");
+      for (let i = 0; i < S.ko.length; i++) {
+        const k = b.keyOverrides[i] || null;
+        if (koKey(k) === koKey(S.ko[i])) continue;
+        await koWrite(i, koEmpty(k) ? null : k);
+      }
+      await koLoad();
     }
     if (want.has("pet")) {
       prog("Pet…");

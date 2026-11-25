@@ -18,7 +18,7 @@ function navItems() {
     }).sort((a, b) => a.y - b.y || a.x - b.x).map((o) => o.el);
     return [...$("layers").querySelectorAll("[data-layer]"), ...keys, ...$("knobs").querySelectorAll("[data-slot]")];
   }
-  const root = S.ui.tab === 1 ? $("ledCtl") : S.ui.tab === 3 ? $("petView") : $("padView");
+  const root = S.ui.tab === 1 ? $("ledCtl") : S.ui.tab === 3 ? $("petView") : S.ui.tab === 4 ? $("macroView") : $("padView");
   return [...root.querySelectorAll("input:not([type=color]), select, button, summary")].filter(navVisible); // the knob uses the swatches
 }
 function navClamp(items) {
@@ -90,7 +90,7 @@ async function navPress() {
 async function navLong() {
   if (NAV.mode !== "move") { NAV.mode = "move"; NAV.editEl = null; return navPaint(); } // back out of the picker / slider
   NAV.idx = 0;
-  await setTab((S.ui.tab + 1) % tabList().length);
+  { const ids = tabList().map(([, i]) => i); await setTab(ids[(ids.indexOf(S.ui.tab) + 1) % ids.length]); }
   navPaint();
 }
 async function navTick() {
@@ -161,6 +161,7 @@ async function setTab(tab) {
   if (tab === 1) { try { await hidLoadLed(); } catch (e) { log(e.message); } }
   if (tab === 2) startZPoll();
   if (tab === 3) { try { await petLoad(); } catch (e) { log(e.message); } startPetPoll(); }
+  if (tab === 4) { try { await macrosLoad(); await koLoad(); } catch (e) { log("macros: " + e.message); } }
   render();
 }
 
@@ -182,13 +183,11 @@ $("hidCats").addEventListener("click", (e) => { const t = e.target.closest("[dat
 $("search").addEventListener("input", renderHidList);
 $("hidList").addEventListener("click", (e) => { const t = e.target.closest("[data-kc]"); if (t) assign(+t.dataset.kc); });
 $("advKind").addEventListener("change", renderAdv);
+["advMods", "advBase", "advLayer"].forEach((id) => $(id).addEventListener("change", renderAdv)); // v28: the preview
 $("advApply").addEventListener("click", () => {
-  const kind = $("advKind").value, base = +$("advBase").value & 0xff;
-  const mods = [...$("advMods").querySelectorAll("input:checked")].reduce((a, i) => a | +i.value, 0);
-  if (kind === "lt") assign(R.QK_LAYER_TAP | ((+$("advLayer").value & 0xf) << 8) | base);
-  else if (!(mods & 0xf)) toast("Tick at least one modifier", true);
-  else if (kind === "mt") assign(R.QK_MOD_TAP | ((mods & 0x1f) << 8) | base);
-  else assign(((mods & 0x1f) << 8) | base);
+  const v = advValue();
+  if (v === null) toast("Tick at least one modifier", true);
+  else assign(v);
 });
 $("rawApply").addEventListener("click", () => {
   const v = parseInt($("rawKc").value.trim(), $("rawKc").value.trim().startsWith("0x") ? 16 : 10);

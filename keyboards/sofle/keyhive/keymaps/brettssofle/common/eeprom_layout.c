@@ -90,9 +90,11 @@ enum { EXPECTED(AS_ENUM) };
 #define CHECK_ACTUAL(name, v) _Static_assert((v) == layout_##name, "EEPROM layout changed (" #name "): bump BRETT_EEPROM_LAYOUT_VERSION in config.h and record the new values in eeprom_layout.c");
 LAYOUT_VALUES(CHECK_ACTUAL)
 
-// Not part of the mark (nothing moved when it was introduced), but pinned:
-// the pet's 32 bytes sit above the macro buffer (pet.c).
-_Static_assert(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR == 4063, "the macro buffer end moved: the pet (pet.c) and BRETT_EEPROM_LAYOUT_VERSION need a look");
+// Not part of the mark (nothing moved when they were introduced), but pinned:
+// the pet's 32 bytes (pet.c) and, since v28, the macros' names (macros.c) sit
+// above the macro buffer, taken off its end.
+_Static_assert(DYNAMIC_KEYMAP_EEPROM_MAX_ADDR == 3867 && BRETT_MACRO_NAMES_EE_ADDR == 3868 && BRETT_PET_EE_ADDR == 4064,
+               "the macro buffer end, the macro names or the pet moved: macros.c, pet.c and BRETT_EEPROM_LAYOUT_VERSION need a look");
 
 #define AS_VALUE(name, v) (uint32_t)(v),
 __attribute__((used)) const uint32_t brett_eeprom_layout[] = {BRETT_EEPROM_LAYOUT_VERSION, LAYOUT_VALUES(AS_VALUE)};

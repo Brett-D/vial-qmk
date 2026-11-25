@@ -21,6 +21,24 @@ enum custom_keycodes {
     CONFIG_MODE,     // toggle config mode (sofle-config.html)
     OLED_PAGE,       // next right-OLED page (status / trackpad / LEDs / info)
     WIGGLE,          // mouse wiggler on/off (wiggler.c)
+    // v28 built-in macros (common/macros.c), in vial.json's order; labels and
+    // tooltips come from vial.json.
+    BM_DEL_LINE,
+    BM_SEL_LINE,
+    BM_DUP_LINE,
+    BM_DEL_WORD_L,
+    BM_DEL_WORD_R,
+    BM_LINE_BELOW,
+    BM_LINE_ABOVE,
+    BM_PASTE_PLAIN,
+    BM_SCREENSHOT,
+    BM_LOCK,
+    BM_DESKTOP,
+    BM_TASKMGR,
+    BM_UNDO,
+    BM_REDO,
+    BM_EMOJI,
+    BM_CLIPBOARD,
 };
 
 // Number of default layers CYCLE rotates through.

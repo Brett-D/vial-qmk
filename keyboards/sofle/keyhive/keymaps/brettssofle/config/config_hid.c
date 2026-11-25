@@ -9,6 +9,7 @@
 #include "perf.h"
 #include "display.h"
 #include "kb_config.h"
+#include "macros.h"
 #ifdef RGB_MATRIX_ENABLE
 #    include "screensaver.h"
 #endif
@@ -336,6 +337,12 @@ static void cfg_raw_hid(uint8_t *data) {
             data[9] = OLED_SLEEP_CHOICES;
             return;
         }
+        case CMD_MACRO_NAME:
+            if (hid.state == HS_ACTIVE) {
+                hid.time = timer_read32();
+            }
+            macro_name_raw_hid(data, hid_writes_allowed());
+            return;
         case CMD_PERF: // v27: [3] bit 0 = right half, bit 1 = valid; [4]... the report (perf.h)
             memset(&data[2], 0, 30);
             data[2] = 0xA2;

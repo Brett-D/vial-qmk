@@ -32,6 +32,86 @@
       "name": "Mouse\nwiggle",
       "title": "Mouse wiggler on/off: nudges the pointer after a while without input so the computer stays awake",
       "shortName": "WIGGLE"
+    },
+    {
+      "name": "Delete\nline",
+      "title": "Delete the whole line: Home, Shift+End, Shift+Right (over the line break), Delete",
+      "shortName": "DEL_LN"
+    },
+    {
+      "name": "Select\nline",
+      "title": "Select the line: Home, Shift+End",
+      "shortName": "SEL_LN"
+    },
+    {
+      "name": "Dupl.\nline",
+      "title": "Duplicate the line below: Home, Shift+End, Ctrl+C, End, Enter, Ctrl+V (uses the clipboard)",
+      "shortName": "DUP_LN"
+    },
+    {
+      "name": "Del word\nleft",
+      "title": "Delete the word to the left: Ctrl+Backspace",
+      "shortName": "DELW_L"
+    },
+    {
+      "name": "Del word\nright",
+      "title": "Delete the word to the right: Ctrl+Delete",
+      "shortName": "DELW_R"
+    },
+    {
+      "name": "New line\nbelow",
+      "title": "New empty line below this one: End, Enter",
+      "shortName": "NL_BLW"
+    },
+    {
+      "name": "New line\nabove",
+      "title": "New empty line above this one: Home, Enter, Up",
+      "shortName": "NL_ABV"
+    },
+    {
+      "name": "Paste\nplain",
+      "title": "Paste as plain text: Ctrl+Shift+V (most browsers and chat apps)",
+      "shortName": "PASTE_P"
+    },
+    {
+      "name": "Screen\nshot",
+      "title": "Screenshot of a region: Win+Shift+S (Windows; Linux desktops differ)",
+      "shortName": "SNIP"
+    },
+    {
+      "name": "Lock\nPC",
+      "title": "Lock the computer: Win+L (Windows; Linux desktops differ)",
+      "shortName": "LOCK"
+    },
+    {
+      "name": "Show\ndesktop",
+      "title": "Show the desktop: Win+D (Windows; Linux desktops differ)",
+      "shortName": "DESKTOP"
+    },
+    {
+      "name": "Task\nmanager",
+      "title": "Task Manager: Ctrl+Shift+Esc (Windows; Linux desktops differ)",
+      "shortName": "TASKMGR"
+    },
+    {
+      "name": "Undo",
+      "title": "Undo: Ctrl+Z",
+      "shortName": "UNDO"
+    },
+    {
+      "name": "Redo",
+      "title": "Redo: Ctrl+Y (some apps: Ctrl+Shift+Z)",
+      "shortName": "REDO"
+    },
+    {
+      "name": "Emoji\npanel",
+      "title": "Emoji panel: Win+. (Windows; Linux desktops differ)",
+      "shortName": "EMOJI"
+    },
+    {
+      "name": "Clip\nhistory",
+      "title": "Clipboard history: Win+V (Windows; Linux desktops differ)",
+      "shortName": "CLIPHST"
     }
   ],
   "layouts": {

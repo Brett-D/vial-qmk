@@ -168,6 +168,7 @@ async function hidLoadAll() {
   await hidLoadLed();
   await hidLoadTp();
   try { await petLoad(); } catch (e) { S.pet = null; }
+  try { await macrosLoad(); await koLoad(); } catch (e) { S.macros = S.ko = null; log("macros / shift pairs: " + e.message); } // v28
   S.ui = { tab: 0, layer: 0, row: 0xff, col: 0xff, slot: -1, pick: -1, pending: null, ledField: -1, tpField: -1 };
 }
 

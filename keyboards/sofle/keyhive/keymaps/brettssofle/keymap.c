@@ -27,6 +27,7 @@
 #include "rgb_driver.h"
 #include "perf.h"
 #include "display.h"
+#include "macros.h"
 
 // Default keymap. Everything here can be changed live in Vial.
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -158,6 +159,9 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (builtin_macro_process(keycode, record)) {
+        return false; // v28 built-in macros (macros.c)
+    }
     switch (keycode) {
         case CYCLE:
             if (record->event.pressed) {

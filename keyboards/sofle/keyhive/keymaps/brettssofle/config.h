@@ -12,8 +12,12 @@
 // EECONFIG_USER / kb datablock layout). See eeprom_layout.c.
 #define BRETT_EEPROM_LAYOUT_VERSION 1
 // The last 32 EEPROM bytes hold the OLED pet (pet.c): taken off the end of
-// Vial's macro buffer (1887 -> 1855 bytes), so nothing else moves.
-#define DYNAMIC_KEYMAP_EEPROM_MAX_ADDR 4063
+// Vial's macro buffer (1887 -> 1855 bytes), so nothing else moves. v28: the
+// 196 bytes below it hold the macros' names (common/macros.c), also taken off
+// the end of the macro buffer (1855 -> 1659 bytes).
+#define BRETT_PET_EE_ADDR 4064
+#define BRETT_MACRO_NAMES_EE_ADDR 3868
+#define DYNAMIC_KEYMAP_EEPROM_MAX_ADDR 3867
 // Hold the four corner keys (` / ` top row and both Shifts) to unlock Vial.
 #define VIAL_UNLOCK_COMBO_ROWS { 0, 5, 3, 8 }
 #define VIAL_UNLOCK_COMBO_COLS { 0, 0, 0, 0 }

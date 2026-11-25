@@ -41,7 +41,7 @@ main { padding:14px 16px; max-width:1100px; }
     <div id="kb"></div>
     <div class="knobs" id="knobs"></div>
     <div id="pick" class="hidden" style="margin-top:12px">
-      <b id="pickWhat"></b> <input id="find" placeholder="Search keycodes" size="18"> <select id="cat"></select>
+      <b id="pickWhat"></b> <input id="find" placeholder="Search (plus, pipe, copy…)" size="18"> <select id="cat"></select>
       <div id="list"></div>
     </div>
   </section>
@@ -90,6 +90,8 @@ const R = DATA.ranges;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 function kcName(v) {
   if (NAMES.has(v)) return NAMES.get(v);
+  if (v >= R.QK_MODS && v < R.QK_MOD_TAP) // v28: Ctrl+Shift+T
+    return [[1, "Ctrl"], [2, "Shift"], [4, "Alt"], [8, "Win"]].filter(([b]) => (v >> 8) & b).map(([, n]) => (v & 0x1000 ? "R" : "") + n).join("+") + "+" + kcName(v & 255).replace(/^(\S) \S$/, "$1");
   for (const [k, n] of [["QK_TO", "TO"], ["QK_MOMENTARY", "MO"], ["QK_TOGGLE_LAYER", "TG"], ["QK_ONE_SHOT_LAYER", "OSL"], ["QK_LAYER_TAP_TOGGLE", "TT"]])
     if (v >= R[k] && v < R[k] + 32) return n + "(" + (v & 31) + ")";
   if (v >= R.QK_LAYER_TAP && v < R.QK_LAYER_MOD) return "LT" + ((v >> 8) & 15) + "(" + kcName(v & 255) + ")";
@@ -182,7 +184,7 @@ function render() {
   if (ui.sel) {
     $("pickWhat").textContent = (ui.sel.kind === "key" ? `Key ${ui.sel.r},${ui.sel.c}` : `${ui.sel.n ? "Right" : "Left"} knob ${["turn left", "turn right", "press"][ui.sel.i]}`) + ` on layer ${ui.layer}:`;
     const q = $("find").value.toLowerCase(), cat = +$("cat").value;
-    const items = DATA.picker.filter(([v, l], i) => (q ? l.toLowerCase().includes(q) : cat < 0 || (i >= DATA.catStarts[cat] && i < (DATA.catStarts[cat + 1] || 1e9))));
+    const items = DATA.picker.filter(([v, l], i) => (q ? l.toLowerCase().includes(q) || (DATA.kw[v] || "").includes(q) : cat < 0 || (i >= DATA.catStarts[cat] && i < (DATA.catStarts[cat + 1] || 1e9))));
     $("list").innerHTML = items.map(([v, l]) => `<button data-v="${v}">${esc(l || "(none)")}</button>`).join("");
   }
   if (S.led) {

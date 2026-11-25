@@ -30,10 +30,23 @@ PICKER = [
         "KC_ENTER", "KC_ESCAPE", "KC_BACKSPACE", "KC_TAB", "KC_SPACE", "KC_MINUS", "KC_EQUAL",
         "KC_LEFT_BRACKET", "KC_RIGHT_BRACKET", "KC_BACKSLASH", "KC_SEMICOLON", "KC_QUOTE", "KC_GRAVE",
         "KC_COMMA", "KC_DOT", "KC_SLASH", "KC_CAPS_LOCK"]),
-    ("Symbols", [f"S({k})" for k in [
-        "KC_GRAVE", "KC_1", "KC_2", "KC_3", "KC_4", "KC_5", "KC_6", "KC_7", "KC_8", "KC_9", "KC_0",
-        "KC_MINUS", "KC_EQUAL", "KC_LEFT_BRACKET", "KC_RIGHT_BRACKET", "KC_BACKSLASH", "KC_SEMICOLON",
-        "KC_QUOTE", "KC_COMMA", "KC_DOT", "KC_SLASH"]]),
+    # v28 (Brett: "the common double keys ... like equals and then via shift plus"):
+    # each one types its symbol directly, whatever the Shift key does.
+    ("Shifted symbols", [f"S({k})" for k in [
+        "KC_EQUAL", "KC_MINUS", "KC_SEMICOLON", "KC_QUOTE", "KC_COMMA", "KC_DOT", "KC_SLASH",
+        "KC_LEFT_BRACKET", "KC_RIGHT_BRACKET", "KC_BACKSLASH", "KC_GRAVE",
+        "KC_1", "KC_2", "KC_3", "KC_4", "KC_5", "KC_6", "KC_7", "KC_8", "KC_9", "KC_0"]]),
+    # v28: modifier + key in one keycode (QMK's LCTL(kc) etc.).
+    ("Shortcuts", ["LCTL(KC_C)", "LCTL(KC_V)", "LCTL(KC_X)", "LCTL(KC_Z)", "LCTL(KC_Y)", "LCTL(KC_A)", "LCTL(KC_S)",
+                   "LCTL(KC_F)", "LCTL(LSFT(KC_ESCAPE))", "LALT(KC_TAB)", "LALT(KC_F4)", "LCTL(LALT(KC_DELETE))",
+                   "LGUI(KC_D)", "LGUI(KC_E)", "LGUI(KC_L)", "LGUI(KC_R)", "LGUI(KC_TAB)", "LGUI(LSFT(KC_S))",
+                   "LCTL(KC_T)", "LCTL(KC_W)", "LCTL(LSFT(KC_T))", "LCTL(KC_TAB)"]),
+    # v28 (Brett: "add nice macros like delete line"): built-in sequences (common/macros.c) ...
+    ("Macros", ["BM_DEL_LINE", "BM_SEL_LINE", "BM_DUP_LINE", "BM_DEL_WORD_L", "BM_DEL_WORD_R", "BM_LINE_BELOW",
+                "BM_LINE_ABOVE", "BM_PASTE_PLAIN", "BM_SCREENSHOT", "BM_LOCK", "BM_DESKTOP", "BM_TASKMGR", "BM_UNDO",
+                "BM_REDO", "BM_EMOJI", "BM_CLIPBOARD"]),
+    # ... and Vial's own macros, made on the page's Macros tab.
+    ("My macros", [f"QK_MACRO_{i}" for i in range(16)]),
     ("Navigation", ["KC_LEFT", "KC_DOWN", "KC_UP", "KC_RIGHT", "KC_HOME", "KC_END", "KC_PAGE_UP",
                     "KC_PAGE_DOWN", "KC_INSERT", "KC_DELETE", "KC_PRINT_SCREEN", "KC_SCROLL_LOCK",
                     "KC_PAUSE", "KC_APPLICATION"]),
@@ -59,9 +72,10 @@ PICKER = [
 # Short labels for the page (anything missing falls back to the QMK name).
 LABELS = {
     "KC_NO": "", "KC_TRNS": "▽", "KC_ENTER": "Enter", "KC_ESCAPE": "Esc", "KC_BACKSPACE": "Bksp",
-    "KC_TAB": "Tab", "KC_SPACE": "Space", "KC_MINUS": "-", "KC_EQUAL": "=", "KC_LEFT_BRACKET": "[",
-    "KC_RIGHT_BRACKET": "]", "KC_BACKSLASH": "\\", "KC_SEMICOLON": ";", "KC_QUOTE": "'",
-    "KC_GRAVE": "`", "KC_COMMA": ",", "KC_DOT": ".", "KC_SLASH": "/", "KC_CAPS_LOCK": "Caps",
+    # v28: keys with two legends show both, unshifted first ("= +").
+    "KC_TAB": "Tab", "KC_SPACE": "Space", "KC_MINUS": "- _", "KC_EQUAL": "= +", "KC_LEFT_BRACKET": "[ {",
+    "KC_RIGHT_BRACKET": "] }", "KC_BACKSLASH": "\\ |", "KC_SEMICOLON": "; :", "KC_QUOTE": "' \"",
+    "KC_GRAVE": "` ~", "KC_COMMA": ", <", "KC_DOT": ". >", "KC_SLASH": "/ ?", "KC_CAPS_LOCK": "Caps",
     "KC_LEFT": "←", "KC_DOWN": "↓", "KC_UP": "↑", "KC_RIGHT": "→", "KC_HOME": "Home", "KC_END": "End",
     "KC_PAGE_UP": "PgUp", "KC_PAGE_DOWN": "PgDn", "KC_INSERT": "Ins", "KC_DELETE": "Del",
     "KC_PRINT_SCREEN": "PrtSc", "KC_SCROLL_LOCK": "ScrLk", "KC_PAUSE": "Pause", "KC_APPLICATION": "Menu",
@@ -84,6 +98,35 @@ LABELS = {
 }
 for i in range(10):
     LABELS[f"KC_KP_{i}"] = f"P{i}"
+for i in range(16):
+    LABELS[f"QK_MACRO_{i}"] = f"Macro {i}"
+for d, sym in zip("1234567890", "!@#$%^&*()"):
+    LABELS[f"KC_{d}"] = f"{d} {sym}"
+
+# v28: what search also matches (words for symbols and shortcuts).
+WORDS = {
+    "KC_MINUS": "minus dash hyphen", "S(KC_MINUS)": "underscore", "KC_EQUAL": "equals equal sign", "S(KC_EQUAL)": "plus",
+    "KC_LEFT_BRACKET": "left bracket open square", "S(KC_LEFT_BRACKET)": "left brace curly open", "KC_RIGHT_BRACKET": "right bracket close square",
+    "S(KC_RIGHT_BRACKET)": "right brace curly close", "KC_BACKSLASH": "backslash", "S(KC_BACKSLASH)": "pipe bar vertical",
+    "KC_SEMICOLON": "semicolon", "S(KC_SEMICOLON)": "colon", "KC_QUOTE": "quote apostrophe single", "S(KC_QUOTE)": "double quote",
+    "KC_GRAVE": "grave backtick backquote", "S(KC_GRAVE)": "tilde", "KC_COMMA": "comma", "S(KC_COMMA)": "less than angle",
+    "KC_DOT": "dot period full stop", "S(KC_DOT)": "greater than angle", "KC_SLASH": "slash forward", "S(KC_SLASH)": "question mark",
+    "S(KC_1)": "exclamation bang", "S(KC_2)": "at sign", "S(KC_3)": "hash pound number sign", "S(KC_4)": "dollar", "S(KC_5)": "percent",
+    "S(KC_6)": "caret hat", "S(KC_7)": "ampersand and", "S(KC_8)": "asterisk star times", "S(KC_9)": "left paren parenthesis open",
+    "S(KC_0)": "right paren parenthesis close",
+    "LCTL(KC_C)": "copy", "LCTL(KC_V)": "paste", "LCTL(KC_X)": "cut", "LCTL(KC_Z)": "undo", "LCTL(KC_Y)": "redo", "LCTL(KC_A)": "select all",
+    "LCTL(KC_S)": "save", "LCTL(KC_F)": "find search", "LCTL(LSFT(KC_ESCAPE))": "task manager", "LALT(KC_TAB)": "switch window app",
+    "LALT(KC_F4)": "close window quit", "LCTL(LALT(KC_DELETE))": "security reboot", "LGUI(KC_D)": "show desktop", "LGUI(KC_E)": "explorer files",
+    "LGUI(KC_L)": "lock screen", "LGUI(KC_R)": "run", "LGUI(KC_TAB)": "task view", "LGUI(LSFT(KC_S))": "screenshot snip",
+    "LCTL(KC_T)": "new tab", "LCTL(KC_W)": "close tab", "LCTL(LSFT(KC_T))": "reopen tab", "LCTL(KC_TAB)": "next tab",
+}
+MOD_NAMES = [(0x01, "Ctrl"), (0x02, "Shift"), (0x04, "Alt"), (0x08, "Win")]
+
+
+def mods_label(v, base_label):
+    """Ctrl+Shift+T style (the pages' kcName does the same for any value)."""
+    m = v >> 8 & 0x1F
+    return "+".join(("R" if m & 0x10 else "") + n for b, n in MOD_NAMES if m & b) + "+" + base_label.split(" ")[0]
 
 LAYER_NAMES = ["QWERTY", "Colemak", "Lower", "Raise", "Mouse", "Adjust"]
 
@@ -186,21 +229,29 @@ def main():
     kc = parse_keycodes()
     vial = json.loads((KEYMAP_DIR / "vial.json").read_text(encoding="utf-8"))
     custom = vial.get("customKeycodes", [])
-    c_custom_names = ["CYCLE", "DRAG_SCROLL", "CONFIG_MODE", "OLED_PAGE", "WIGGLE"]
+    # The C names in order (brettssofle.h); vial.json has their labels and tooltips, in the same order.
+    hdr = (KEYMAP_DIR / "brettssofle.h").read_text(encoding="utf-8")
+    body = hdr[hdr.index("enum custom_keycodes"):]
+    body = re.sub(r"//[^\n]*", "", body[body.index("{") + 1:body.index("};")])
+    c_custom_names = [re.match(r"\s*(\w+)", e).group(1) for e in body.split(",") if e.strip()]
+    assert len(c_custom_names) == len(custom), f"brettssofle.h has {len(c_custom_names)} custom keycodes, vial.json {len(custom)}"
     for i, name in enumerate(c_custom_names):
         kc[name] = kc["QK_KB_0"] + i if "QK_KB_0" in kc else 0x7E00 + i
+        if name.startswith("BM_"):
+            LABELS[name] = custom[i]["name"].replace("\n", " ")
 
     fn = {
-        "S": lambda v: 0x0200 | v, "MO": lambda n: kc["QK_MOMENTARY"] | n, "TG": lambda n: kc["QK_TOGGLE_LAYER"] | n,
+        "S": lambda v: 0x0200 | v, "LSFT": lambda v: 0x0200 | v, "LCTL": lambda v: 0x0100 | v, "LALT": lambda v: 0x0400 | v,
+        "LGUI": lambda v: 0x0800 | v, "MO": lambda n: kc["QK_MOMENTARY"] | n, "TG": lambda n: kc["QK_TOGGLE_LAYER"] | n,
         "TO": lambda n: kc["QK_TO"] | n, "OSL": lambda n: kc["QK_ONE_SHOT_LAYER"] | n,
         "TT": lambda n: kc["QK_LAYER_TAP_TOGGLE"] | n, "PDF": lambda n: kc["QK_PERSISTENT_DEF_LAYER"] | n,
     }
 
     def evaluate(expr):
-        m = re.fullmatch(r"(\w+)\((\w+)\)", expr)
+        m = re.fullmatch(r"(\w+)\((.+)\)", expr)  # nested: LCTL(LSFT(KC_T))
         if m:
             arg = m.group(2)
-            return fn[m.group(1)](int(arg) if arg.isdigit() else kc[arg])
+            return fn[m.group(1)](int(arg) if arg.isdigit() else evaluate(arg))
         return kc[expr]
 
     shifted = {kc[base] | 0x0200: sym for base, sym in parse_us_shifted() if base in kc}
@@ -213,6 +264,9 @@ def main():
             v = evaluate(e)
             if e.startswith("S("):
                 label = shifted.get(v, e)
+            elif re.match(r"L(CTL|SFT|ALT|GUI)\(", e):
+                base = re.search(r"(KC_\w+)", e).group(1)
+                label = mods_label(v, LABELS.get(base, base[3:]))
             elif e in LABELS:
                 label = LABELS[e]
             else:
@@ -227,7 +281,8 @@ def main():
     for e, v, label in picker:
         names[v] = label
     for i, ck in enumerate(custom):
-        names[kc["QK_KB_0"] + i] = ck.get("shortName", f"KB{i}")
+        if not c_custom_names[i].startswith("BM_"):  # v28's macros keep their readable labels ("Delete line")
+            names[kc["QK_KB_0"] + i] = ck.get("shortName", f"KB{i}")
     names.update(shifted)
 
     def crc16(data):
@@ -277,6 +332,8 @@ def main():
         "cols": vial["matrix"]["cols"],
         "usb": {"vid": int(vial["vendorId"], 16), "pid": int(vial["productId"], 16)},
         "picker": [[v, label] for _, v, label in picker],
+        "kw": {str(evaluate(e)): w for e, w in WORDS.items()},  # v28: search words
+        "tips": {str(kc[n]): custom[i]["title"] for i, n in enumerate(c_custom_names)},  # v28: picker tooltips
         "cats": cats,
         "catStarts": cat_starts,
         "names": {str(k): v for k, v in sorted(names.items())},
@@ -310,13 +367,13 @@ def main():
     skip = set(data["ledReact"]) | set(data["ledSolo"]) | {data["ledDirectId"], data["ledLayeredId"], 0}
     light = {
         "pickerHash": phash, "rows": data["rows"], "cols": data["cols"], "usb": data["usb"],
-        "picker": data["picker"], "cats": cats, "catStarts": cat_starts, "layout": layout, "layerNames": LAYER_NAMES,
+        "picker": data["picker"], "kw": data["kw"], "cats": cats, "catStarts": cat_starts, "layout": layout, "layerNames": LAYER_NAMES,
         "ledLayeredId": data["ledLayeredId"], "ledKeyFx": data["ledReact"] + data["ledSolo"],
         "ledZones": data["ledZones"], "ledIdle": data["ledIdle"],
         # Names of the other effects, for keyboard-only mode (its Effect field can be any of them).
         "ledOther": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) in skip and int(i)],
         "ledBase": [[int(i), n] for i, n in sorted(((int(i), n) for i, n in effects.items()), key=lambda x: x[0]) if int(i) not in skip and int(i) < data["fxTable"]["ownSolo"]],
-        "ranges": {k: data["ranges"][k] for k in ["QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO", "QK_MOMENTARY",
+        "ranges": {k: data["ranges"][k] for k in ["QK_MODS", "QK_MOD_TAP", "QK_LAYER_TAP", "QK_LAYER_MOD", "QK_TO", "QK_MOMENTARY",
                                                   "QK_TOGGLE_LAYER", "QK_ONE_SHOT_LAYER", "QK_LAYER_TAP_TOGGLE"]},
     }
     template = (PAGE / "light.html").read_text(encoding="utf-8")
