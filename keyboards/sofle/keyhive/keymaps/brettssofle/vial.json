@@ -1,0 +1,566 @@
+{
+  "name": "Sofle (Keyhive) - brettssofle",
+  "vendorId": "0xFC32",
+  "productId": "0x1287",
+  "lighting": "vialrgb",
+  "matrix": {
+    "rows": 10,
+    "cols": 7
+  },
+  "customKeycodes": [
+    {
+      "name": "Cycle\nbase",
+      "title": "Cycle the default layer between QWERTY and Colemak-DH",
+      "shortName": "CYCLE"
+    },
+    {
+      "name": "Drag\nscroll",
+      "title": "Hold: trackpad movement scrolls instead of moving the cursor",
+      "shortName": "DRG_SCR"
+    },
+    {
+      "name": "Config\nmode",
+      "title": "Toggle config mode (edit the keyboard from sofle-config.html)",
+      "shortName": "CONFIG"
+    },
+    {
+      "name": "OLED\npage",
+      "title": "Next page on the right OLED: status, trackpad, LEDs, info",
+      "shortName": "OLEDPG"
+    },
+    {
+      "name": "Mouse\nwiggle",
+      "title": "Mouse wiggler on/off: nudges the pointer after a while without input so the computer stays awake",
+      "shortName": "WIGGLE"
+    },
+    {
+      "name": "Delete\nline",
+      "title": "Delete the whole line: Home, Shift+End, Shift+Right (over the line break), Delete",
+      "shortName": "DEL_LN"
+    },
+    {
+      "name": "Select\nline",
+      "title": "Select the line: Home, Shift+End",
+      "shortName": "SEL_LN"
+    },
+    {
+      "name": "Dupl.\nline",
+      "title": "Duplicate the line below: Home, Shift+End, Ctrl+C, End, Enter, Ctrl+V (uses the clipboard)",
+      "shortName": "DUP_LN"
+    },
+    {
+      "name": "Del word\nleft",
+      "title": "Delete the word to the left: Ctrl+Backspace",
+      "shortName": "DELW_L"
+    },
+    {
+      "name": "Del word\nright",
+      "title": "Delete the word to the right: Ctrl+Delete",
+      "shortName": "DELW_R"
+    },
+    {
+      "name": "New line\nbelow",
+      "title": "New empty line below this one: End, Enter",
+      "shortName": "NL_BLW"
+    },
+    {
+      "name": "New line\nabove",
+      "title": "New empty line above this one: Home, Enter, Up",
+      "shortName": "NL_ABV"
+    },
+    {
+      "name": "Paste\nplain",
+      "title": "Paste as plain text: Ctrl+Shift+V (most browsers and chat apps)",
+      "shortName": "PASTE_P"
+    },
+    {
+      "name": "Screen\nshot",
+      "title": "Screenshot of a region: Win+Shift+S (Windows; Linux desktops differ)",
+      "shortName": "SNIP"
+    },
+    {
+      "name": "Lock\nPC",
+      "title": "Lock the computer: Win+L (Windows; Linux desktops differ)",
+      "shortName": "LOCK"
+    },
+    {
+      "name": "Show\ndesktop",
+      "title": "Show the desktop: Win+D (Windows; Linux desktops differ)",
+      "shortName": "DESKTOP"
+    },
+    {
+      "name": "Task\nmanager",
+      "title": "Task Manager: Ctrl+Shift+Esc (Windows; Linux desktops differ)",
+      "shortName": "TASKMGR"
+    },
+    {
+      "name": "Undo",
+      "title": "Undo: Ctrl+Z",
+      "shortName": "UNDO"
+    },
+    {
+      "name": "Redo",
+      "title": "Redo: Ctrl+Y (some apps: Ctrl+Shift+Z)",
+      "shortName": "REDO"
+    },
+    {
+      "name": "Emoji\npanel",
+      "title": "Emoji panel: Win+. (Windows; Linux desktops differ)",
+      "shortName": "EMOJI"
+    },
+    {
+      "name": "Clip\nhistory",
+      "title": "Clipboard history: Win+V (Windows; Linux desktops differ)",
+      "shortName": "CLIPHST"
+    }
+  ],
+  "layouts": {
+    "keymap": [
+      [
+        {
+          "x": 3
+        },
+        "0,3"
+      ],
+      [
+        {
+          "x": 12.5,
+          "y": -1
+        },
+        "5,3"
+      ],
+      [
+        {
+          "x": 2,
+          "y": -0.875
+        },
+        "0,2"
+      ],
+      [
+        {
+          "x": 4,
+          "y": -1.0
+        },
+        "0,4"
+      ],
+      [
+        {
+          "x": 11.5,
+          "y": -1.0
+        },
+        "5,4"
+      ],
+      [
+        {
+          "x": 13.5,
+          "y": -1.0
+        },
+        "5,2"
+      ],
+      [
+        {
+          "x": 5,
+          "y": -0.875
+        },
+        "0,5"
+      ],
+      [
+        {
+          "x": 10.5,
+          "y": -1.0
+        },
+        "5,5"
+      ],
+      [
+        {
+          "x": 1,
+          "y": -0.875
+        },
+        "0,1"
+      ],
+      [
+        {
+          "x": 14.5,
+          "y": -1.0
+        },
+        "5,1"
+      ],
+      [
+        {
+          "y": -0.875
+        },
+        "0,0"
+      ],
+      [
+        {
+          "x": 15.5,
+          "y": -1.0
+        },
+        "5,0"
+      ],
+      [
+        {
+          "x": 3,
+          "y": -0.5
+        },
+        "1,3"
+      ],
+      [
+        {
+          "x": 12.5,
+          "y": -1
+        },
+        "6,3"
+      ],
+      [
+        {
+          "x": 2,
+          "y": -0.875
+        },
+        "1,2"
+      ],
+      [
+        {
+          "x": 4,
+          "y": -1.0
+        },
+        "1,4"
+      ],
+      [
+        {
+          "x": 11.5,
+          "y": -1.0
+        },
+        "6,4"
+      ],
+      [
+        {
+          "x": 13.5,
+          "y": -1.0
+        },
+        "6,2"
+      ],
+      [
+        {
+          "x": 5,
+          "y": -0.875
+        },
+        "1,5"
+      ],
+      [
+        {
+          "x": 10.5,
+          "y": -1.0
+        },
+        "6,5"
+      ],
+      [
+        {
+          "x": 1,
+          "y": -0.875
+        },
+        "1,1"
+      ],
+      [
+        {
+          "x": 14.5,
+          "y": -1.0
+        },
+        "6,1"
+      ],
+      [
+        {
+          "y": -0.875
+        },
+        "1,0"
+      ],
+      [
+        {
+          "x": 6,
+          "y": -1.0
+        },
+        "0,0\n\n\n\n\n\n\n\n\ne"
+      ],
+      [
+        {
+          "x": 7,
+          "y": -1.0
+        },
+        "0,1\n\n\n\n\n\n\n\n\ne"
+      ],
+      [
+        {
+          "x": 8.5,
+          "y": -1.0
+        },
+        "1,0\n\n\n\n\n\n\n\n\ne"
+      ],
+      [
+        {
+          "x": 9.5,
+          "y": -1.0
+        },
+        "1,1\n\n\n\n\n\n\n\n\ne"
+      ],
+      [
+        {
+          "x": 15.5,
+          "y": -1.0
+        },
+        "6,0"
+      ],
+      [
+        {
+          "x": 3,
+          "y": -0.5
+        },
+        "2,3"
+      ],
+      [
+        {
+          "x": 12.5,
+          "y": -1
+        },
+        "7,3"
+      ],
+      [
+        {
+          "x": 2,
+          "y": -0.875
+        },
+        "2,2"
+      ],
+      [
+        {
+          "x": 4,
+          "y": -1.0
+        },
+        "2,4"
+      ],
+      [
+        {
+          "x": 11.5,
+          "y": -1.0
+        },
+        "7,4"
+      ],
+      [
+        {
+          "x": 13.5,
+          "y": -1.0
+        },
+        "7,2"
+      ],
+      [
+        {
+          "x": 5,
+          "y": -0.875
+        },
+        "2,5"
+      ],
+      [
+        {
+          "x": 10.5,
+          "y": -1.0
+        },
+        "7,5"
+      ],
+      [
+        {
+          "x": 1,
+          "y": -0.875
+        },
+        "2,1"
+      ],
+      [
+        {
+          "x": 14.5,
+          "y": -1.0
+        },
+        "7,1"
+      ],
+      [
+        {
+          "y": -0.875
+        },
+        "2,0"
+      ],
+      [
+        {
+          "x": 15.5,
+          "y": -1.0
+        },
+        "7,0"
+      ],
+      [
+        {
+          "x": 6,
+          "y": -0.75
+        },
+        "4,0"
+      ],
+      [
+        {
+          "x": 9.5,
+          "y": -1.0
+        },
+        "9,5"
+      ],
+      [
+        {
+          "x": 3,
+          "y": -0.75
+        },
+        "3,3"
+      ],
+      [
+        {
+          "x": 12.5,
+          "y": -1
+        },
+        "8,3"
+      ],
+      [
+        {
+          "x": 2,
+          "y": -0.875
+        },
+        "3,2"
+      ],
+      [
+        {
+          "x": 4,
+          "y": -1.0
+        },
+        "3,4"
+      ],
+      [
+        {
+          "x": 11.5,
+          "y": -1.0
+        },
+        "8,4"
+      ],
+      [
+        {
+          "x": 13.5,
+          "y": -1.0
+        },
+        "8,2"
+      ],
+      [
+        {
+          "x": 5,
+          "y": -0.875
+        },
+        "3,5"
+      ],
+      [
+        {
+          "x": 10.5,
+          "y": -1.0
+        },
+        "8,5"
+      ],
+      [
+        {
+          "x": 1,
+          "y": -0.875
+        },
+        "3,1"
+      ],
+      [
+        {
+          "x": 14.5,
+          "y": -1.0
+        },
+        "8,1"
+      ],
+      [
+        {
+          "y": -0.875
+        },
+        "3,0"
+      ],
+      [
+        {
+          "x": 15.5,
+          "y": -1.0
+        },
+        "8,0"
+      ],
+      [
+        {
+          "x": 2.5,
+          "y": -0.375
+        },
+        "4,2"
+      ],
+      [
+        {
+          "x": 13,
+          "y": -1.0
+        },
+        "9,1"
+      ],
+      [
+        {
+          "x": 3.5,
+          "y": -0.975
+        },
+        "4,3"
+      ],
+      [
+        {
+          "x": 12,
+          "y": -1.0
+        },
+        "9,2"
+      ],
+      [
+        {
+          "x": 4.5,
+          "y": -0.9
+        },
+        "4,4"
+      ],
+      [
+        {
+          "x": 6,
+          "y": -1.0,
+          "h": 1.5
+        },
+        "4,5"
+      ],
+      [
+        {
+          "x": 9.5,
+          "y": -1.0,
+          "h": 1.5
+        },
+        "9,4"
+      ],
+      [
+        {
+          "x": 11,
+          "y": -1.0
+        },
+        "9,3"
+      ],
+      [
+        {
+          "x": 1.5,
+          "y": -0.875
+        },
+        "4,1"
+      ],
+      [
+        {
+          "x": 14,
+          "y": -1.0
+        },
+        "9,0"
+      ]
+    ]
+  }
+}

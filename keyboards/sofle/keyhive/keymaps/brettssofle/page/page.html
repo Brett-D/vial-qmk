@@ -1,0 +1,425 @@
+<!doctype html>
+<!-- Copyright 2026 Brett-D. SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Generated from page/page.html and page/js/*.js by tools/gen.py. Open from disk; works offline. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sofle config</title>
+<style>
+  :root { --bg:#15171c; --panel:#1f232b; --line:#323844; --text:#e6e8ec; --dim:#8a93a3; --acc:#4fa3ff; --ok:#3fcf7f; --warn:#ffb648; --bad:#ff5d6c; --key:#2a2f3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:12px; padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  .pill { padding:2px 10px; border-radius:99px; font-size:12px; font-weight:600; background:var(--line); }
+  .pill.ok { background:#1d4630; color:#9ff0c2; } .pill.wait { background:#4a3a17; color:#ffd58f; } .pill.bad { background:#4c1d23; color:#ffb3bb; }
+  .spacer { flex:1; } .dim { color:var(--dim); } .small { font-size:12px; }
+  button { font:inherit; color:var(--text); background:var(--key); border:1px solid var(--line); border-radius:8px; padding:6px 14px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:var(--acc); color:#06121f; border-color:var(--acc); font-weight:700; }
+  button.big { font-size:17px; padding:10px 26px; }
+  button:disabled { opacity:.5; cursor:default; }
+  input[type=text], select { font:inherit; color:var(--text); background:#11141a; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .banner { padding:8px 18px; font-weight:600; }
+  #focusWarn { display:none; background:var(--bad); color:#fff; }
+  body.blurred.bridgeish #focusWarn { display:block; }
+  main { padding:16px 18px; display:grid; grid-template-columns: minmax(0,1fr) 340px; gap:16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .panel + .panel { margin-top:14px; }
+  .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; }
+  ol { margin:6px 0 0 20px; padding:0; } li { margin:6px 0; }
+  .code { font:700 56px/1 ui-monospace, Consolas, monospace; color:var(--acc); margin:12px 0; }
+  kbd { background:var(--key); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:12px; }
+  .err { color:#ffb3bb; background:#3a1a1f; border:1px solid #6b2a33; border-radius:8px; padding:10px 12px; margin-top:10px; white-space:pre-line; }
+  .err pre { white-space:pre-wrap; background:#11141a; padding:8px; border-radius:6px; color:var(--text); font-size:12px; }
+  .note { color:#ffd58f; background:#3a3017; border:1px solid #6b5a2a; border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; }
+  .info { color:#bcd8ff; background:#17283c; border:1px solid #2a4a6b; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .tab { padding:6px 14px; border-radius:8px; background:var(--key); color:var(--dim); font-weight:600; border:none; }
+  button.layer { border:none; font:inherit; font-size:12px; }
+  body:not(.hid) button.tab, body:not(.hid) button.layer { cursor:default; }
+  .tab.on { background:var(--acc); color:#06121f; }
+  body.hid .tab, body.hid .layer, body.hid .k, body.hid .slot, body.hid .cat { cursor:pointer; }
+  body.hid .tab:not(.on):hover, body.hid .k:hover, body.hid .slot:hover { outline:1px solid var(--acc); }
+  .layers { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .layer { padding:3px 10px; border-radius:6px; background:var(--key); color:var(--dim); font-size:12px; }
+  .layer.on { outline:2px solid var(--acc); color:var(--text); }
+  #kb { position:relative; height:330px; }
+  .k { position:absolute; border-radius:6px; background:var(--key); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; padding:2px; overflow:hidden; word-break:break-word; user-select:none; }
+  .k.trns { color:var(--dim); } .k.none { opacity:.45; }
+  .k.sel { outline:3px solid var(--acc) !important; z-index:1; } .k.held { background:#203a5a; }
+  .k.knob { border-radius:50%; background:#262b35; font-size:10px; flex-direction:column; }
+  .k .new { color:var(--warn); font-weight:700; }
+.k .sh { color:var(--dim); } .k .ko { color:var(--acc); font-weight:700; }
+.mcRow { display:flex; gap:8px; align-items:center; padding:4px 6px; border-bottom:1px solid var(--line); }
+.mcRow .mcName { width:120px; font-weight:700; } .mcRow .mcPrev { flex:1; color:var(--dim); font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.mcStep { display:flex; gap:6px; align-items:center; margin:3px 0; } .mcStep select, .mcStep input { max-width:260px; }
+#mcPreview { font-family:monospace; font-size:12px; background:var(--key); padding:6px 8px; border-radius:6px; margin:8px 0; white-space:pre-wrap; }
+.koRow { display:flex; gap:8px; align-items:center; padding:4px 6px; border-bottom:1px solid var(--line); } .koRow span:first-child { flex:1; }
+#mcRec.on { background:#7a2030; color:#fff; }
+  .knobs { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px; }
+  .knobbox { background:var(--key); border-radius:8px; padding:8px 10px; }
+  .slot { display:flex; justify-content:space-between; padding:3px 6px; border-radius:5px; }
+  .slot.on { outline:2px solid var(--acc); }
+  .cats { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0; }
+  .cat { font-size:11px; padding:1px 7px; border-radius:5px; background:var(--key); color:var(--dim); }
+  .cat.on { background:var(--acc); color:#06121f; }
+  .list div { padding:3px 8px; border-radius:5px; font-family: ui-monospace, Consolas, monospace; }
+  .list div.on { background:var(--acc); color:#06121f; font-weight:700; }
+  #hidList { max-height:380px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
+  #hidList .item { display:flex; justify-content:space-between; gap:8px; cursor:pointer; padding:4px 8px; border-radius:5px; }
+  #hidList .item:hover { background:#203a5a; }
+  #hidList .item.cur { background:var(--acc); color:#06121f; font-weight:700; }
+  #hidList .hdr { color:var(--dim); font-size:11px; text-transform:uppercase; padding:6px 8px 2px; }
+  .big { font-size:22px; font-weight:700; } .arrow { color:var(--dim); margin:0 6px; }
+  .rows .row { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-radius:6px; }
+  .rows .row.on { outline:2px solid var(--acc); background:#1c2a3d; }
+  .ctl .row { display:grid; grid-template-columns: 170px minmax(0,1fr) 70px; gap:12px; align-items:center; padding:7px 4px; }
+  .ctl .row select { max-width:100%; min-width:0; }
+  .ctl .row .v { text-align:right; font-family:ui-monospace,monospace; }
+  .btns { display:flex; gap:8px; margin-top:10px; align-items:center; }
+  .sw { width:22px; height:22px; padding:0; border-radius:50%; margin:1px; border:2px solid var(--line); vertical-align:middle; }
+.sw.on { border-color:#fff; } .cpick input[type=color] { width:44px; height:28px; padding:0 2px; vertical-align:middle; margin-right:4px; }
+.fxPrev { margin:4px 0 10px; } #fxCanvas { width:100%; max-width:600px; background:#0c0d10; border-radius:8px; cursor:pointer; display:block; }
+.fxH { margin:14px 0 4px; font-size:14px; } .fxNote { margin:2px 0 6px; } .fxNote.warn { color:var(--warn); }
+#fxSec.off .row { opacity:.45; } #fxSec.off select, #fxSec.off input { pointer-events:none; }
+.swatch { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; border:1px solid var(--line); margin-left:8px; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:99px; background:#4a3a17; color:#ffd58f; display:none; }
+  .badge.show { display:inline-block; }
+  canvas { width:100%; background:#11141a; border-radius:8px; display:block; }
+  .help dt { font-weight:600; margin-top:6px; } .help dd { margin:0; color:var(--dim); }
+  details { margin-top:16px; } pre { white-space:pre-wrap; font-size:11px; color:var(--dim); max-height:240px; overflow:auto; }
+  .hidden { display:none !important; }
+  .petTop { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  #petCanvas { width:96px; flex:none; background:#0a0a1e; border-radius:8px; image-rendering:pixelated; }
+  .petInfo { flex:1; min-width:220px; }
+  #petStats .row { display:grid; grid-template-columns:70px 1fr 40px; gap:12px; padding:4px 0; }
+  #petStats .v { text-align:right; font-family:ui-monospace,monospace; }
+  .petPick { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+  .petPick button { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px; }
+  .petPick button.on { outline:2px solid var(--acc); background:#1c2a3d; }
+  .petPick canvas { width:64px; height:64px; background:#0a0a1e; border-radius:6px; image-rendering:pixelated; }
+  .pbar { height:10px; background:#1b2333; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+  .pbar i { display:block; height:100%; background:var(--acc); }
+  #restorePanel { margin:10px 16px; }
+  #restoreList label { display:block; margin:6px 0; }
+  #restoreList .chg { color:var(--dim, #9aa); font-size:12px; margin-left:24px; white-space:pre-wrap; }
+  .peaks span { display:inline-block; margin:2px; padding:1px 6px; border-radius:5px; background:var(--key); font-family:ui-monospace,monospace; }
+  .peaks span.click { background:#1d4630; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1d4630; color:#c9f7dd; padding:8px 16px; border-radius:8px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; z-index:5; }
+  #toast.show { opacity:1; } #toast.bad { background:#4c1d23; color:#ffd0d5; }
+  #calKb { position:relative; height:310px; margin-top:10px; }
+  #calKb .k { cursor:pointer; } #calKb .k:hover { outline:2px solid var(--acc); }
+  #calKb .k.done { background:#1d4630; } #calKb .k.other { opacity:.35; }
+  .calBtns { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .calStep { font-size:15px; font-weight:600; margin:6px 0; color:var(--dim); }
+  .calBig { font-size:26px; font-weight:800; margin:8px 0 12px; min-height:1.2em; }
+  .calNote { margin:6px 0; min-height:1.2em; }
+  .calProg { height:8px; background:var(--key); border-radius:4px; overflow:hidden; margin-bottom:8px; }
+  #calBar { height:100%; width:0; background:var(--acc); transition:width .2s; }
+  .calSteps li { margin:4px 0; } .warnText { color:var(--warn); }
+  .calBig:empty, .calNote:empty, #calText:empty, .calBtns:empty { display:none; }
+  .navf { outline:3px solid #ffb020 !important; outline-offset:1px; } .navedit { outline:3px solid #4cd964 !important; outline-offset:1px; }
+  #calClickBox { margin-top:14px; } #calClickBox summary { cursor:pointer; color:var(--dim); }
+  #calJson { width:100%; height:120px; font:11px ui-monospace,monospace; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:6px; }
+  .adv { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+  .adv .line { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sofle config</h1>
+  <span id="status" class="pill">Not connected</span>
+  <span id="stats" class="dim small"></span>
+  <span class="spacer"></span>
+  <button id="backupBtn" class="hidden" title="Download every setting as a file">Backup</button>
+  <button id="restoreBtn" class="hidden" title="Load settings from a backup file">Restore…</button>
+  <input type="file" id="restoreFile" accept=".json,application/json" class="hidden">
+  <button id="disconnectBtn" class="hidden">Disconnect</button>
+  <span class="dim small" id="whereFrom">Works offline from this file.</span>
+</header>
+<div id="diagBanner" class="err hidden"><span id="diagText"></span> <button id="diagCopy">Copy</button> <button id="diagClear">Dismiss</button></div>
+<div id="restorePanel" class="panel hidden">
+  <h2>Restore from backup</h2>
+  <div id="restoreInfo" class="small"></div>
+  <div id="restoreList"></div>
+  <div class="line"><button id="restoreApply" class="primary">Restore selected</button> <button id="restoreCancel">Cancel</button> <span id="restoreProgress" class="dim small"></span></div>
+</div>
+<div id="focusWarn" class="banner">This page isn't focused. Click here first, or the keyboard's messages will be typed into another window.</div>
+<main>
+  <section>
+    <div id="connect">
+      <div class="panel" id="hidConnect">
+        <h2>Connect</h2>
+        <div id="hidYes">
+          <button id="connectBtn" class="primary big">Connect</button>
+          <p id="hidHow">Click <b>Connect</b>, choose <b>Sofle</b> in the browser's list, then confirm on the keyboard: its screen shows <b>CONF?</b> — press the <b>right knob</b> (or <kbd>Enter</kbd>).</p>
+          <p class="small dim" id="hidVial">Close Vial/VIA first; only one app can use the keyboard's config channel at a time.</p>
+        </div>
+        <div id="hidNo" class="hidden">
+          <p>This browser can't connect to the keyboard directly (no WebHID, e.g. Firefox or Safari). Use <b>keyboard-only mode</b> below, or open this file in Chrome or Edge to use the mouse.</p>
+        </div>
+        <div id="hidWait" class="info hidden"></div>
+        <div id="hidErr" class="err hidden"></div>
+      </div>
+      <div class="panel" id="bridgeConnect">
+        <h2>Keyboard-only mode <span class="dim small">(any browser — controlled with the keyboard's keys and knobs)</span></h2>
+        <div id="connectSteps">
+          <ol>
+            <li>Click this page so it has focus.</li>
+            <li>Press <kbd>Raise</kbd> + the top-right key (<b>Config</b>), or hold both knob buttons for 2 s. The screen shows <b>CONF?</b></li>
+            <li>Press the <b>right knob</b> (or <kbd>Space</kbd> / <kbd>Enter</kbd>).</li>
+            <li>Press the letter that appears here.</li>
+          </ol>
+        </div>
+        <div id="challenge" class="hidden">
+          Press this letter on the keyboard:
+          <div class="code" id="code"></div>
+          <span class="dim small">This proves the keyboard is typing into this page. <kbd>Space</kbd> gets a new letter.</span>
+        </div>
+        <div id="closed" class="hidden">Keyboard-only mode is off. Saved changes stay on the keyboard.</div>
+        <div id="mismatch" class="hidden err">This page and the keyboard firmware come from different builds; keycode picking may be wrong. Use the sofle-config.html from the same build.</div>
+      </div>
+    </div>
+
+    <div id="editor" class="hidden">
+      <div id="modeNote"></div>
+      <div class="tabs" id="tabs"></div>
+      <div id="keysView" class="panel">
+        <div class="layers" id="layers"></div>
+        <div id="kb"></div>
+        <div class="knobs" id="knobs"></div>
+      </div>
+      <div id="ledView" class="panel hidden">
+        <h2>Underglow <span id="ledUnsaved" class="badge">unsaved</span></h2>
+        <div class="rows" id="ledRows"></div>
+        <div class="ctl hidden" id="ledCtl">
+          <div class="row"><span>Lights</span><label><input type="checkbox" id="ledOn"> on</label><span></span></div>
+          <div class="fxPrev"><canvas id="fxCanvas" width="600" height="230" title="Click a key: a test ripple, here and on the keyboard"></canvas>
+            <div class="small dim">Preview: <b>click a key</b> for a test ripple (it also runs on the keyboard), or <button id="fxDemo" class="small">play a demo</button>. <span id="fxApprox"></span></div></div>
+          <h3 class="fxH">Background</h3>
+          <div class="row"><span>Effect</span><select id="ledBase"></select><span></span></div>
+          <div class="row"><span>Colour</span><span class="cpick" data-h="ledHue" data-s="ledSat"></span><span></span></div>
+          <div class="small dim" style="margin:-2px 0 6px">Pick a colour or a swatch (brightness is its own slider); hue and saturation below are the fine controls. The keys show colours a little differently from the screen.</div>
+          <div class="row"><span>Hue</span><input type="range" id="ledHue" min="0" max="255"><span class="v"><span id="ledHueV"></span><span class="swatch" id="ledSwatch"></span></span></div>
+          <div class="row"><span>Saturation</span><input type="range" id="ledSat" min="0" max="255"><span class="v" id="ledSatV"></span></div>
+          <div class="row"><span>Brightness</span><input type="range" id="ledVal" min="0" max="100"><span class="v" id="ledValV"></span></div>
+          <div class="row"><span>Brightness curve</span><select id="ledCurve"><option value="0">Balanced (recommended)</option><option value="1">Linear (as before v23)</option><option value="2">Smooth (v23-v25)</option></select><span></span></div>
+          <div class="small dim" style="margin:-2px 0 6px">How LED levels become light. <b>Balanced</b>: as bright as before v23, with smooth fades at the dim end. <b>Linear</b>: the old output (dim fades step). <b>Smooth</b>: gamma 2.2 for everything — smoothest, but mid-tones, mixed colours and sparse effects come out much darker. The maximum brightness (power) is the same for all three.</div>
+          <div class="row"><span>Speed</span><input type="range" id="ledSpeed" min="0" max="255"><span class="v" id="ledSpeedV"></span></div>
+          <div id="fxSec">
+            <h3 class="fxH">On key press</h3>
+            <div class="small fxNote hidden" id="fxSolo">This effect reacts to keys itself, so it's used on its own.</div>
+            <div class="row"><span>Effect</span><select id="fxEffect"></select><span></span></div>
+            <div class="row fxOn"><span>Colour</span><select id="fxColour"><option value="0">Fixed (pick below)</option><option value="1">Opposite of the background</option><option value="2">Rainbow by distance</option><option value="3">Random per press</option></select><span></span></div>
+            <div class="row fxOn rxRow"><span>Key-press colour</span><span class="cpick" data-h="rxHue" data-s="rxSat"></span><span></span></div>
+            <div class="row fxOn rxRow"><span>Key-press hue</span><input type="range" id="rxHue" min="0" max="255"><span class="v"><span id="rxHueV"></span><span class="swatch" id="rxSwatch"></span></span></div>
+            <div class="row fxOn rxRow"><span>Key-press saturation</span><input type="range" id="rxSat" min="0" max="255"><span class="v" id="rxSatV"></span></div>
+            <div class="row fxOn"><span>Over the background</span><select id="fxBlend"><option value="0">Replace (always clear)</option><option value="1">Add (lightens)</option><option value="2">Tint (keeps its brightness)</option></select><span></span></div>
+            <div class="row fxOn"><span>Key-press brightness</span><label><input type="checkbox" id="fxBrightSame"> same as the background</label><span></span></div>
+            <div class="row fxOn fxBrightRow"><span></span><input type="range" id="fxBright" min="1" max="100"><span class="v" id="fxBrightV"></span></div>
+            <div class="small dim fxOn" style="margin:-2px 0 6px">How bright the key-press animation is, on its own. The background's <b>Brightness</b> (above) is the rest of the keyboard; <b>Dim background while active</b> (below) lowers the background only while an animation runs. Both stay under the keyboard's maximum brightness. With <b>Tint</b> the animation takes the background's brightness instead.</div>
+            <div class="row fxOn"><span>Speed</span><input type="range" id="fxSpeed" min="0" max="15"><span class="v" id="fxSpeedV"></span></div>
+            <div class="row fxOn"><span>Band width</span><input type="range" id="fxWidth" min="0" max="15"><span class="v" id="fxWidthV"></span></div>
+            <div class="row fxOn"><span>Reach</span><input type="range" id="fxRadius" min="0" max="15"><span class="v" id="fxRadiusV"></span></div>
+            <div class="row fxOn"><span>Fade</span><input type="range" id="fxFade" min="0" max="15"><span class="v" id="fxFadeV"></span></div>
+            <div class="row fxOn fxEchoRow"><span>Echo rings</span><input type="range" id="fxEchoes" min="0" max="3"><span class="v" id="fxEchoesV"></span></div>
+            <div class="row fxOn"><span>Dim background while active</span><input type="range" id="fxDim" min="0" max="7"><span class="v" id="fxDimV"></span></div>
+            <div class="row fxOn fxMaxRow"><span>Max effects at once</span><input type="range" id="fxMax" min="1" max="8"><span class="v" id="fxMaxV"></span></div>
+            <div class="small dim fxOn fxMaxRow" style="margin:-2px 0 6px">Only the newest this many presses animate at once (older ones end early). Each one costs the keyboard time on every frame; 4 is plenty for typing.</div>
+            <div class="small fxNote warn hidden" id="fxWarn"></div>
+          </div>
+          <h3 class="fxH">Underglow and power</h3>
+          <div class="row"><span>LED zones</span><select id="ledZone"></select><span></span></div>
+          <div class="row ugRow"><span>Underglow colour</span><span class="cpick" data-h="ugHue" data-s="ugSat"></span><span></span></div>
+          <div class="row ugRow"><span>Underglow hue</span><input type="range" id="ugHue" min="0" max="255"><span class="v"><span id="ugHueV"></span><span class="swatch" id="ugSwatch"></span></span></div>
+          <div class="row ugRow"><span>Underglow saturation</span><input type="range" id="ugSat" min="0" max="255"><span class="v" id="ugSatV"></span></div>
+          <div class="row"><span>Turn off after no use</span><select id="ledIdle"></select><span></span></div>
+          <div id="ssSec" class="hidden">
+            <h3 class="fxH">Screensaver</h3>
+            <div class="row"><span>Screensaver after no use</span><select id="ssAfter"></select><span></span></div>
+            <div class="row ssOn"><span>Effect</span><select id="ssEffect"></select><span></span></div>
+            <div class="row ssOn"><span>Hue</span><input type="range" id="ssHue" min="0" max="248" step="8"><span class="v"><span id="ssHueV"></span><span class="swatch" id="ssSwatch"></span></span></div>
+            <div class="row ssOn"><span>Saturation</span><select id="ssSat"></select><span></span></div>
+            <div class="row ssOn"><span>Brightness</span><select id="ssVal"></select><span></span></div>
+            <div class="row ssOn"><span>Speed</span><select id="ssSpeed"></select><span></span></div>
+            <div class="row ssOn"><span>Pet reactions</span><label><input type="checkbox" id="ssPet"> still play over it</label><span></span></div>
+            <div class="btns"><button id="ssPreview">Preview</button><span class="dim small">Shows it here and on the keyboard for 10 s (any key, knob or trackpad ends it).</span></div>
+            <div class="small dim" style="margin:-2px 0 6px">After this long without a key, knob or trackpad, the lights fade (1 s) to this effect, and fade back on the next input (that key is still typed). <b>Turn off after no use</b> still counts from the last input, so set it longer than this (or Never) to see the screensaver. Not while the config page is connected.</div>
+            <div class="small fxNote warn hidden" id="ssWarn"></div>
+          </div>
+          <div class="btns"><button id="ledSave" class="primary">Save</button><button id="ledRevert">Undo changes</button><span class="dim small">The lights preview changes live; unsaved changes are undone when you leave this tab.</span></div>
+          <div class="btns" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+            <button id="calStart">Calibrate LED positions…</button><button id="calTest">Test LED map</button><button id="mapReset">Use built-in LED map</button>
+            <span class="dim small" id="mapState"></span>
+          </div>
+        </div>
+        <div id="calView" class="hidden">
+          <div id="calProg" class="calProg hidden"><div id="calBar"></div></div>
+          <div class="calStep" id="calTitle"></div>
+          <div class="calBig" id="calBig"></div>
+          <div id="calText"></div>
+          <div class="calNote" id="calNote"></div>
+          <div class="calBtns" id="calBtns"></div>
+          <details id="calClickBox"><summary>Can't press that key? Click it on the picture instead</summary><div id="calKb"></div></details>
+          <div id="calDone" class="hidden">
+            <p><b>Save to keyboard</b> makes effects like splash use the new map right away (it is kept across power-offs), then lets you test it. <b>Copy result</b> gives the map as text (LED number → key) if you want it built into the firmware.</p>
+            <textarea id="calJson" readonly></textarea>
+            <div class="calBtns"><button id="calSave" class="primary">Save to keyboard</button><button id="calCopy">Copy result</button><button id="calRestart">Start over</button><button id="calClose">Close</button></div>
+          </div>
+        </div>
+      </div>
+      <div id="padView" class="panel hidden">
+        <h2>Trackpad press-to-click <span id="tpUnsaved" class="badge">unsaved</span></h2>
+        <div class="rows" id="tpRows"></div>
+        <div class="ctl hidden" id="tpCtl">
+          <div class="row"><span>Press-to-click</span><label><input type="checkbox" id="tpOn"> on</label><span></span></div>
+          <div class="row"><span>Threshold (press)</span><input type="range" id="tpThr" min="1" max="63"><span class="v" id="tpThrV"></span></div>
+          <div class="row"><span>Release Z</span><input type="range" id="tpRel" min="0" max="62"><span class="v" id="tpRelV"></span></div>
+          <div class="btns"><button id="tpSave" class="primary">Save</button><button id="tpRevert">Undo changes</button></div>
+        </div>
+        <div class="ctl hidden" id="wgCtl">
+          <h2 style="margin-top:14px">Mouse wiggler</h2>
+          <div class="row"><span>Mouse wiggler</span><label><input type="checkbox" id="wgOn"> on</label><span></span></div>
+          <div class="row"><span>Nudge after no input for</span><select id="wgEvery"><option value="0">30 seconds</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="3">4 minutes</option></select><span></span></div>
+          <p class="small dim">Keeps the computer awake: after this long without any key, knob or trackpad use, the pointer moves 1 pixel and straight back (again every interval while you're away). Applies right away and switches off whenever the keyboard is unplugged. The <b>Mouse wiggle</b> key (Special) toggles it too.</p>
+          <div class="hidden" id="netPrefs">
+            <h2 style="margin-top:14px">Network mode</h2>
+            <div class="row"><span>Typing the address</span><label><input type="checkbox" id="netEnter"> press Enter after typing <code>http://192.168.7.1</code></label><span></span></div>
+            <p class="small dim">On the NET screen, a click of the right knob types the address into the address bar you have selected; with this on (the default) it also presses Enter, so the page opens. That Enter never answers the page's <b>CONF?</b> — confirm with the knob. Saved on the keyboard.</p>
+          </div>
+          <div class="hidden" id="dispPrefs">
+            <h2 style="margin-top:14px">Display (right OLED)</h2>
+            <div class="row"><span>Brightness</span><input type="range" id="dispBright" min="1" max="5"><span class="v" id="dispBrightV"></span></div>
+            <div class="row"><span>Sleep after no use</span><select id="dispSleep"><option value="0">30 seconds</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="3">5 minutes</option><option value="4">10 minutes</option><option value="5">30 minutes</option></select><span></span></div>
+            <div class="row"><span>Screen</span><label><input type="checkbox" id="dispOff"> off</label><span></span></div>
+            <p class="small dim">Also on the keyboard: on the <b>INFO</b> page, turn the right knob for the Display menu (Brite, Sleep, Off, Back; tap to choose, turn to change, tap again to save). While the screen is off, a knob press wakes it. The config, CONF? and network screens always show. Lower brightness and a short sleep help the OLED last (burn-in). Saved on the keyboard.</p>
+          </div>
+          <div class="hidden" id="perfBox">
+            <h2 style="margin-top:14px">Responsiveness</h2>
+            <div class="btns"><button id="perfRun">Measure</button><button id="perfReset">Reset</button><button id="perfCopy">Copy</button><span class="dim small" id="perfNote"></span></div>
+            <div id="perfOut" class="small"></div>
+            <p class="small dim">How long each pass of the keyboard's main loop takes, on each half (the longest over the last 10 s, and the worst since the last reset). A key is read once per pass, so the longest pass is about the longest a press can wait to be seen, plus the 5 ms debounce; keys on the right half also wait for the left half's next pass. If you notice lag, press Measure, keep using the keyboard until it happens, then Copy and send the numbers.</p>
+          </div>
+        </div>
+        <h2 style="margin-top:14px">Live Z</h2>
+        <canvas id="zbar" width="600" height="70"></canvas>
+        <canvas id="zhist" width="600" height="140" style="margin-top:8px"></canvas>
+        <p class="small dim">Z is the trackpad's signal strength (0–63). A press clicks when Z reaches the <span style="color:var(--warn)">threshold</span> and lets go below the <span style="color:var(--acc)">release Z</span> (or when you lift). Set the threshold between your light-touch peaks and your firm-press peaks.</p>
+        <div class="small">Recent touch peaks (green = would click at the threshold shown):</div>
+        <div class="peaks" id="peaks"></div>
+      </div>
+      <div id="petView" class="panel hidden">
+        <h2 id="petTitle">The OLED pet</h2>
+        <div class="petTop">
+          <canvas id="petCanvas" width="96" height="150"></canvas>
+          <div class="petInfo">
+            <div class="rows" id="petStats"></div>
+            <div class="small" id="petMood"></div>
+          </div>
+        </div>
+        <div class="btns" id="petCare"><button data-act="1">Feed</button><button data-act="2">Play</button><button data-act="3" id="petSleepBtn">Sleep</button><button data-act="4">Clean</button></div>
+        <div class="ctl" id="petCtl">
+          <h2 style="margin-top:14px">Settings</h2>
+          <div class="row"><span>Pet</span><label><input type="checkbox" id="petOn"> on (its own OLED page)</label><span></span></div>
+          <div class="row"><span>Name</span><input type="text" id="petName" maxlength="9" spellcheck="false"><span></span></div>
+          <div class="row"><span>Needs care</span><select id="petDecay"><option value="0">Slowly (stats last ~2 days)</option><option value="1">Normally (~1 day)</option><option value="2">Quickly (~12 hours)</option></select><span></span></div>
+          <div class="row"><span>Can die</span><label><input type="checkbox" id="petDie"> after a whole day with no food and no fun</label><span></span></div>
+          <div class="row pgOnly"><span>Big pet</span><label><input type="checkbox" id="petBig"> more room: thin stat bars while the care menu is closed</label><span></span></div>
+          <div class="pgOnly">
+            <h3 class="fxH">LED reactions</h3>
+            <div class="row"><span>LED reactions</span><label><input type="checkbox" id="pgOn"> the keys light up when the pet eats, plays, is happy, sad, sleeps or hatches</label><span></span></div>
+            <div class="row pgRow"><span>Strength</span><input type="range" id="pgLevel" min="5" max="100" step="5"><span class="v" id="pgLevelV"></span></div>
+            <div class="row pgRow"><span>When</span><select id="pgPage"><option value="0">Always</option><option value="1">Only while the pet's screen is showing</option></select><span></span></div>
+            <div class="pgRow" id="pgList"></div>
+            <div class="fxPrev pgRow"><canvas id="pgCanvas" width="600" height="230"></canvas>
+              <div class="small dim">Preview over your lighting: <b>Test</b> plays a reaction here and on the keyboard.</div></div>
+            <div class="small dim pgRow">A reaction lights up for a few seconds over your lighting, in the key-press brightness, and never changes the lighting settings. None during config mode, LED calibration or typed delivery (the sad and sleepy ones also not while this page is connected).</div>
+          </div>
+          <div class="btns"><button id="petNew">New pet…</button></div>
+          <div id="petPicker" class="hidden">
+            <p class="small">Choose who hatches from the new egg. It starts as an egg (about 10 minutes), is a baby until a day old, a child until three days, then an adult. Good care keeps it growing at full speed.</p>
+            <div class="petPick" id="petPick"></div>
+            <div class="btns"><button id="petHatch" class="primary">Hatch this egg</button><button id="petPickCancel">Cancel</button></div>
+          </div>
+        </div>
+        <p class="small dim">On the keyboard: press the right knob until the pet fills the right screen. There, turn the right knob to choose Feed / Play / Sleep / Clean, tap it to do it, and hold it about a second for the next screen. Typing counts as play and gives it a little energy (up to 80; sleep fills the rest), so normal use keeps the pet happy; it only gets hungry or sad, never dies, unless <b>Can die</b> is on.</p>
+      </div>
+      <div id="macroView" class="panel hidden">
+        <h2>My macros</h2>
+        <p class="small dim">A macro types a sequence of keys or text with one key. Make it here, then put it on a key: Layout tab → click a key → <b>My macros</b>. Ready-made ones (Delete line, Duplicate line, Lock PC…) are in the picker's <b>Macros</b> group and need no setup. Saved on the keyboard (Vial's macros M0–M15; the names too).</p>
+        <div id="mcList"></div>
+        <div id="mcEdit" class="hidden">
+          <h3 class="fxH" id="mcTitle"></h3>
+          <div class="row"><span>Name</span><input type="text" id="mcName" maxlength="12" spellcheck="false" placeholder="e.g. Signature"><span></span></div>
+          <div id="mcSteps"></div>
+          <div class="btns">
+            <button data-add="tap">+ Tap key</button><button data-add="down">+ Hold key</button><button data-add="up">+ Release key</button>
+            <button data-add="text">+ Type text</button><button data-add="delay">+ Wait</button>
+            <button id="mcRec" title="Type on the keyboard: every key you press and release is added (Esc ends it)">● Record</button>
+          </div>
+          <div class="btns"><select id="mcTpl"></select><button id="mcUseTpl">Start from template</button></div>
+          <div class="small dim">What it sends:</div>
+          <div id="mcPreview"></div>
+          <div class="btns"><button id="mcSave" class="primary">Save</button><button id="mcCancel">Cancel</button><button id="mcClear">Clear this macro</button><span class="dim small" id="mcBytes"></span></div>
+          <p class="small dim">Text is typed as on a US layout (letters, digits, symbols, new lines). <b>Hold key</b> / <b>Release key</b> keep a key (e.g. Shift) down across steps; release it again before the end.</p>
+        </div>
+        <h2 style="margin-top:18px">Shift pairs</h2>
+        <p class="small dim">Choose what a key sends with Shift held, e.g. <code>,</code> normally and <code>;</code> with Shift. It applies wherever that key's keycode is on the keymap (the diagram shows it in blue). These are Vial's key overrides: Vial can edit them too.</p>
+        <div id="koList"></div>
+        <div class="row"><span>Key (normal output)</span><select id="koTrig"></select><span></span></div>
+        <div class="row"><span>With Shift sends</span><select id="koOut"></select><span></span></div>
+        <div class="row"><span>On layers</span><span id="koLayers"></span><span></span></div>
+        <div class="btns"><button id="koSave" class="primary">Add shift pair</button><button id="koCancel" class="hidden">Cancel</button><span class="dim small" id="koNote"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div id="picker" class="panel hidden">
+      <h2 id="pickTitle">Keycode</h2>
+      <div><span id="curName" class="big"></span><span id="pickArrow" class="arrow">→</span><span id="newName" class="big" style="color:var(--warn)"></span></div>
+      <div class="small dim" id="pickHint" style="margin:4px 0 6px"></div>
+      <div id="pickBridge">
+        <div class="cats" id="cats"></div>
+        <div class="list" id="list"></div>
+      </div>
+      <div id="pickHid" class="hidden">
+        <input type="text" id="search" placeholder="Search keycodes (e.g. plus, pipe, copy, vol, F5, MO)" style="width:100%">
+        <div class="cats" id="hidCats"></div>
+        <div id="hidList"></div>
+        <div class="adv">
+          <div class="small dim">Hold/tap keys: tap sends the key, hold gives a layer or modifier.</div>
+          <div class="line">
+            <select id="advKind"><option value="lt">Layer-tap: hold for layer</option><option value="mt">Mod-tap: hold for modifier</option><option value="mod">Shortcut: modifiers + key (e.g. Ctrl+Shift+T)</option></select>
+            <select id="advLayer"></select>
+          </div>
+          <div class="line" id="advMods">
+            <label><input type="checkbox" value="1"> Ctrl</label><label><input type="checkbox" value="2"> Shift</label>
+            <label><input type="checkbox" value="4"> Alt</label><label><input type="checkbox" value="8"> GUI</label>
+            <label><input type="checkbox" value="16"> right-hand</label>
+          </div>
+          <div class="line">key <select id="advBase"></select> <button id="advApply">Assign</button> <b id="advPreview" class="small"></b></div>
+          <div class="line">or keycode value <input type="text" id="rawKc" placeholder="0x5223" size="8"> <button id="rawApply">Assign</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel help">
+      <h2>How to use</h2>
+      <dl id="help"></dl>
+      <p class="small dim" id="helpFoot"></p>
+    </div>
+    <details>
+      <summary class="dim small">Log</summary>
+      <pre id="log"></pre>
+    </details>
+  </aside>
+</main>
+<div id="toast"></div>
+
+<script>
+/*__PAGE_JS__*/</script>
+</body>
+</html>

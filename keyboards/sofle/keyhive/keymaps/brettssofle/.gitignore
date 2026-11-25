@@ -1,0 +1,3 @@
+# Written by tools/gen.py at every build (rules.mk).
+generated/
+__pycache__/

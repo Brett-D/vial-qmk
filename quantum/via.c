@@ -81,19 +81,26 @@ void via_qmk_rgb_matrix_set_value(uint8_t *data);
 void via_qmk_rgb_matrix_get_value(uint8_t *data);
 #endif
 
+// The 3-byte value stored at VIA_EEPROM_MAGIC_ADDR that marks the EEPROM as
+// written by a compatible firmware. Vial uses the random BUILD_ID, so every
+// new build resets the keymap and settings; a keyboard/keymap can override
+// this with a value that only changes when its stored layout does.
+__attribute__((weak)) uint32_t via_eeprom_magic(void) {
+#ifdef VIAL_ENABLE
+    return BUILD_ID & 0xFFFFFF;
+#else
+    char *p = QMK_BUILDDATE; // e.g. "2019-11-05-11:29:54"
+    return (uint32_t)(((p[2] & 0x0F) << 4) | (p[3] & 0x0F)) | (uint32_t)(((p[5] & 0x0F) << 4) | (p[6] & 0x0F)) << 8 | (uint32_t)(((p[8] & 0x0F) << 4) | (p[9] & 0x0F)) << 16;
+#endif
+}
+
 // Can be called in an overriding via_init_kb() to test if keyboard level code usage of
 // EEPROM is invalid and use/save defaults.
 bool via_eeprom_is_valid(void) {
-#ifdef VIAL_ENABLE
-    uint8_t magic0 = BUILD_ID & 0xFF;
-    uint8_t magic1 = (BUILD_ID >> 8) & 0xFF;
-    uint8_t magic2 = (BUILD_ID >> 16) & 0xFF;
-#else
-    char *  p      = QMK_BUILDDATE; // e.g. "2019-11-05-11:29:54"
-    uint8_t magic0 = ((p[2] & 0x0F) << 4) | (p[3] & 0x0F);
-    uint8_t magic1 = ((p[5] & 0x0F) << 4) | (p[6] & 0x0F);
-    uint8_t magic2 = ((p[8] & 0x0F) << 4) | (p[9] & 0x0F);
-#endif
+    uint32_t magic  = via_eeprom_magic();
+    uint8_t  magic0 = magic & 0xFF;
+    uint8_t  magic1 = (magic >> 8) & 0xFF;
+    uint8_t  magic2 = (magic >> 16) & 0xFF;
 
     return (eeprom_read_byte((void *)VIA_EEPROM_MAGIC_ADDR + 0) == magic0 && eeprom_read_byte((void *)VIA_EEPROM_MAGIC_ADDR + 1) == magic1 && eeprom_read_byte((void *)VIA_EEPROM_MAGIC_ADDR + 2) == magic2);
 }
@@ -101,16 +108,10 @@ bool via_eeprom_is_valid(void) {
 // Sets VIA/keyboard level usage of EEPROM to valid/invalid
 // Keyboard level code (eg. via_init_kb()) should not call this
 void via_eeprom_set_valid(bool valid) {
-#ifdef VIAL_ENABLE
-    uint8_t magic0 = BUILD_ID & 0xFF;
-    uint8_t magic1 = (BUILD_ID >> 8) & 0xFF;
-    uint8_t magic2 = (BUILD_ID >> 16) & 0xFF;
-#else
-    char *  p      = QMK_BUILDDATE; // e.g. "2019-11-05-11:29:54"
-    uint8_t magic0 = ((p[2] & 0x0F) << 4) | (p[3] & 0x0F);
-    uint8_t magic1 = ((p[5] & 0x0F) << 4) | (p[6] & 0x0F);
-    uint8_t magic2 = ((p[8] & 0x0F) << 4) | (p[9] & 0x0F);
-#endif
+    uint32_t magic  = via_eeprom_magic();
+    uint8_t  magic0 = magic & 0xFF;
+    uint8_t  magic1 = (magic >> 8) & 0xFF;
+    uint8_t  magic2 = (magic >> 16) & 0xFF;
 
     eeprom_update_byte((void *)VIA_EEPROM_MAGIC_ADDR + 0, valid ? magic0 : 0xFF);
     eeprom_update_byte((void *)VIA_EEPROM_MAGIC_ADDR + 1, valid ? magic1 : 0xFF);
@@ -208,9 +209,20 @@ __attribute__((weak)) void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
 //
 // raw_hid_send() is called at the end, with the same buffer, which was
 // possibly modified with returned values.
+// Keyboard/keymap hook run before any VIA/Vial command (as in upstream QMK).
+// Return true if the command was handled; the hook must then call
+// raw_hid_send() itself.
+__attribute__((weak)) bool via_command_kb(uint8_t *data, uint8_t length) {
+    return false;
+}
+
 void raw_hid_receive(uint8_t *data, uint8_t length) {
     uint8_t *command_id   = &(data[0]);
     uint8_t *command_data = &(data[1]);
+
+    if (via_command_kb(data, length)) {
+        return;
+    }
 
 #ifdef VIAL_ENABLE
     /* When unlock is in progress, we can only react to a subset of commands */

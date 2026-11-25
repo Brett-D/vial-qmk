@@ -127,6 +127,8 @@ enum via_qmk_audio_value {
 
 // Can be called in an overriding via_init_kb() to test if keyboard level code usage of
 // EEPROM is invalid and use/save defaults.
+// 24-bit EEPROM validity magic (weak; default: Vial BUILD_ID / build date).
+uint32_t via_eeprom_magic(void);
 bool via_eeprom_is_valid(void);
 
 // Sets VIA/keyboard level usage of EEPROM to valid/invalid
@@ -136,6 +138,10 @@ void via_eeprom_set_valid(bool valid);
 // Called by QMK core to initialize dynamic keymaps etc.
 void eeconfig_init_via(void);
 void via_init(void);
+
+// Runs before VIA/Vial handle a raw HID command. Return true if handled (the
+// hook then sends the reply with raw_hid_send()).
+bool via_command_kb(uint8_t *data, uint8_t length);
 
 // Used by VIA to store and retrieve the layout options.
 uint32_t via_get_layout_options(void);

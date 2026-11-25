@@ -1,0 +1,604 @@
+// Copyright 2026 Brett-D
+// SPDX-License-Identifier: GPL-2.0-or-later
+//
+// The OLED pet: care, stats and growth (master half).
+//
+// Seven species (Pip, cat, dog, owl, dragon, blob, axolotl; art in
+// pet_art.h) grow egg -> baby -> child -> adult: the egg hatches after about
+// 10 minutes, it's a child at 1 day and an adult at 3 days of growth. Growth
+// runs at the care speed (slowly: half, quickly: double) and at half rate
+// while it's poorly cared for (average stat under 40); it never goes back.
+// An egg needs nothing: no care, no stat drift.
+//
+// Stats 0-100: food, joy, energy, clean. They drift slowly while the keyboard
+// is powered (per hour at "normal": food -5, joy -4, energy -3, clean -3, so
+// a full stat lasts about a day; asleep: energy +25, joy -1; "slow" halves,
+// "fast" doubles). Typing keeps it going (v29, Brett: typing should build
+// energy, not drain it): every 35 key presses, joy +1 and energy +1. Energy
+// from typing is capped: at most a point every 2 minutes (slowly: 4, quickly:
+// 1), and only up to 80, so sleep is still what fills it. Only real presses
+// count (one per press, however long it's held; not macros, typed pages or
+// config mode). It's forgiving: it
+// only gets hungry, sad, tired or dirty, unless "can die" is on (then 24 h
+// with no food and no joy at all turns it into a ghost; "new pet" hatches a
+// new egg).
+//
+// On the pet page (right OLED; page_key.c): a right-knob turn opens the care
+// menu (Feed / Play / Sleep / Clean / Next, wraps), a tap does the choice;
+// with the menu closed a tap goes to the next page, as on every page.
+//
+// Saved in the last 32 bytes of the EEPROM (taken off the end of Vial's macro
+// buffer, so nothing else moves): every 10 min if something changed, and
+// 15 s after care or a settings change (so a burst of clicks is one write).
+
+#include "brettssofle.h"
+#include "eeprom.h"
+#include "pet.h"
+#include "brett_util.h"
+#include "oled_pages.h"
+#include "config_mode.h"
+#include "led_fx_core.h" // enum fx_pet
+#include "perf.h"
+
+#define PET_EE_ADDR ((void *)(uintptr_t)BRETT_PET_EE_ADDR) // the last 32 EEPROM bytes (config.h)
+#define PET_EE_SIZE 32
+#define PET_MAGIC 0xB7
+#define PET_VERSION 3 // v26: LED reactions, big pet
+#define PET_NAME_LEN 10
+#ifndef PET_SAVE_PERIOD_MS
+#    define PET_SAVE_PERIOD_MS 600000
+#endif
+#define PET_SAVE_SOON_MS 15000
+#define PET_MENU_MS 6000
+#define PET_TYPING_STEP 35
+#define PET_TYPING_ENERGY_MAX 80      // typing alone tops energy up to here; sleep does the rest
+#define PET_TYPING_ENERGY_MS 120000UL // at most a point per 2 min at normal speed
+#define PET_GET_MARK 0x9E
+#define PET_GLOW_MARK 0x9F
+#define PET_SAD_GLOW_MS 240000UL   // hungry / sad / dirty: a blue sigh at most every 4 min
+#define PET_SLEEP_GLOW_MS 120000UL // asleep: a dim pulse every 2 min
+#define PET_HAPPY_GLOW_MS 600000UL // turning happy: at most every 10 min
+
+enum { F_ON = 1, F_CAN_DIE = 2, F_ASLEEP = 4, F_DEAD = 8, F_BIG = 16 }; // F_BIG: big pet (v26, slim stats while the menu is closed)
+// v26 LED reactions (pet_store_t.glow): on, only while the pet page shows, then one bit per reaction.
+enum { G_ON = 1, G_PAGE = 2, G_EAT = 4, G_PLAY = 8, G_HAPPY = 16, G_SAD = 32, G_SLEEP = 64, G_HATCH = 128 };
+#define GLOW_DEFAULT (G_ON | G_EAT | G_PLAY | G_HAPPY | G_SAD | G_SLEEP | G_HATCH)
+#define GLOW_LEVEL_DEFAULT 70 // brief and local, but its colour reads (fx_pet_k)
+enum { S_FOOD, S_JOY, S_ENERGY, S_CLEAN };
+
+typedef struct __attribute__((packed)) {
+    uint8_t  magic, version, flags;
+    uint8_t  stat[4];   // food, joy, energy, clean
+    uint8_t  decay;     // 0 slow, 1 normal, 2 fast
+    uint8_t  neglect_h; // hours with no food and no joy
+    uint32_t age_min;
+    char     name[PET_NAME_LEN];
+    uint8_t  species; // PET_SP_*
+    uint8_t  stage;   // PET_STAGE_*
+    uint32_t growth;  // growth points (4 = one minute at normal speed and care)
+    uint8_t  glow;     // v26: LED reactions (G_*)
+    uint8_t  glow_lvl; // v26: their strength, 1-100 %
+    uint8_t  sum;
+} pet_store_t;
+
+// Version 2 (v14-v25): the same without the LED reactions.
+typedef struct __attribute__((packed)) {
+    uint8_t  magic, version, flags;
+    uint8_t  stat[4];
+    uint8_t  decay, neglect_h;
+    uint32_t age_min;
+    char     name[PET_NAME_LEN];
+    uint8_t  species, stage;
+    uint32_t growth;
+    uint8_t  sum;
+} pet_store_v2_t;
+
+// Version 1 (v13: Pip only): becomes an adult Pip, stats and name kept.
+typedef struct __attribute__((packed)) {
+    uint8_t  magic, version, flags;
+    uint8_t  stat[4];
+    uint8_t  decay, neglect_h;
+    uint32_t age_min;
+    char     name[PET_NAME_LEN];
+    uint8_t  sum;
+} pet_store_v1_t;
+
+// Growth points at which each stage starts (egg, baby, child, adult).
+static const uint32_t stage_at[PET_STAGE_COUNT] = {0, 10 * 4, 24 * 60 * 4, 72 * 60 * 4};
+_Static_assert(sizeof(pet_store_t) <= PET_EE_SIZE, "pet record too big");
+#ifdef TOTAL_EEPROM_BYTE_COUNT
+_Static_assert(BRETT_PET_EE_ADDR + PET_EE_SIZE <= TOTAL_EEPROM_BYTE_COUNT && DYNAMIC_KEYMAP_EEPROM_MAX_ADDR < BRETT_PET_EE_ADDR, "the pet needs the last 32 EEPROM bytes (config.h)");
+#endif
+
+static pet_store_t p;
+static bool        dirty;
+static uint32_t    minute_t, save_t, soon_t; // soon_t: 0 = no early save pending
+static uint16_t    acc[4], keys, neglect_min;
+static uint32_t    typing_energy_at; // v29: the last energy point from typing
+static uint8_t     sel, anim, anim_seq;
+static bool        menu_on;
+static uint32_t    menu_t;
+static uint32_t    glow_check_t, sad_glow_t, sleep_glow_t, happy_glow_t;
+static uint8_t     glow_mood;
+uint16_t           pet_saves; // EEPROM writes since boot (tests / diagnostics)
+
+static uint8_t mood(void);
+
+static uint8_t checksum_n(const void *s, uint8_t n) {
+    const uint8_t *b   = (const uint8_t *)s;
+    uint8_t        sum = 0x5A;
+    for (uint8_t i = 0; i < n; i++) {
+        sum = (uint8_t)(sum * 31 + b[i]);
+    }
+    return sum;
+}
+#define checksum(s) checksum_n((s), offsetof(pet_store_t, sum))
+
+// A new egg (stats ready for when it hatches).
+static void hatch(void) {
+    p.stat[S_FOOD] = p.stat[S_JOY] = p.stat[S_ENERGY] = 80;
+    p.stat[S_CLEAN]                                   = 100;
+    p.flags &= (uint8_t)~(F_DEAD | F_ASLEEP);
+    p.age_min   = 0;
+    p.neglect_h = 0;
+    p.stage     = PET_STAGE_EGG;
+    p.growth    = 0;
+    neglect_min = 0;
+}
+
+static void defaults(void) {
+    memset(&p, 0, sizeof(p));
+    p.magic   = PET_MAGIC;
+    p.version = PET_VERSION;
+    p.flags   = F_ON;
+    p.decay   = 1;
+    memcpy(p.name, "Pip", 4);
+    hatch();
+    p.flags |= F_BIG;
+    p.glow     = GLOW_DEFAULT;
+    p.glow_lvl = GLOW_LEVEL_DEFAULT;
+}
+
+// v26: settings that came with this version (an older pet gets them by default).
+static void new_settings(void) {
+    p.version  = PET_VERSION;
+    p.flags   |= F_BIG;
+    p.glow     = GLOW_DEFAULT;
+    p.glow_lvl = GLOW_LEVEL_DEFAULT;
+}
+
+static void save_soon(void) {
+    dirty  = true;
+    soon_t = timer_stamp32();
+}
+
+void pet_init(void) {
+    eeprom_read_block(&p, PET_EE_ADDR, sizeof(p));
+    pet_store_v1_t v1;
+    pet_store_v2_t v2;
+    memcpy(&v1, &p, sizeof(v1));
+    memcpy(&v2, &p, sizeof(v2));
+    if (v1.magic == PET_MAGIC && v1.version == 1 && v1.sum == checksum_n(&v1, offsetof(pet_store_v1_t, sum)) && v1.decay <= 2) {
+        memset(&p, 0, sizeof(p)); // v13's Pip grows up into this version
+        memcpy(&p, &v1, offsetof(pet_store_v1_t, sum));
+        p.species = PET_SP_PIP;
+        p.stage   = PET_STAGE_ADULT;
+        p.growth  = stage_at[PET_STAGE_ADULT];
+        new_settings();
+        save_soon();
+    } else if (v2.magic == PET_MAGIC && v2.version == 2 && v2.sum == checksum_n(&v2, offsetof(pet_store_v2_t, sum)) && v2.decay <= 2 && v2.species < PET_SPECIES_COUNT &&
+               v2.stage < PET_STAGE_COUNT) {
+        memset(&p, 0, sizeof(p)); // v14-v25: the same pet, with the v26 settings
+        memcpy(&p, &v2, offsetof(pet_store_v2_t, sum));
+        new_settings();
+        save_soon();
+    } else if (p.magic != PET_MAGIC || p.version != PET_VERSION || p.sum != checksum(&p) || p.decay > 2 || p.species >= PET_SPECIES_COUNT || p.stage >= PET_STAGE_COUNT) {
+        defaults(); // first start (or the macro area's old bytes): a new egg
+        save_soon();
+    }
+    p.name[PET_NAME_LEN - 1] = 0;
+    if (!p.glow_lvl || p.glow_lvl > 100) p.glow_lvl = GLOW_LEVEL_DEFAULT;
+    minute_t = save_t = glow_check_t = sad_glow_t = sleep_glow_t = timer_read32();
+    glow_mood = mood();
+}
+
+bool pet_enabled(void) {
+    return p.flags & F_ON;
+}
+
+static void add(uint8_t s, int8_t d) {
+    int16_t v    = p.stat[s] + d;
+    p.stat[s]    = v < 0 ? 0 : v > 100 ? 100 : v;
+}
+
+static void animate(uint8_t type) {
+    anim_seq = (anim_seq + 1) & 15;
+    anim     = anim_seq << 4 | type;
+}
+
+// v26: an LED reaction (led_fx.c draws it on both halves), if it's switched on.
+__attribute__((weak)) void led_fx_pet(uint8_t type, uint8_t level) {} // no RGB Matrix
+static const uint8_t glow_bit[FXP_COUNT] = {0, G_EAT, G_PLAY, G_HAPPY, G_SAD, G_SLEEP, G_HATCH, G_HAPPY};
+static void glow(uint8_t type, bool ambient) {
+    if (!(p.flags & F_ON) || !(p.glow & G_ON) || !(p.glow & glow_bit[type]) || config_mode_leds_quiet(ambient)) {
+        return;
+    }
+    if ((p.glow & G_PAGE) && oled_page_current() != OLED_PAGE_PET) {
+        return;
+    }
+    led_fx_pet(type, p.glow_lvl);
+}
+
+static uint8_t mood(void) {
+    if (!(p.flags & F_ON)) return MOOD_OFF;
+    if (p.flags & F_DEAD) return MOOD_DEAD;
+    if (p.stage == PET_STAGE_EGG) return MOOD_EGG;
+    if (p.flags & F_ASLEEP) return MOOD_ASLEEP;
+    if (p.stat[S_FOOD] < 20) return MOOD_HUNGRY;
+    if (p.stat[S_JOY] < 20) return MOOD_SAD;
+    if (p.stat[S_ENERGY] < 20) return MOOD_TIRED;
+    if (p.stat[S_CLEAN] < 25) return MOOD_DIRTY;
+    return p.stat[S_FOOD] + p.stat[S_JOY] + p.stat[S_ENERGY] + p.stat[S_CLEAN] >= 280 ? MOOD_HAPPY : MOOD_OK;
+}
+
+// Growth: 4 points a minute at normal speed and care, never backwards.
+static void grow(void) {
+    if (p.stage >= PET_STAGE_ADULT) {
+        return;
+    }
+    uint8_t pts = p.decay == 0 ? 2 : p.decay == 2 ? 8 : 4;
+    if (p.stage != PET_STAGE_EGG && p.stat[S_FOOD] + p.stat[S_JOY] + p.stat[S_ENERGY] + p.stat[S_CLEAN] < 160) {
+        pts /= 2; // poorly cared for: grows slower
+    }
+    p.growth += pts;
+    if (p.growth >= stage_at[p.stage + 1]) {
+        p.stage++;
+        p.flags &= (uint8_t)~F_ASLEEP;
+        animate(p.stage == PET_STAGE_BABY ? ANIM_HATCH : ANIM_GROW);
+        glow(p.stage == PET_STAGE_BABY ? FXP_HATCH : FXP_GROW, false);
+        save_soon();
+    }
+}
+
+// One minute of life.
+static void tick(void) {
+    if (!(p.flags & F_ON) || (p.flags & F_DEAD)) {
+        return;
+    }
+    p.age_min++;
+    if (p.stage == PET_STAGE_EGG) {
+        grow(); // an egg only waits
+        dirty = true;
+        return;
+    }
+    bool          asleep = p.flags & F_ASLEEP;
+    const uint8_t m2     = p.decay == 0 ? 1 : p.decay == 2 ? 4 : 2; // speed x2
+    const int8_t  per_h[4] = {-5, asleep ? -1 : -4, asleep ? 25 : -3, -3};
+    for (uint8_t s = 0; s < 4; s++) {
+        int8_t r = per_h[s];
+        acc[s] += (uint16_t)((r < 0 ? -r : r) * m2);
+        while (acc[s] >= 120) { // 120 = one point at x1 speed per hour
+            acc[s] -= 120;
+            add(s, r < 0 ? -1 : 1);
+        }
+    }
+    if (asleep && p.stat[S_ENERGY] >= 100) {
+        p.flags &= (uint8_t)~F_ASLEEP; // rested: wakes up by itself
+        animate(ANIM_WAKE);
+    }
+    if (p.stat[S_FOOD] == 0 && p.stat[S_JOY] == 0) {
+        if (++neglect_min >= 60) {
+            neglect_min = 0;
+            if (p.neglect_h < 255) p.neglect_h++;
+        }
+        if ((p.flags & F_CAN_DIE) && p.neglect_h >= 24) {
+            p.flags |= F_DEAD;
+            p.flags &= (uint8_t)~F_ASLEEP;
+            save_soon();
+        }
+    } else {
+        neglect_min = 0;
+        p.neglect_h = 0;
+    }
+    grow();
+    dirty = true;
+}
+
+// Care. Returns false when the pet won't (asleep, full, too tired, an egg...).
+static bool act(uint8_t a) {
+    if (!(p.flags & F_ON)) return false;
+    bool ok = true;
+    if (p.flags & F_DEAD || p.stage == PET_STAGE_EGG) {
+        ok = a == PET_NEW;
+    } else if ((p.flags & F_ASLEEP) && (a == PET_FEED || a == PET_PLAY)) {
+        ok = false;
+    }
+    if (ok) {
+        switch (a) {
+            case PET_FEED:
+                if (p.stat[S_FOOD] >= 95) {
+                    add(S_JOY, -2); // overfed
+                    ok = false;
+                    break;
+                }
+                add(S_FOOD, 25);
+                add(S_CLEAN, -3);
+                animate(ANIM_EAT);
+                glow(FXP_EAT, false);
+                break;
+            case PET_PLAY:
+                if (p.stat[S_ENERGY] < 10) {
+                    ok = false; // too tired
+                    break;
+                }
+                add(S_JOY, 20);
+                add(S_ENERGY, -8);
+                add(S_FOOD, -4);
+                animate(ANIM_PLAY);
+                glow(FXP_PLAY, false);
+                break;
+            case PET_SLEEP:
+                p.flags ^= F_ASLEEP;
+                animate(p.flags & F_ASLEEP ? ANIM_SLEEP : ANIM_WAKE);
+                if (p.flags & F_ASLEEP) {
+                    glow(FXP_SLEEP, false);
+                    sleep_glow_t = timer_read32();
+                }
+                break;
+            case PET_CLEAN:
+                p.stat[S_CLEAN] = 100;
+                add(S_JOY, 3);
+                animate(ANIM_CLEAN);
+                glow(FXP_HAPPY, false);
+                break;
+            case PET_NEW:
+                hatch(); // a new egg
+                animate(ANIM_GROW);
+                break;
+            default:
+                ok = false;
+        }
+    }
+    if (!ok) {
+        animate(ANIM_NO);
+    }
+    save_soon();
+    return ok;
+}
+
+// The care menu: always ends with "Next" (leave the page).
+static uint8_t menu_items(const uint8_t **items) {
+    static const uint8_t alive[] = {PET_FEED, PET_PLAY, PET_SLEEP, PET_CLEAN, PET_NEXT};
+    static const uint8_t ghost[] = {PET_NEW, PET_NEXT};
+    static const uint8_t egg[]   = {PET_NEXT};
+    if (p.flags & F_DEAD) {
+        *items = ghost;
+        return sizeof(ghost);
+    }
+    if (p.stage == PET_STAGE_EGG) {
+        *items = egg;
+        return sizeof(egg);
+    }
+    *items = alive;
+    return sizeof(alive);
+}
+
+static uint8_t menu_count(void) {
+    const uint8_t *items;
+    return menu_items(&items);
+}
+
+static uint8_t menu_action(uint8_t i) {
+    const uint8_t *items;
+    uint8_t        n = menu_items(&items);
+    return items[i % n];
+}
+
+void pet_menu_close(void) {
+    menu_on = false;
+}
+
+bool pet_process(keyrecord_t *record, bool pet_page) {
+    keyevent_t *ev = &record->event;
+    if (!(p.flags & F_ON) || !ev->pressed) {
+        return false;
+    }
+    if (ev->type == KEY_EVENT) {
+        if (!(p.flags & (F_ASLEEP | F_DEAD)) && p.stage != PET_STAGE_EGG && ev->key.row < MATRIX_ROWS && ++keys >= PET_TYPING_STEP) {
+            keys = 0; // typing keeps it going
+            add(S_JOY, 1);
+            // Care speed: slowly 4 min, normally 2, quickly 1 per point.
+            uint32_t gap = p.decay == 0 ? PET_TYPING_ENERGY_MS * 2 : p.decay == 2 ? PET_TYPING_ENERGY_MS / 2 : PET_TYPING_ENERGY_MS;
+            if (p.stat[S_ENERGY] < PET_TYPING_ENERGY_MAX && (!typing_energy_at || timer_elapsed32(typing_energy_at) >= gap)) {
+                add(S_ENERGY, 1);
+                typing_energy_at = timer_stamp32();
+            }
+            dirty = true;
+        }
+        return false;
+    }
+    if (ev->type == KEY_EVENT && p.stage == PET_STAGE_EGG) {
+        return false;
+    }
+    if (pet_page && IS_ENCODEREVENT(*ev) && ev->key.col == 1) {
+        int8_t  dir = ev->type == ENCODER_CW_EVENT ? 1 : -1;
+        uint8_t n   = menu_count();
+        if (menu_on) {
+            sel = (uint8_t)((sel + n + dir) % n);
+        } else {
+            sel = 0; // the menu always opens on its first choice
+        }
+        menu_on = true;
+        menu_t  = timer_read32();
+        return true; // the right knob chooses care while the pet is shown
+    }
+    return false;
+}
+
+bool pet_press(void) {
+    if (!(p.flags & F_ON) || !menu_on) {
+        return false; // menu closed: the tap leaves the page
+    }
+    uint8_t a = menu_action(sel);
+    if (a == PET_NEXT) {
+        menu_on = false;
+        sel     = 0;
+        return false;
+    }
+    act(a);
+    sel %= menu_count();
+    menu_t = timer_read32();
+    return true;
+}
+
+// v27: only the bytes that changed (a minute's ticking changes the age, a stat
+// or two and the check byte), not all 31. Every EEPROM write is flash
+// programming with the whole chip stopped (QMK's wear levelling on the
+// RP2040), and the smaller writes fill its log, whose rewrite stops the chip
+// for ~100 ms, about 3x less often. Runs closer than 3 bytes go as one write.
+static void save_changed(void) {
+    uint8_t        old[sizeof(p)];
+    const uint8_t *now = (const uint8_t *)&p;
+    eeprom_read_block(old, PET_EE_ADDR, sizeof(p));
+    for (uint8_t i = 0; i < sizeof(p);) {
+        if (old[i] == now[i]) {
+            i++;
+            continue;
+        }
+        uint8_t end = i + 1; // one past the last changed byte of this run
+        for (uint8_t j = end; j < sizeof(p) && j < end + 3; j++) {
+            if (old[j] != now[j]) end = j + 1;
+        }
+        eeprom_update_block(&now[i], (uint8_t *)PET_EE_ADDR + i, end - i);
+        i = end;
+    }
+}
+
+void pet_task(void) {
+    if (!is_keyboard_master()) {
+        return;
+    }
+    if (timer_elapsed32(minute_t) >= 60000) {
+        minute_t += 60000;
+        tick();
+    }
+    if (menu_on && timer_elapsed32(menu_t) > PET_MENU_MS) {
+        menu_on = false;
+    }
+    // v26: LED reactions to how it feels, now and then.
+    if (timer_elapsed32(glow_check_t) >= 1000) {
+        glow_check_t = timer_read32();
+        uint8_t m    = mood();
+        bool    low  = m == MOOD_HUNGRY || m == MOOD_SAD || m == MOOD_DIRTY;
+        if (low && ((glow_mood != m && timer_elapsed32(sad_glow_t) >= PET_SAD_GLOW_MS / 4) || timer_elapsed32(sad_glow_t) >= PET_SAD_GLOW_MS)) {
+            glow(FXP_SAD, true);
+            sad_glow_t = timer_read32();
+        } else if (m == MOOD_HAPPY && glow_mood != MOOD_HAPPY && glow_mood != MOOD_OFF && (!happy_glow_t || timer_elapsed32(happy_glow_t) >= PET_HAPPY_GLOW_MS)) {
+            glow(FXP_HAPPY, true);
+            happy_glow_t = timer_stamp32();
+        } else if (m == MOOD_ASLEEP && timer_elapsed32(sleep_glow_t) >= PET_SLEEP_GLOW_MS) {
+            glow(FXP_SLEEP, true);
+            sleep_glow_t = timer_read32();
+        }
+        glow_mood = m;
+    }
+    if (dirty && ((soon_t && timer_elapsed32(soon_t) >= PET_SAVE_SOON_MS) || timer_elapsed32(save_t) >= PET_SAVE_PERIOD_MS)) {
+        p.sum = checksum(&p);
+        PERF_SPAN(PF_FLASH, save_changed());
+        pet_saves++;
+        dirty  = false;
+        soon_t = 0;
+        save_t = timer_read32();
+    }
+}
+
+void pet_view(pet_view_t *v) {
+    v->flags = (p.flags & F_ON ? PV_ON : 0) | (p.flags & F_ASLEEP ? PV_ASLEEP : 0) | (p.flags & F_DEAD ? PV_DEAD : 0) | (menu_on ? PV_MENU : 0) | (p.flags & F_BIG ? PV_BIG : 0);
+    memcpy(&v->food, p.stat, 4);
+    v->sel  = menu_on ? menu_action(sel) : PET_NEXT; // what a tap does now
+    v->anim = anim;
+    v->mood = mood();
+    memcpy(v->name, p.name, sizeof(v->name));
+    v->species = p.species;
+    v->stage   = p.stage;
+}
+
+/* ---- config page: 0xF6 0x18 get, 0x19 care, 0x1A settings ---- */
+
+// 0xF6 0x1D (v26): LED reactions and big pet. [2] 0 get, 1 set ([3] G_* flags,
+// [4] strength 1-100, [5] bit 0 big pet), 2 test ([3] reaction, fx_pet; any
+// setting). Reply: [2] mark, [3] flags, [4] strength, [5] big, [6] result
+// (0 read, 1 done, 3 refused), [7] reactions known (FXP_COUNT).
+static void glow_raw_hid(uint8_t *d, bool allowed) {
+    uint8_t result = 0;
+    if (d[2] == 1 && allowed && d[4] >= 1 && d[4] <= 100) {
+        p.glow     = d[3];
+        p.glow_lvl = d[4];
+        p.flags    = (p.flags & (uint8_t)~F_BIG) | (d[5] & 1 ? F_BIG : 0);
+        save_soon();
+        result = 1;
+    } else if (d[2] == 2 && allowed && d[3] && d[3] < FXP_COUNT) {
+        result = config_mode_leds_quiet(false) ? 2 : 1;
+        if (result == 1) led_fx_pet(d[3], p.glow_lvl);
+    } else if (d[2]) {
+        result = 3;
+    }
+    memset(d + 2, 0, 30);
+    d[2] = PET_GLOW_MARK;
+    d[3] = p.glow;
+    d[4] = p.glow_lvl;
+    d[5] = p.flags & F_BIG ? 1 : 0;
+    d[6] = result;
+    d[7] = FXP_COUNT;
+}
+
+void pet_raw_hid(uint8_t *d, bool allowed) {
+    uint8_t result = 0;
+    if (d[1] == 0x1D) {
+        glow_raw_hid(d, allowed);
+        return;
+    }
+    if (d[1] == 0x19 && allowed) {
+        if (d[2] == PET_NEW && d[3] < PET_SPECIES_COUNT) {
+            p.species = d[3]; // a new egg of another species
+        }
+        result = act(d[2]) ? 1 : 2;
+    } else if (d[1] == 0x1B && allowed && d[2] < PET_SPECIES_COUNT && d[3] < PET_STAGE_COUNT) {
+        p.species = d[2]; // restoring a backup: same pet, its species and stage
+        p.stage   = d[3];
+        p.growth  = stage_at[p.stage];
+        save_soon();
+        result = 1;
+    } else if (d[1] == 0x1A && allowed) {
+        p.flags = (p.flags & (uint8_t)~(F_ON | F_CAN_DIE)) | (d[2] & 1 ? F_ON : 0) | (d[2] & 2 ? F_CAN_DIE : 0);
+        p.decay = d[3] > 2 ? 1 : d[3];
+        if (d[4] && d[4] != 0xFF) {
+            memset(p.name, 0, sizeof(p.name));
+            for (uint8_t i = 0; i < PET_NAME_LEN - 1 && d[4 + i] >= 0x20 && d[4 + i] < 0x7F; i++) {
+                p.name[i] = d[4 + i];
+            }
+        }
+        save_soon();
+        result = 1;
+    } else if (d[1] != 0x18) {
+        result = 3; // refused: no confirmed session
+    }
+    memset(d + 2, 0, 30);
+    d[2] = PET_GET_MARK;
+    d[3] = p.flags;
+    memcpy(d + 4, p.stat, 4);
+    d[8]  = p.decay;
+    d[9]  = p.age_min;
+    d[10] = p.age_min >> 8;
+    d[11] = p.age_min >> 16;
+    d[12] = p.age_min >> 24;
+    d[13] = mood();
+    memcpy(d + 14, p.name, PET_NAME_LEN);
+    d[24] = p.neglect_h;
+    d[25] = anim & 15;
+    d[26] = result; // 0 read, 1 done, 2 the pet won't, 3 refused
+    d[27] = menu_action(sel);
+    d[28] = p.species;
+    d[29] = p.stage;
+    d[30] = p.stage >= PET_STAGE_ADULT ? 100 : (uint8_t)((p.growth - stage_at[p.stage]) * 100 / (stage_at[p.stage + 1] - stage_at[p.stage]));
+}

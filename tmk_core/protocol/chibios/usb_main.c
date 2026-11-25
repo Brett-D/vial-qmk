@@ -177,8 +177,19 @@ void usb_event_queue_task(void) {
     }
 }
 
+/* Lets a keyboard or keymap set up its own endpoints / react to USB events
+ * (called from the USB interrupt). */
+__attribute__((weak)) void usb_event_user(USBDriver *usbp, usbevent_t event) {}
+
+/* Lets a keyboard or keymap handle its own control requests (class / vendor
+ * requests of an extra USB function). Return true if handled. */
+__attribute__((weak)) bool usb_requests_hook_user(USBDriver *usbp) {
+    return false;
+}
+
 /* Handles the USB driver global events. */
 static void usb_event_cb(USBDriver *usbp, usbevent_t event) {
+    usb_event_user(usbp, event);
     switch (event) {
         case USB_EVENT_ADDRESS:
             return;
@@ -260,6 +271,10 @@ static void set_led_transfer_cb(USBDriver *usbp) {
 
 static bool usb_requests_hook_cb(USBDriver *usbp) {
     usb_control_request_t *setup = (usb_control_request_t *)usbp->setup;
+
+    if (usb_requests_hook_user(usbp)) {
+        return true;
+    }
 
     /* Handle HID class specific requests */
     if ((setup->bmRequestType & (USB_RTYPE_TYPE_MASK | USB_RTYPE_RECIPIENT_MASK)) == (USB_RTYPE_TYPE_CLASS | USB_RTYPE_RECIPIENT_INTERFACE)) {

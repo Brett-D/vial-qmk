@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /**
@@ -27,5 +28,11 @@ void raw_hid_receive(uint8_t *data, uint8_t length);
  * \param length The length of the buffer. Must always be 32.
  */
 void raw_hid_send(uint8_t *data, uint8_t length);
+
+/**
+ * \brief Hook run by raw_hid_send(): return true to keep the report from the
+ * host (the caller takes the reply from its buffer instead).
+ */
+bool raw_hid_send_user(uint8_t *data, uint8_t length);
 
 /** \} */

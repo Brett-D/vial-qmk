@@ -1195,7 +1195,20 @@ void set_serial_number_descriptor(void) {
  * is called so that the descriptor details can be passed back and the appropriate descriptor sent back to the
  * USB host.
  */
+/*
+ * Lets a keyboard or keymap serve its own descriptors (e.g. a different
+ * device / configuration descriptor while an extra USB function is active).
+ * Return the size and set *DescriptorAddress, or return 0 to use the defaults.
+ */
+__attribute__((weak)) uint16_t get_usb_descriptor_user(const uint16_t wValue, const uint16_t wIndex, const uint16_t wLength, const void** const DescriptorAddress) {
+    return 0;
+}
+
 uint16_t get_usb_descriptor(const uint16_t wValue, const uint16_t wIndex, const uint16_t wLength, const void** const DescriptorAddress) {
+    uint16_t user_size = get_usb_descriptor_user(wValue, wIndex, wLength, DescriptorAddress);
+    if (user_size) {
+        return user_size;
+    }
     const uint8_t DescriptorType  = (wValue >> 8);
     const uint8_t DescriptorIndex = (wValue & 0xFF);
     const void*   Address         = NULL;

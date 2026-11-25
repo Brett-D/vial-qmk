@@ -1,0 +1,27 @@
+<!--
+Stage 1 of the typed page delivery: the keyboard types this into the
+browser's address bar as a data: URL (gen_page_blob.py compacts it to one
+line and checks it only uses safe characters: no spaces, '#', '%' or
+newlines; "_" in messages becomes a space). It is kept tiny because the
+address bar gets slower with every character (Edge lagged far behind the
+keyboard with the 3 KB v16 address).
+
+After Brett's Enter it loads; his second Enter (kept from the computer by
+the keyboard) makes the keyboard type the loader (loader.js) into this page
+as "~" + loader + "~" + hash + "~" (US layout, KeyboardEvent.key). If the
+hash is right the loader runs (global eval) and takes over; if not, or if
+the typing stops halfway for 4 s, it says to press the right knob, which
+makes the keyboard type the loader again. An Enter that reaches this page
+means the keyboard isn't waiting for it: it says to press the right knob,
+and after 9 s with nothing, to start again.
+-->
+<title>Sofle</title><body><script>
+d=document;T=t=>d.body.innerHTML=("<h2>Sofle</h2><p>"+t).replace(/_/g,"\x20");
+T("Press_<b>Enter</b>.");
+a=[];s="";w=0;M="Damaged:_press_the_<b>right_knob</b>.";
+I=t=>{a=[];s="";T(t)};
+onkeydown=e=>{k=e.key;e.preventDefault();clearTimeout(w);
+if(k=="Enter"){T("Press_the_<b>right_knob</b>.");w=setTimeout(I,9e3,"Nothing_came:_press_<b>Esc</b>,_then_start_again_(CONFIG,_P).");return}
+if(k=="~"){a.push(s);s="";if(a.length==1)T("Loading...");if(a.length>2){for(h=i=0;i<a[1].length;i++)h=Math.imul(h,31)+a[1].charCodeAt(i)|0;if(h==a[2])return(0,eval)(a[1]);I(M)}}else(k.length<2)&&(s+=k);
+if(a.length||s)w=setTimeout(I,4e3,M)};
+</script>
