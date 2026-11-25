@@ -48,3 +48,5 @@ void pet_raw_hid(uint8_t *data, bool allowed);
 // Backup: settings + name.
 
 void pet_draw(const pet_view_t *v, bool force); // right half
+uint16_t pet_seed(uint8_t species, const char *name); // its motion's seed (pet_motion.h)
+uint8_t  pet_typing_wpm(void); // this half's typing speed (led_fx_draw.c; 0 without RGB)

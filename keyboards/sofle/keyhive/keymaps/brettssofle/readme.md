@@ -298,8 +298,8 @@ from the HTML at every build) and can type either into any browser:
 | | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
 |---|---|---|
 | has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, background + key-press effects with the preview, pet, wiggler, knob control, keyboard-only mode, help, …) |
-| gzipped | 12.3 KB | 55.5 KB |
-| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~22 s, then ~423 s |
+| gzipped | 12.3 KB | 62.1 KB (the limit is 64 KB) |
+| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~22 s, then ~484 s |
 | when done | opens in the same tab in keyboard-only mode; **Save for mouse mode next time** | Save as / Use it here |
 
 The full page is also served by network mode (quicker, and the mouse works
@@ -488,7 +488,7 @@ To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE
 | `common/` | `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
 | `trackpad/` | gestures and press-to-click (`trackpad.c`), Cirque Z + raw HID `0xF5` (`trackpad_z.c`), mouse wiggler |
 | `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key |
-| `pet/` | the OLED pet (state, care, EEPROM record; drawing) |
+| `pet/` | the OLED pet (state, care, EEPROM record; drawing; `pet_motion.h`: where it goes and what it does) |
 | `leds/` | per-half WS2812 driver with the smooth output stage (`rgb_driver.c`), LED layout (`rgb_layout.c`, a source: `tools/gen.py rgb-layout` rewrites it), measured LED map and calibration, the lighting engine: settings / storage / split sync (`led_fx.c`), drawing (`led_fx_draw.c`), maths (`led_fx_core.h`) and the effect table (`led_fx_table.h`) |
 | `config/` | config mode: keyboard-only editor and keys (`config_mode.c`), web session and raw HID `0xF6` (`config_hid.c`), right-OLED sync and screens (`config_oled.c`), shared internals (`config_internal.h`), keystroke bridge, typed page delivery |
 | `net/` | USB network mode: CDC-NCM, lwIP glue, DHCP, HTTP server and JSON API |
@@ -562,6 +562,24 @@ clean), then the selected care action as a big icon with its name.
   wag, head tilt, wing flap, squish, gill wiggle) and its own food and toy:
   apple/ball, fish/yarn, bone/ball, mouse/feather, coal/flame, jelly/bubble,
   worm/bubbles. A happy dragon puffs a little flame.
+- **It moves around** (v25, `pet/pet_motion.h`): ground pets wander the
+  meadow (left/right, and up the screen = further away) and each moves its
+  own way: Pip hops, the dog trots with a wag, the cat walks and sometimes
+  pounces, the blob squishes and bounces, the axolotl swims. Owls and the
+  adult dragon fly anywhere in the play area with flapping wings, hover,
+  and land to perch; asleep they come down. Babies move less, eggs only
+  wobble. In between it does things: looks around, yawns, stretches, sits,
+  scratches, sneezes, and now and then a surprise (a jump with "!", a spin,
+  dragon fire). Care has its own animations: food eaten bite by bite, the
+  toy in play (ball bouncing, yarn rolling, feather floating down, bubbles,
+  fire), a sparkle sweep when cleaned. Hungry or sad it droops, tired it
+  nods off, and when you type fast it gets excited and bounces around.
+  It holds still while the care menu is open. The motion is a pure function
+  of a clock and a seed (species + name), so the right half needs no extra
+  sync and the Pet tab's live view (`page/pet_core.js`, the same integer
+  maths) moves the same way. The page is drawn into a frame buffer and only
+  changed pixels go to the OLED, so 10 frames/s costs little on I2C. Cost:
+  +9 KB of art (302 frames), +6.8 KB gzipped page, ~4 KB code; 512 B RAM.
 
 - **Right knob on the pet page** (`page_key.c`): with the care menu closed the
   bottom shows **▸ Next** and a **tap goes to the next page**, as on every

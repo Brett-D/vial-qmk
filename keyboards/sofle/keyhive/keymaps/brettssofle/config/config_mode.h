@@ -20,6 +20,6 @@ bool config_mode_oled_task(void);
 bool config_mode_oled_busy(void); // a config / network / delivery screen must stay on
 #endif
 // The firmware version (the INFO page; both halves compare theirs). Bump with every release.
-#define BRETT_FW_VERSION 24
+#define BRETT_FW_VERSION 25
 // Right half: the left half's version as last synced (0 = not known: v18 or older).
 uint8_t config_mode_left_fw(void);

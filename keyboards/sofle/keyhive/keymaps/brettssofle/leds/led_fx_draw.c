@@ -44,6 +44,13 @@ bool led_fx_background(effect_params_t *params) {
     return rgb_matrix_check_finished_leds(led_max);
 }
 
+// The pet gets excited when you type fast (pet_draw.c): the same typing speed as the meter.
+uint8_t pet_typing_wpm(void) {
+    uint16_t ht[LED_HITS_TO_REMEMBER];
+    for (uint8_t j = 0; j < g_last_hit_tracker.count; j++) ht[j] = g_last_hit_tracker.tick[j];
+    return fx_typing_wpm(g_last_hit_tracker.count, ht);
+}
+
 // Compositing: rgb_driver.c, once per frame at flush, over every LED of this half.
 static bool       frame_on;
 static uint8_t    frame_v, frame_hue, frame_n;

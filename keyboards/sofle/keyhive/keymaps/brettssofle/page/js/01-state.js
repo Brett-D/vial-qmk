@@ -14,6 +14,7 @@ const HS = { NONE:0, ASK:1, ACTIVE:2, DENIED:3, TIMEOUT:4 };
 
 // mode: null (not connected) | "bridge" (keyboard-only) | "hid" (WebHID, mouse)
 /*__FX_CORE__*/
+/*__PET_CORE__*/
 const S = {
   mode: null, state: "idle", nonce: 0, ready: null, ui: null, keymap: [], enc: [], led: null, tp: null, tpz: null,
   frames: 0, missed: 0, lastSeq: null, zHist: [], peaks: [], wasTouching: false, modeEffects: [], bridgeOn: false,

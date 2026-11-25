@@ -299,6 +299,7 @@ def main():
     template = (PAGE / "page.html").read_text(encoding="utf-8").replace("/*__PAGE_JS__*/", script)
     page = template.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     page = page.replace("/*__FX_CORE__*/", (PAGE / "fx_core.js").read_text(encoding="utf-8"))
+    page = page.replace("/*__PET_CORE__*/", (PAGE / "pet_core.js").read_text(encoding="utf-8"))  # pet motion (pet_motion.h)
     write(GEN / "sofle-config.html", page)
     print(f"picker: {len(picker)} keycodes, {len(cats)} categories, hash 0x{phash:04X}; page {len(page.encode())} bytes")
 

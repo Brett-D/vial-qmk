@@ -11,9 +11,15 @@ function petParse(d) {
   for (let i = 14; i < 24 && d[i]; i++) name += String.fromCharCode(d[i]);
   return { on: !!(d[3] & 1), canDie: !!(d[3] & 2), asleep: !!(d[3] & 4), dead: !!(d[3] & 8), food: d[4], joy: d[5], energy: d[6], clean: d[7],
            decay: d[8], age: (d[9] | (d[10] << 8) | (d[11] << 16) | (d[12] << 24)) >>> 0, mood: d[13], name, result: d[26],
-           species: d[28] < 7 ? d[28] : 0, stage: d[29] < 4 ? d[29] : 3, progress: d[30] };
+           species: d[28] < 7 ? d[28] : 0, stage: d[29] < 4 ? d[29] : 3, progress: d[30], anim: d[25] };
 }
-async function petLoad() { const p = petParse(await cmd([0xf6, 0x18])); S.pet = p; return p; }
+async function petLoad() {
+  const p = petParse(await cmd([0xf6, 0x18]));
+  if (p && PV2.seenAnim >= 0 && p.anim !== PV2.seenAnim && p.anim) petAnimStart(p.anim); // done on the keyboard
+  if (p) PV2.seenAnim = p.anim;
+  S.pet = p;
+  return p;
+}
 function startPetPoll() {
   if (PET.poll) return;
   PET.poll = setInterval(async () => {
@@ -31,6 +37,7 @@ async function petAct(a, species) {
     const p = petParse(await cmd(species === undefined ? [0xf6, 0x19, a] : [0xf6, 0x19, a, species]));
     if (!p) throw new Error("this firmware has no pet");
     S.pet = p;
+    if (p.result === 1 && p.anim) petAnimStart(p.anim);
     const done = ["", "Fed", "Played", p.asleep ? "Good night" : "Woke up", "Cleaned", `A new ${speciesName(p.species).toLowerCase()} egg`][a];
     toast(p.result === 1 ? done : p.result === 2 ? (p.stage === 0 ? "It's still an egg — wait for it to hatch" : `${p.name || "The pet"} doesn't want to right now`) : "Refused — confirm the connection on the keyboard again", p.result !== 1);
   } catch (e) { toast("Failed: " + e.message, true); }
@@ -54,42 +61,115 @@ async function petSettingsInput() {
   try { await petSettings(); toast("Pet settings saved"); } catch (e) { toast("Not saved: " + e.message, true); }
   render();
 }
-// The same frame choice as pet_draw.c.
-function petFrame(p, t) {
-  const ph = (t / 250) | 0;
-  let f = ((ph >> 1) & 1) ? "idle2" : "idle";
-  if (p.dead) f = "dead";
-  else if (p.asleep) f = "sleep";
-  else if (p.food < 20 || p.joy < 20) f = "sad";
-  else if (p.energy < 20) f = "tired";
-  else if (p.mood === 0 && ph % 16 >= 12) f = "happy";
-  if (!p.dead && !p.asleep && ph % 16 === 5) f = "blink";
-  return f;
+// The live view: the OLED's play area (rows 8-57), the same motion and effects as
+// pet_draw.c (pet_core.js = pet_motion.h). Its own clock, so not frame-for-frame.
+const PV2 = { mt4: 0, last: 0, x: null, floor: 0, anim: 0, animT: 0, seenAnim: -1 };
+// gen_pet_art.py's "width:hexrows" -> [width, row, ...] (bit width-1 = leftmost pixel).
+const PET_BM = [];
+function petArt(i) {
+  if (!PET_BM[i]) {
+    const [w, hex] = DATA.petArt.art[i].split(":"), n = (+w + 3) >> 2, bm = [+w];
+    for (let k = 0; k < hex.length; k += n) bm.push(parseInt(hex.substr(k, n), 16));
+    PET_BM[i] = bm;
+  }
+  return PET_BM[i];
 }
-// Pre-rendered frame (gen_pet_art.py): [width, hex row, ...].
 function petBitmap(species, stage, frame) {
   const A = DATA.petArt, sp = A.species[species] || "pip";
-  return stage === 0 ? A.egg[sp] : A.frame[`${sp}/${A.stages[stage]}/${frame}`];
+  return petArt(stage === 0 ? A.egg[sp] : A.ix[`${sp}/${A.stages[stage]}`][A.frames.indexOf(frame)]);
 }
-function drawBitmap(g, bm, ox, oy, S4) {
-  const w = bm[0];
-  for (let y = 1; y < bm.length; y++) {
-    const v = parseInt(bm[y], 16);
-    for (let x = 0; x < w; x++) if ((v >> (w - 1 - x)) & 1) g.fillRect((ox + x) * S4, (oy + y - 1) * S4, S4 - 1, S4 - 1);
+function drawBitmap(g, bm, ox, oy, S4, mirror, sy = 16) { // oy: the top row; sy/16 as tall (pet_draw.c sprite)
+  const w = bm[0], h = bm.length - 1, out = PETM.rows(h, sy);
+  for (let y = 0; y < out; y++) {
+    const v = bm[1 + PETM.row(y, h, out)];
+    for (let x = 0; x < w; x++) if ((v >> (w - 1 - x)) & 1) g.fillRect((ox + (mirror ? w - 1 - x : x)) * S4, (oy + y) * S4, S4 - 1, S4 - 1);
   }
 }
+function petAnimStart(type) { PV2.anim = type; PV2.animT = Date.now(); }
 function drawPet(p) {
-  const cv = $("petCanvas"), g = cv.getContext("2d"), t = Date.now(), A = DATA.petArt, S4 = 3;
+  const cv = $("petCanvas"), g = cv.getContext("2d"), now = Date.now(), A = DATA.petArt, S4 = 3, Y0 = 8;
+  if (!PETM.FR.idle && PETM.FR.idle !== 0) PETM.init(A.frames);
   g.fillStyle = "#0a0a1e"; g.fillRect(0, 0, cv.width, cv.height);
   if (!p.on) return;
   g.fillStyle = "#8cdcff";
-  const bm = petBitmap(p.species, p.stage, petFrame(p, t));
-  const wob = p.stage === 0 && ((t / 250) | 0) % 12 < 2 ? (((t / 250) | 0) & 1 ? 1 : -1) : 0;
-  const dy = p.dead ? ((((t / 250) | 0) % 4 < 2) ? -1 : 1) : 0;
-  drawBitmap(g, bm, ((40 - bm[0]) >> 1) + wob, 38 - (bm.length - 1) + dy, S4); // stands on y 38 of 40
-  const icon = (name, ox, oy) => A.icons[name].forEach((row, y) => { for (let x = 0; x < 8; x++) if (row[x] === "#") g.fillRect((ox + x) * S4, (oy + y) * S4, S4 - 1, S4 - 1); });
-  if (p.asleep) icon("z", 31, 2);
-  if (!p.dead && p.stage && p.clean < 40) icon("poop", 31, 30);
+  const px = (x, y) => { if (x >= 0 && x < 32 && y >= Y0 && y < Y0 + 50) g.fillRect(x * S4, (y - Y0) * S4, S4 - 1, S4 - 1); };
+  const icon = (name, ox, oy, cols = 0xff) => A.icons[name].forEach((row, y) => { for (let x = 0; x < 8; x++) if (row[x] === "#" && (cols & (0x80 >> x))) px(ox + x, oy + y); });
+  const clear = (x0, y0, x1, y1) => { g.fillStyle = "#0a0a1e"; g.fillRect(x0 * S4, (y0 - Y0) * S4, (x1 - x0 + 1) * S4, (y1 - y0 + 1) * S4); g.fillStyle = "#8cdcff"; };
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v), tri = (t, per, span) => { const q = t % per, h = per >> 1; return Math.floor(((q < h ? q : per - q) * span) / h); };
+  const ANIM = { EAT: 1, PLAY: 2, SLEEP: 3, WAKE: 4, CLEAN: 5, NO: 6, HATCH: 7, GROW: 8 };
+  const sp = p.species, st = p.stage, spName = A.species[sp] || "pip", egg = st === 0, ph = Math.floor(now / 250);
+  const animMs = PV2.anim === ANIM.GROW || PV2.anim === ANIM.HATCH ? 3000 : PV2.anim === ANIM.PLAY ? 3000 : 2000, el = now - PV2.animT;
+  const animating = PV2.anim && el < animMs, sad = p.food < 20 || p.joy < 20, tired = p.energy < 20, M = PETM.M;
+  const mood = (p.mood === 0 ? M.HAPPY : 0) | (sad ? M.SAD : 0) | (tired ? M.TIRED : 0) | (p.asleep ? M.ASLEEP : 0);
+  const speed = sad || tired ? 2 : st === 1 ? 3 : 4;
+  const dt = PV2.last ? Math.min(250, now - PV2.last) : 0;
+  PV2.last = now;
+  if (!(egg || p.dead || p.asleep || animating)) PV2.mt4 += dt * speed;
+  const bx = egg ? [16, 18] : A.box[`${spName}/${A.stages[st]}`];
+  const area = PETM.area(bx[0], bx[1], !egg && A.flyers.includes(`${spName}/${A.stages[st]}`), st);
+  const P = egg ? { x: 8, floor: PETM.FLOOR, dx: 0, dy: 0, frame: 0, flags: 0, fx: 0 } : PETM.pose(area, sp, st, PETM.seedOf(sp, p.name || ""), Math.floor(PV2.mt4 / 4), mood);
+  let wantX = P.x, mir = !!(P.flags & PETM.P.MIRROR), f = A.frames[P.frame], dx = P.dx, dy = P.dy, sy = P.sy;
+  if (p.dead) { f = "dead"; dy = ph % 4 < 2 ? -1 : 1; }
+  const toy = A.play[spName];
+  if (animating && PV2.anim === ANIM.PLAY && (toy === "ball" || toy === "yarn")) {
+    const per = toy === "ball" ? 1500 : 2000;
+    wantX = clamp(tri(el, per, 24) + 4 - (bx[0] >> 1), 0, area.xr);
+    mir = el % per < per / 2;
+  }
+  if (PV2.x === null) { PV2.x = wantX; PV2.floor = P.floor; }
+  else { PV2.x += clamp(wantX - PV2.x, -4, 4); PV2.floor += clamp(P.floor - PV2.floor, -4, 4); }
+  let showEgg = egg;
+  if (animating) {
+    f = p.asleep ? "sleep" : p.dead ? "dead" : "happy"; dx = 0; dy = 0; sy = 16;
+    if (PV2.anim === ANIM.EAT) f = Math.floor(el / 200) & 1 ? "happy" : "eat";
+    if (PV2.anim === ANIM.PLAY) {
+      if (toy === "ball") dy = -PETM.arc(el % 400, 400, 3);
+      if (toy === "yarn") { dy = -PETM.arc(el % 600, 600, 5); sy = Math.floor(el / 300) & 1 ? 18 : 16; }
+      if (toy === "feather") f = Math.floor(el / 120) & 1 ? "fly2" : "fly1";
+    }
+    if (PV2.anim === ANIM.NO && !p.asleep && !p.dead && !egg) { f = "sad"; dx = ph & 1 ? 1 : -1; }
+    if (PV2.anim === ANIM.HATCH && el < 1800) { showEgg = true; dx = ph & 1 ? 1 : -1; }
+  }
+  if (egg && !animating && ph % 12 < 2) dx = ph & 1 ? 1 : -1;
+  if (showEgg) sy = 16;
+  const bm = petBitmap(sp, showEgg ? 0 : st, f), fw = bm[0], fh = PETM.rows(bm.length - 1, sy);
+  const left = showEgg ? ((32 - fw) >> 1) + dx : PV2.x + ((bx[0] - fw) >> 1) + dx, bot = (showEgg ? PETM.FLOOR : PV2.floor) + dy;
+  const top = bot + 1 - fh, cx = left + (fw >> 1);
+  let foodAbove = false;
+  if (animating && PV2.anim === ANIM.EAT && !showEgg) { // turn to where the food fits; no room either side: above (pet_draw.c)
+    const roomL = left >= 8, roomR = left + fw <= 24;
+    if (mir ? !roomR : !roomL) { if (mir ? roomL : roomR) mir = !mir; else foodAbove = true; }
+  }
+  const fy = clamp(top - 9, 9, 48), side = mir ? left + fw : left - 8;
+  const moodIcons = ["heart", "smile", "apple", "tear", "bolt", "poop", "moon", "no", "smile", "egg"];
+  if (!animating && top >= 17) icon(moodIcons[p.mood] || "smile", 12, 9);
+  drawBitmap(g, bm, left, top - Y0, S4, mir && !showEgg, sy);
+  if (animating) {
+    if (PV2.anim === ANIM.EAT) {
+      const b = Math.floor((el * 9) / 2000), keep = b >= 8 ? 0 : mir && !foodAbove ? 0xff >> b : (0xff << b) & 0xff;
+      const ix = foodAbove ? cx - 4 : side, iy = foodAbove ? clamp(top - 9, 9, 48) : clamp(top + Math.floor(fh / 3), 9, 48);
+      clear(ix, iy, ix + 7, iy + 7); icon(A.food[spName], ix, iy, keep);
+    } else if (PV2.anim === ANIM.PLAY) {
+      if (toy === "ball" || toy === "yarn") { const tx = tri(el, toy === "ball" ? 1500 : 2000, 24), ty = toy === "ball" ? 47 - PETM.arc(el % 500, 500, 14) : 48; clear(tx, ty, tx + 7, ty + 7); icon(toy, tx, ty); }
+      else if (toy === "feather") icon(toy, 4 + tri(el, 1200, 18), 9 + Math.floor((el * 36) / 3000));
+      else if (toy === "flame") icon(toy, cx - 4 + (Math.floor(el / 200) & 1 ? 3 : -3), clamp(fy - (Math.floor(el / 100) % 4) * 2, 9, 48));
+      else for (let k = 0; k < 2; k++) { const q = (el + k * 500) % 1000; icon(toy, cx - 4 + (k ? 7 : -7) + (Math.floor(q / 250) & 1), clamp(top - 6 - Math.floor((q * 20) / 1000), 9, 50)); }
+    } else if (PV2.anim === ANIM.CLEAN) {
+      const sx = -8 + Math.floor(((el % 1000) * 40) / 1000), sy = el < 1000 ? top : top + (fh >> 1);
+      icon("sparkle", sx, sy); icon("sparkle", sx - 14, sy + 6);
+    } else if (PV2.anim === ANIM.WAKE || (PV2.anim === ANIM.HATCH && el >= 1800)) { icon("sparkle", ph & 1 ? 0 : 24, fy); if (PV2.anim === ANIM.WAKE) icon("sparkle", ph & 1 ? 24 : 0, fy + 10); }
+    else if (PV2.anim === ANIM.NO) icon("no", cx - 4, fy);
+    else if (PV2.anim === ANIM.GROW) { icon("star", ph & 1 ? 0 : 24, ph & 1 ? fy : fy + 6); icon("sparkle", ph & 1 ? 24 : 0, ph & 1 ? fy + 8 : fy); }
+  } else if (!p.dead && !egg) {
+    const X = PETM.FX;
+    if (P.fx === X.SNEEZE) for (let k = 0; k < 3; k++) px(mir ? left + fw + 1 + k * 2 : left - 2 - k * 2, top + (fh >> 1) - 1 + (k & 1) * 2);
+    else if (P.fx === X.EXCLAIM) { for (let y = fy + 1; y < fy + 6; y++) px(cx, y); px(cx, fy + 7); }
+    else if (P.fx === X.STAR) icon("star", cx - 4, fy);
+    else if (P.fx === X.FLAME) { icon("flame", cx - 4, fy); icon("flame", cx - 4 + (Math.floor(now / 150) & 1 ? 5 : -5), clamp(fy - 7, 9, 48)); }
+    if (spName === "dragon" && f === "happy" && !P.fx && ph & 1) icon("flame", cx - 4, fy);
+  }
+  if (p.asleep && !(animating && PV2.anim === ANIM.NO)) icon("z", clamp(left + fw - 4, 0, 24), clamp(top - 6 - (ph % 3) * 3, 9, 48));
+  if (!p.dead && st && p.clean < 40) { clear(23, 47, 31, 56); icon("poop", 24, 48); }
 }
 function renderPetPicker() {
   setHtml($("petPick"), DATA.petArt.species.map((sp, i) => `<button type="button" class="${i === PET.pick ? "on" : ""}" data-sp="${i}"><canvas width="96" height="96" data-sp="${i}"></canvas><span>${speciesName(i)}</span></button>`).join(""));
@@ -129,5 +209,5 @@ $("petHatch").addEventListener("click", async () => {
   $("petPicker").classList.add("hidden");
   await petAct(5, PET.pick);
 });
-setInterval(() => { if (S.mode === "hid" && S.ui && S.ui.tab === 3 && S.pet) drawPet(S.pet); }, 250);
+setInterval(() => { if (S.mode === "hid" && S.ui && S.ui.tab === 3 && S.pet) drawPet(S.pet); }, 100);
 

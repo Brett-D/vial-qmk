@@ -86,7 +86,7 @@
   details { margin-top:16px; } pre { white-space:pre-wrap; font-size:11px; color:var(--dim); max-height:240px; overflow:auto; }
   .hidden { display:none !important; }
   .petTop { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  #petCanvas { width:120px; height:120px; flex:none; background:#0a0a1e; border-radius:8px; image-rendering:pixelated; }
+  #petCanvas { width:96px; height:150px; flex:none; background:#0a0a1e; border-radius:8px; image-rendering:pixelated; }
   .petInfo { flex:1; min-width:220px; }
   #petStats .row { display:grid; grid-template-columns:70px 1fr 40px; gap:12px; padding:4px 0; }
   #petStats .v { text-align:right; font-family:ui-monospace,monospace; }
@@ -272,7 +272,7 @@
       <div id="petView" class="panel hidden">
         <h2 id="petTitle">The OLED pet</h2>
         <div class="petTop">
-          <canvas id="petCanvas" width="120" height="120"></canvas>
+          <canvas id="petCanvas" width="96" height="150"></canvas>
           <div class="petInfo">
             <div class="rows" id="petStats"></div>
             <div class="small" id="petMood"></div>

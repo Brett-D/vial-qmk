@@ -20,7 +20,10 @@ from paths import write, GEN
 SPECIES = ["pip", "cat", "dog", "owl", "dragon", "blob", "axolotl"]
 SPECIES_NAMES = ["Pip", "Cat", "Dog", "Owl", "Dragon", "Blob", "Axolotl"]
 STAGES = ["baby", "child", "adult"]  # the egg is separate
-FRAMES = ["idle", "idle2", "blink", "happy", "sad", "tired", "sleep", "eat", "dead"]
+FRAMES = ["idle", "idle2", "blink", "happy", "sad", "tired", "sleep", "eat", "dead",
+          # v25: moving around (pet_motion.h) and more to do
+          "walk", "look", "yawn", "sneeze", "surprise", "fly1", "fly2"]  # stretch / sit: drawn taller / shorter (pet_motion.h sy)
+FLYERS = {("owl", "baby"), ("owl", "child"), ("owl", "adult"), ("dragon", "adult")}
 SCALE = {"baby": 0.62, "child": 0.78, "adult": 1.0}
 SIZE = {"baby": (18, 16), "child": (22, 20), "adult": (28, 25)}
 GLYPH = {"baby": "S", "child": "M", "adult": "L"}
@@ -36,6 +39,9 @@ EYES = {
         "tired": ["....", "####", ".##.", "...."],
         "sleep": ["....", "....", "#..#", ".##."],
         "dead": ["#.#.", ".#..", "#.#.", "...."],
+        "look": ["##..", "##..", "##..", "...."],
+        "squeeze": ["#...", ".##.", "#...", "...."],
+        "wide": [".##.", "#..#", "#..#", ".##."],
     },
     "M": {
         "open": ["##.", "##.", "..."],
@@ -45,6 +51,9 @@ EYES = {
         "tired": ["###", ".#.", "..."],
         "sleep": ["...", "#.#", ".#."],
         "dead": ["#.#", ".#.", "#.#"],
+        "look": ["#..", "#..", "..."],
+        "squeeze": ["#..", ".##", "#.."],
+        "wide": [".#.", "#.#", ".#."],
     },
     "S": {
         "open": ["#.", "#."],
@@ -54,6 +63,9 @@ EYES = {
         "tired": ["##", ".."],
         "sleep": ["..", "##"],
         "dead": ["#.", ".#"],
+        "look": ["#.", "#."],
+        "squeeze": ["#.", "##"],
+        "wide": ["##", "##"],
     },
 }
 MOUTHS = {
@@ -85,15 +97,22 @@ MOUTHS = {
 FACE = {  # frame -> (eyes, mouth)
     "idle": ("open", "smile"), "idle2": ("open", "smile"), "blink": ("blink", "smile"), "happy": ("happy", "happy"),
     "sad": ("sad", "frown"), "tired": ("tired", "flat"), "sleep": ("sleep", "o"), "eat": ("open", "eat"), "dead": ("dead", "flat"),
+    "walk": ("open", "smile"), "look": ("look", "smile"), "yawn": ("sleep", "eat"),
+    "sneeze": ("squeeze", "o"), "surprise": ("wide", "o"),
+    "fly1": ("open", "smile"), "fly2": ("open", "smile"),
 }
+# frame -> (body pose the species draws, x scale, y scale): squash and stretch.
+POSE = {"idle2": ("idle2", 1, 1), "walk": ("walk", 1, 1), "fly1": ("fly1", 1, 1), "fly2": ("fly2", 1, 1),
+        "yawn": ("idle", 0.97, 1.05), "sneeze": ("idle", 1.04, 0.94)}
 
 
 # ---------------------------------------------------------------- canvas
 class Canvas:
     """Shapes in adult coordinates, scaled into a stage-sized grid."""
 
-    def __init__(self, w, h, s, ox=0.0, oy=0.0):
+    def __init__(self, w, h, s, ox=0.0, oy=0.0, sx=None, sy=None):
         self.w, self.h, self.s, self.ox, self.oy = w, h, s, ox, oy
+        self.sx, self.sy = sx or s, sy or s  # squash / stretch
         self.fine = s >= 0.99   # adult: all details
         self.mid = s >= 0.7     # child and adult
         self.mask = set()
@@ -101,7 +120,7 @@ class Canvas:
         self.erase = set()
 
     def T(self, x, y):
-        return x * self.s + self.ox, y * self.s + self.oy
+        return x * self.sx + self.ox, y * self.sy + self.oy
 
     def _fill(self, inside, target):
         for y in range(self.h):
@@ -111,7 +130,7 @@ class Canvas:
 
     def ell(self, cx, cy, rx, ry, target=None):
         cx, cy = self.T(cx, cy)
-        rx, ry = max(rx * self.s, 0.8), max(ry * self.s, 0.8)
+        rx, ry = max(rx * self.sx, 0.8), max(ry * self.sy, 0.8)
         self._fill(lambda x, y: ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1.0, self.mask if target is None else target)
 
     def poly(self, pts, target=None):
@@ -133,7 +152,7 @@ class Canvas:
 
     def thick(self, pts, r, target=None):
         P = [self.T(x, y) for x, y in pts]
-        r = max(r * self.s, 0.75)
+        r = max(r * (self.sx + self.sy) / 2, 0.75)
 
         def near(x, y):
             for (x1, y1), (x2, y2) in zip(P, P[1:]):
@@ -195,15 +214,21 @@ def clear_box(g, x, y, w, h):
                 g[y + r][x + c] = 0
 
 
+def feet(c, f, xs, y0, y1, hw):
+    """Two feet; walking: one a step forward and lifted, the other back."""
+    for k, x in enumerate(xs):
+        dx, dy = ((-1.2, -1.2), (1.0, 0))[k] if f == "walk" else (0, 0)
+        c.rect(x + dx - hw, y0 + dy, x + dx + hw, y1 + dy)
+
+
 # ---------------------------------------------------------------- species
 # Each draws in adult coordinates (about 28 x 25) and returns face anchors
 # (adult coordinates): left eye box, right eye box, mouth box, head top.
 
 def pip(c, f, st):
     c.ell(13.5, 14.5, 10.6, 8.6)
-    for x in (9, 17):
-        c.rect(x - 1, 23, x + 1, 23.9)
-    tip = (16.5, 2) if f != "idle2" else (18, 3)
+    feet(c, f, (9, 17), 23, 23.9, 1)
+    tip = (16.5, 2) if f not in ("idle2", "walk") else (18, 3)
     c.thick([(14, 6), (14.5, 4), tip], 0.5)
     c.ell(tip[0] + 0.5, tip[1] - 0.5, 1.3, 1.3)
     return dict(eyes=((7, 10), (16, 10)), mouth=(11.5, 16), top=4)
@@ -222,8 +247,7 @@ def cat(c, f, st):
     for y0, y1 in ((12.5, 12), (14, 14.5)) if c.mid else ():  # whiskers
         c.line([(1.5, y0), (4.5, y1 + 0.3)])
         c.line([(21.5, y1 + 0.3), (24.5, y0)])
-    for x in (10, 17):
-        c.rect(x - 1.2, 23.3, x + 1.2, 24.5)
+    feet(c, f, (10, 17), 23.3, 24.5, 1.2)
     return dict(eyes=((7.5, 8), (14.5, 8)), mouth=(11, 12.5), top=1)
 
 
@@ -234,11 +258,10 @@ def dog(c, f, st):
         c.poly([(x, 4.5), (x + sgn * 3, 5.5), (x + sgn * 4, 11), (x + sgn * 3, 16), (x + sgn * 0.5, 15.5), (x - sgn * 0.5, 9)])
         c.line([(x - sgn * 0.3, 5.5), (x - sgn * 0.6, 9), (x + sgn * 0.3, 14.5)])
     c.ell(13.5, 20, 7, 4.5)  # body
-    tail = [(20, 19), (24, 15.5), (24.5, 12.5)] if f != "idle2" else [(20, 19), (24.5, 18.5), (27, 16)]
+    tail = [(20, 19), (24, 15.5), (24.5, 12.5)] if f not in ("idle2", "walk") else [(20, 19), (24.5, 18.5), (27, 16)]  # wags
     c.thick(tail, 1.1)
     c.ell(13.5, 10.8, 1.7, 1.0, c.detail)  # nose
-    for x in (10, 17):
-        c.rect(x - 1.2, 23.5, x + 1.2, 24.5)
+    feet(c, f, (10, 17), 23.5, 24.5, 1.2)
     return dict(eyes=((7.8, 6), (15.2, 6)), mouth=(12, 13), top=3)
 
 
@@ -251,7 +274,12 @@ def owl(c, f, st):
         c.ring(9.5, 10.5, 4)  # eye rings
         c.ring(17.5, 10.5, 4)
     c.line([(12.5, 14), (13.5, 16), (14.5, 14)])  # beak
-    if c.mid:
+    if f in ("fly1", "fly2"):  # spread wings: up, then down
+        for sgn in (-1, 1):
+            X = lambda x: 13.5 + sgn * (13.5 - x)
+            pts = [(6, 12), (-1.5, 2.5), (0.5, 8), (-2, 10.5), (5, 17)] if f == "fly1" else [(6, 11), (-2, 16.5), (0.5, 18.5), (-1, 22), (6.5, 19.5)]
+            c.poly([(X(x), y) for x, y in pts])
+    elif c.mid:
         c.line([(4.5, 14), (5.5, 19), (8, 22)])  # wings
         c.line([(22.5, 14), (21.5, 19), (19, 22)])
     for x, y in ((11, 19), (13.5, 20), (16, 19)) if c.fine else ():  # chest
@@ -275,16 +303,15 @@ def dragon(c, f, st):
     for y in (18, 20.5) if c.mid else ():  # belly scales
         c.line([(11.5, y), (15.5, y)])
     if st == "adult":  # wings, flapping in idle2
-        up = -3 if f == "idle2" else 0
+        up = {"idle2": -3, "fly1": -5, "fly2": 3}.get(f, 0)
         for sgn in (-1, 1):
             c.poly([(13.5 + sgn * 5, 14.5), (13.5 + sgn * 12.5, 6 + up), (13.5 + sgn * 12, 12 + up), (13.5 + sgn * 14, 14.5 + up), (13.5 + sgn * 8, 18)])
-    for x in (10, 17):
-        c.rect(x - 1.2, 23.6, x + 1.2, 24.6)
+    feet(c, f, (10, 17), 23.6, 24.6, 1.2)
     return dict(eyes=((7.5, 6.5), (15.5, 6.5)), mouth=(12, 13), top=2)
 
 
 def blob(c, f, st):
-    if f == "idle2":  # squish
+    if f in ("idle2", "walk"):  # squish
         c.ell(13.5, 18, 12.6, 9)
     else:
         c.ell(13.5, 16.5, 11, 10.5)
@@ -292,13 +319,13 @@ def blob(c, f, st):
     c.mask = {(x, y) for x, y in c.mask if y <= c.T(0, 24.3)[1]}
     c.line([(3.5, 17), (4, 14.5), (5.5, 12.5)])  # shine
     c.line([(1, 24), (26, 24)])
-    lift = 1.5 if f == "idle2" else 0
+    lift = 1.5 if f in ("idle2", "walk") else 0
     return dict(eyes=((7.5, 11 + lift), (15.5, 11 + lift)), mouth=(11.5, 16 + lift), top=6 + lift)
 
 
 def axolotl(c, f, st):
     c.ell(14, 11, 9.5, 6.3)  # head
-    w = 1 if f == "idle2" else 0
+    w = 1 if f in ("idle2", "walk") else 0
     for sgn in (-1, 1):  # gill fronds
         x0 = 14 + sgn * 8
         for dy, (ex, ey) in ((-3, (5, -4 - w)), (0, (6, 0 + w)), (3, (5, 4 - w))):
@@ -307,8 +334,7 @@ def axolotl(c, f, st):
                 c.dot(x0 + sgn * ex * 0.6, 11 + dy + ey * 0.6 - 1.2)
     c.ell(14, 19.5, 5.5, 4)  # body
     c.thick([(18.5, 20.5), (23.5, 21.5), (27, 20.5 - w)], 1.0)  # tail
-    for x in (10.5, 17.5):
-        c.rect(x - 1, 22.5, x + 1, 24.4)
+    feet(c, f, (10.5, 17.5), 22.5, 24.4, 1)
     return dict(eyes=((7, 9.5), (17, 9.5)), mouth=(12, 13.5), top=5)
 
 
@@ -318,12 +344,19 @@ DRAW = {"pip": pip, "cat": cat, "dog": dog, "owl": owl, "dragon": dragon, "blob"
 def frame(species, stage, f):
     s = SCALE[stage]
     w, h = SIZE[stage]
+    pose, mx_, my_ = POSE.get(f, ("idle", 1, 1))
+    if pose in ("fly1", "fly2") and (species, stage) not in FLYERS:
+        pose = "idle"  # can't fly: never shown flying (pet_motion.h), same as idle
     if species == "dragon" and stage == "adult":
         w = 32
-    ox = (w - 28 * s) / 2  # centred
-    oy = h - 25 * s
-    c = Canvas(w, h, s, ox, oy)
-    a = DRAW[species](c, "idle2" if f == "idle2" else "idle", stage)
+    if species == "owl" and pose in ("fly1", "fly2"):
+        w += 4  # the wings
+    sx, sy = s * mx_, s * my_
+    h = int(math.ceil(25 * sy - 1e-9)) if my_ > 1 else h
+    ox = (w - 28 * sx) / 2  # centred
+    oy = h - 25 * sy
+    c = Canvas(w, h, s, ox, oy, sx, sy)
+    a = DRAW[species](c, pose, stage)
     g = c.grid()
     gs = GLYPH[stage]
     eyes, mouth = FACE[f]
@@ -331,7 +364,7 @@ def frame(species, stage, f):
     ey = [int(round(c.T(x, y)[1])) for x, y in a["eyes"]]
     eye = EYES[gs][eyes]
     stamp(g, eye, ex[0], ey[0])
-    stamp(g, eye, ex[1], ey[1], mirror=True)
+    stamp(g, eye, ex[1], ey[1], mirror=eyes != "look")  # looking: both eyes to one side
     if f == "sad":
         stamp(g, ["#", "#"], ex[1] + len(eye[0]), ey[1] + len(eye))  # tear
     mx, my = (int(round(v)) for v in c.T(*a["mouth"]))
@@ -428,15 +461,31 @@ def bits(row):
 
 def build():
     frames = []  # (w, h, rows)
-    index = {}
+    index, seen = {}, {}
+
+    def add(key, g):
+        k = tuple(tuple(r) for r in g)  # the same picture twice (a pet that can't fly): stored once
+        if k not in seen:
+            seen[k] = len(frames)
+            frames.append(g)
+        index[key] = seen[k]
+
     for sp in SPECIES:
         for st in STAGES:
             for f in FRAMES:
-                index[(sp, st, f)] = len(frames)
-                frames.append(frame(sp, st, f))
-        index[(sp, "egg", "egg")] = len(frames)
-        frames.append(egg(sp))
+                add((sp, st, f), frame(sp, st, f))
+        add((sp, "egg", "egg"), egg(sp))
     return frames, index
+
+
+def boxes(frames, index):
+    """Per species and stage, the box every living frame fits (pet_motion.h keeps it on screen)."""
+    out = {}
+    for sp in SPECIES:
+        for st in STAGES:
+            gs = [frames[index[(sp, st, f)]] for f in FRAMES if f != "dead"]
+            out[(sp, st)] = (max(len(g[0]) for g in gs), max(len(g) for g in gs))
+    return out
 
 
 def main():
@@ -470,10 +519,17 @@ def main():
     for g, o in zip(frames, offs):
         L.append(f"    {{{len(g[0])}, {len(g)}, {o}}},")
     L += ["};", "", "// pet_frame_index[species][stage - 1][frame]; eggs: pet_egg_index[species]",
-          f"static const uint8_t pet_frame_index[{len(SPECIES)}][{len(STAGES)}][{len(FRAMES)}] = {{"]
+          f"static const uint16_t pet_frame_index[{len(SPECIES)}][{len(STAGES)}][{len(FRAMES)}] = {{"]
     for sp in SPECIES:
         L.append("    {" + ", ".join("{" + ", ".join(str(index[(sp, st, f)]) for f in FRAMES) + "}" for st in STAGES) + "},")
-    L += ["};", "static const uint8_t pet_egg_index[] = {" + ", ".join(str(index[(sp, "egg", "egg")]) for sp in SPECIES) + "};", ""]
+    L += ["};", "static const uint16_t pet_egg_index[] = {" + ", ".join(str(index[(sp, "egg", "egg")]) for sp in SPECIES) + "};", ""]
+    box = boxes(frames, index)
+    L += ["// pet_box[species][stage - 1] = {width, height}: every living frame fits (pet_motion.h).",
+          f"static const uint8_t pet_box[{len(SPECIES)}][{len(STAGES)}][2] = {{"]
+    for sp in SPECIES:
+        L.append("    {" + ", ".join("{%d, %d}" % box[(sp, st)] for st in STAGES) + "},")
+    L += ["};", "static const uint8_t pet_flyer[" + str(len(SPECIES)) + "] = {" +
+          ", ".join(str(sum(1 << i for i, st in enumerate(STAGES) if (sp, st) in FLYERS)) for sp in SPECIES) + "}; // bit stage - 1", ""]
     L += ["static const uint8_t pet_food_icon[] = {" + ", ".join(f"PET_ICON_{FOOD[s].upper()}" for s in SPECIES) + "};",
           "static const uint8_t pet_play_icon[] = {" + ", ".join(f"PET_ICON_{PLAY[s].upper()}" for s in SPECIES) + "};", ""]
     L += ["// 8x8 icons: bit 7 = leftmost pixel.", "static const uint8_t pet_icons[PET_ICON_COUNT][8] = {"]
@@ -498,13 +554,21 @@ def main():
     ]
     write(GEN / "pet_ids.h", "\n".join(ids))
 
-    # The page: each frame as width, height and hex rows.
+    # The page: every distinct frame once, as "width:rows" (each row ceil(w/4)
+    # hex digits), and which frame is which; compact, since the page goes into
+    # the firmware gzipped (and typed delivery has a 64 KB limit).
+    def packed(g):
+        n = (len(g[0]) + 3) // 4
+        return f"{len(g[0])}:" + "".join(f"{bits(r):0{n}x}" for r in g)
+
     js = {
         "species": SPECIES, "speciesNames": SPECIES_NAMES, "stages": ["egg"] + STAGES, "frames": FRAMES,
-        "frame": {f"{sp}/{st}/{f}": [len(frames[index[(sp, st, f)]][0])] + [f"{bits(r):x}" for r in frames[index[(sp, st, f)]]]
-                  for sp in SPECIES for st in STAGES for f in FRAMES},
-        "egg": {sp: [16] + [f"{bits(r):x}" for r in egg(sp)] for sp in SPECIES},
+        "art": [packed(g) for g in frames],
+        "ix": {f"{sp}/{st}": [index[(sp, st, f)] for f in FRAMES] for sp in SPECIES for st in STAGES},
+        "egg": {sp: index[(sp, "egg", "egg")] for sp in SPECIES},
         "icons": ICONS, "food": FOOD, "play": PLAY,
+        "box": {f"{sp}/{st}": list(v) for (sp, st), v in boxes(frames, index).items()},
+        "flyers": sorted(f"{sp}/{st}" for sp, st in FLYERS),
     }
     write(GEN / "pet_art.json", json.dumps(js, separators=(",", ":")))
     print(f"pet art: {len(frames)} frames, {len(rows)} rows ({len(rows) * 4 + len(frames) * 4} bytes), {len(ICONS)} icons")
