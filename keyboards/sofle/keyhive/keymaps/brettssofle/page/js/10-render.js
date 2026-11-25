@@ -63,11 +63,18 @@ function renderNote() {
     setHtml(el, `<div class="info"><b>Keyboard-only mode:</b> use the keyboard's knobs and keys (see “How to use”). Clicking does nothing in this mode${navigator.hid ? " — for mouse control, exit it and click Connect" : ""}.</div>`);
   } else if (S.mode === "hid") {
     let s = "";
-    if (S.sessionLost) s += `<div class="note">The keyboard ended the session (idle, or unplugged). <button id="reconnectBtn">Reconnect</button></div>`;
+    if (S.sessionLost) {
+      const why = { [END.KEY]: "<b>Config mode ended</b> on the keyboard (Config key).", [END.IDLE]: "The keyboard ended the session: this page hadn't polled it for 90 s.",
+                    [END.NET]: "<b>Network mode ended</b> (no traffic for 10 minutes, or it was switched off).", [END.PAGE]: "The session was ended.",
+                    [END.GONE]: "<b>Lost the keyboard:</b> network mode is off." }[S.sessionLost] || "The keyboard ended the session (idle, or unplugged).";
+      s += NET ? `<div class="note">${why} Changes not saved before that are lost. To come back, press Config and then <kbd>N</kbd> on the keyboard, then <button id="reloadBtn">Reload</button> this page.</div>`
+               : `<div class="note">${why} <button id="reconnectBtn">Reconnect</button></div>`;
+    }
     if (NAV.on) s += `<div class="info"><b>Right knob:</b> turn to move the orange highlight, press to select or change it (turn, then press again to finish), hold to switch tab.</div>`;
     if (S.bridgeOn) s += `<div class="note">Keyboard-only mode is also on, so the keyboard isn't typing. <button id="exitBridgeBtn">Turn it off</button></div>`;
     setHtml(el, s);
     const rc = $("reconnectBtn"); if (rc) rc.onclick = async () => { S.sessionLost = false; clearInterval(HID.poll); await requestSession(); };
+    const rl = $("reloadBtn"); if (rl) rl.onclick = () => location.reload();
     const eb = $("exitBridgeBtn"); if (eb) eb.onclick = async () => { await cmd([0xf6, 0x03]); pollStatus(); };
   } else setHtml(el, "");
 }

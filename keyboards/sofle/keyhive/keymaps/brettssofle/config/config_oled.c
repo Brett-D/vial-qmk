@@ -16,6 +16,8 @@ static const uint8_t cfg_sync_ack[2] = {0xA7, 0x5E}; // reply of a v19+ right ha
 static uint8_t  left_fw;        // right half: the left half's version (0 = none seen yet)
 static uint32_t old_left_since; // right half: first sync without a reply request (an older left half, or a v19 one before its first full sync)
 static uint32_t fw_mismatch_at; // right half: when the halves were found to differ
+static uint32_t cfg_rx_at;      // right half: the last config sync (v29: a stale config screen goes)
+static uint16_t stale_drops;    // right half: config screens dropped because the syncs stopped
 
 uint8_t config_mode_left_fw(void) {
     return left_fw;
@@ -33,6 +35,7 @@ void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_len, voi
         uint8_t n = in_len < sizeof(oled_state) ? in_len : sizeof(oled_state);
         memset(&oled_state, 0, sizeof(oled_state));
         memcpy(&oled_state, in_data, n);
+        cfg_rx_at = timer_stamp32();
         // Only a v19+ left half asks for the reply, with its full payload.
         if (out_len >= sizeof(cfg_sync_ack) && in_len > offsetof(cfg_oled_t, fw)) {
             left_fw = oled_state.fw;
@@ -49,6 +52,33 @@ void oled_sync_handler(uint8_t in_len, const void *in_data, uint8_t out_len, voi
     }
 }
 
+#ifdef NETWORK_ENABLE
+// v29: "NET off" + why only after network mode ended by itself (10 min idle:
+// ~1 s; P: until the typed page starts), never after the Config key, and a
+// knob press ends it.
+static uint32_t bye_dismissed_at;
+
+static uint8_t net_bye_why(void) {
+    uint32_t ago;
+    uint8_t  why = net_last_exit(&ago);
+    if (!why || why == NET_EXIT_KEY || ago >= (why == NET_EXIT_FALLBACK ? 2600 : CONFIG_NET_BYE_MS)) {
+        return 0;
+    }
+    if (bye_dismissed_at && timer_elapsed32(bye_dismissed_at) <= ago) {
+        return 0; // dismissed after this exit
+    }
+    return why;
+}
+
+bool config_net_bye_dismiss(void) {
+    if (net_mode_active() || !net_bye_why()) {
+        return false;
+    }
+    bye_dismissed_at = timer_stamp32();
+    return true;
+}
+#endif
+
 void oled_sync_task(void) {
     static cfg_oled_t last_sent;
     static uint16_t   last_time;
@@ -64,16 +94,14 @@ void oled_sync_task(void) {
     }
 #ifdef NETWORK_ENABLE
     uint32_t typed = deliver_address_typed_at();
-    now.net        = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) | (typed && timer_elapsed32(typed) < 2500 ? 0x40 : 0) | (net_addr_enter() ? 0x20 : 0) : 0; // 0x40: v22 "Typed", 0x20: v26 + Enter
-    uint32_t ago;
-    uint8_t  why = net_last_exit(&ago);
-    now.net_bye  = !now.net && why && ago < CONFIG_NET_BYE_MS ? why : 0;
+    now.net        = config_net_shown() ? net_state() | (net_failed() ? 0x80 : 0) | (typed && timer_elapsed32(typed) < 2500 ? 0x40 : 0) | (net_addr_enter() ? 0x20 : 0) : 0; // 0x40: v22 "Typed", 0x20: v26 + Enter
+    now.net_bye  = !now.net ? net_bye_why() : 0;
     now.net_secs = now.net && (now.net & 0x0F) != NET_READY ? (net_mode_seconds() > 255 ? 255 : net_mode_seconds()) : 0;
 #endif
     bool              active = now.state != ST_OFF || now.hid == HS_ASK || now.hid == HS_ACTIVE || now.cal || now.dl || now.net || now.net_bye;
+    now.fw = BRETT_FW_VERSION; // v29: before the compare (v19-v28 compared without it, so it sent on every main-loop pass)
     // Resent now and then even when idle: the right half may have restarted.
     bool              due    = memcmp(&now, &last_sent, sizeof(now)) != 0 || timer_elapsed(last_time) > (active ? CONFIG_MODE_OLED_SYNC_MS : 5000);
-    now.fw = BRETT_FW_VERSION;
     if (!due) {
         return;
     }
@@ -102,13 +130,39 @@ void oled_sync_task(void) {
 // without key presses (each of those ends by itself). A connected page (web
 // session) doesn't keep it on: that can last for hours.
 #    define NET_OLED_ON_SECS 120
+// v29: the left half sends the config state every second while there is
+// something to show; if that stops (it restarted, the link dropped, the PC
+// slept mid-session), a config screen must not stay up for good.
+static void drop_stale(void) {
+    if (!cfg_rx_at || timer_elapsed32(cfg_rx_at) < CONFIG_OLED_STALE_MS) {
+        return;
+    }
+    if (oled_state.state || oled_state.hid == HS_ASK || oled_state.hid == HS_ACTIVE || oled_state.dl || oled_state.net || oled_state.net_bye || oled_state.nav || oled_state.cal) {
+        oled_state.state = oled_state.hid = oled_state.dl = oled_state.net = oled_state.net_bye = oled_state.nav = oled_state.cal = 0;
+        if (stale_drops < 0xFFFF) {
+            stale_drops++;
+        }
+    }
+}
+
+uint16_t config_oled_stale_drops(void) {
+    return stale_drops;
+}
+
 bool config_mode_oled_busy(void) {
+    drop_stale();
     bool net_wait = oled_state.net && (oled_state.net & 0x0F) != NET_READY && oled_state.net_secs < NET_OLED_ON_SECS && oled_state.hid != HS_ACTIVE;
     return oled_state.state != ST_OFF || oled_state.hid == HS_ASK || oled_state.dl || net_wait;
 }
 
+static uint8_t last_screen;
+
+void config_mode_oled_invalidate(void) {
+    last_screen = 0xFF;
+}
+
 bool config_mode_oled_task(void) {
-    static uint8_t last_screen;
+    drop_stale();
     bool           asking = oled_state.state == ST_ASK || oled_state.hid == HS_ASK;
     bool           active = oled_state.state != ST_OFF || asking || oled_state.hid == HS_ACTIVE;
     bool           net    = oled_state.net && oled_state.hid != HS_ASK; // CONF? for the page wins
@@ -244,6 +298,8 @@ bool config_mode_oled_task(void) {
             if (oled_state.nav) {
                 oled_write_P(PSTR("     Knob nav  "), false); // right knob drives the page
             }
+            oled_set_cursor(0, 13);
+            oled_write_P(PSTR("CONFG=end  "), false); // v29: the Config key ends the session
             break;
         case ST_CHALLENGE:
             oled_write_P(PSTR("Press"), false);

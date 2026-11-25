@@ -12,6 +12,8 @@ const CHALLENGE = "ACDEFHJKLMNPRSTUWXY";
 const KNOB_L = [4, 0], KNOB_R = [9, 5];
 const SLOT_NAMES = ["Turn left", "Turn right", "Press"];
 const HS = { NONE:0, ASK:1, ACTIVE:2, DENIED:3, TIMEOUT:4 };
+// v29: why the keyboard ended the session (status byte 31); GONE: the network page lost it.
+const END = { NONE:0, KEY:1, IDLE:2, NET:3, PAGE:4, GONE:99 };
 
 // mode: null (not connected) | "bridge" (keyboard-only) | "hid" (WebHID, mouse)
 /*__FX_CORE__*/

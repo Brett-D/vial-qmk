@@ -124,13 +124,25 @@ function readStatus(st) {
 }
 
 async function pollStatus() {
-  if (S.mode !== "hid") return;
+  if (S.mode !== "hid" || S.sessionLost) return;
   try {
     const st = await cmd([0xf6, 0x00, S.ui && S.ui.tab === 1 ? 1 : 0]);
+    HID.pollFails = 0;
     readStatus(st);
-    if (st[3] !== HS.ACTIVE) { S.sessionLost = true; }
+    if (st[3] !== HS.ACTIVE) sessionEnded(st[31] || END.NONE);
     renderNote();
-  } catch (e) { log("poll: " + e.message); }
+  } catch (e) {
+    log("poll: " + e.message);
+    // Network mode: the keyboard went back to a plain keyboard (or the cable came out).
+    if (NET && ++HID.pollFails >= 2) { sessionEnded(END.GONE); renderNote(); }
+  }
+}
+// v29: the keyboard ended the session (Brett: "clean up the exit"): say so at once, and why.
+function sessionEnded(why) {
+  if (S.sessionLost) return;
+  S.sessionLost = why || -1;
+  if (NET) { clearInterval(HID.poll); HID.poll = null; } // network mode is off now: nothing to poll
+  toast(why === END.KEY ? "Config mode ended on the keyboard" : "The keyboard ended the session", true);
 }
 
 async function hidLoadAll() {

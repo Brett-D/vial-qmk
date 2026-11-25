@@ -38,8 +38,10 @@
 #include "oled_pages.h"
 
 #ifndef CONFIG_NET_BYE_MS
-#    define CONFIG_NET_BYE_MS 6000 // "NET off" + why, after network mode ends
+#    define CONFIG_NET_BYE_MS 1200 // "NET off" + why, after network mode ended by itself (v29: not after the Config key)
 #endif
+#define CONFIG_NET_CLOSE_MS 2000  // v29 Config key in network mode: the page's next poll hears it ended, then the USB switch
+#define CONFIG_OLED_STALE_MS 4000 // v29 right half: no config sync for this long (it comes every 1 s while there's something to show) = gone
 #ifndef CONFIG_MODE_IDLE_EXIT_MS
 #    define CONFIG_MODE_IDLE_EXIT_MS 300000
 #endif
@@ -67,7 +69,8 @@
 //                            capture seq, row, col, flags, right half map (0 ?, 1 same, 2 differs),
 //                            knob nav (CMD_NAV only): turns (int8), presses, long presses, nav on,
 //                            layers: base effect, key-press effect (VialRGB ids), key-press hue, sat,
-//                            wiggler (bit 0 on, bits 1-2 interval)]
+//                            wiggler (bit 0 on, bits 1-2 interval),
+//                            v29: why the session ended (END_*, while it isn't active)]
 #define CFG_RAW_HID_ID 0xF6
 enum cfg_hid_cmd {
     CMD_STATUS      = 0x00, // arg: 1 = keep the underglow awake (LED tab open); refreshes the session
@@ -104,6 +107,8 @@ enum cfg_hid_cmd {
     CMD_END         = 0x11, // end the web session
 };
 enum hid_state { HS_NONE, HS_ASK, HS_ACTIVE, HS_DENIED, HS_TIMEOUT };
+// v29: why the web session ended (status byte 31; keep in sync with the page).
+enum hid_end { END_NONE, END_KEY, END_IDLE, END_NET, END_PAGE };
 
 // Vial subcommands (quantum/vial.h) that change the keyboard.
 #define VIAL_SET_ENCODER 0x04
@@ -203,9 +208,15 @@ typedef struct {
     uint8_t  state;
     bool     led_dirty; // lighting previewed and not saved (undone when the session ends)
     uint32_t time;      // ask start / last poll / deny time
+    uint8_t  end_why;   // v29: END_* of the last session (told to the page's next status poll)
+    bool     end_told;  // ... and a status reply has said so
 } hid_session_t;
 extern hid_session_t hid;
-void hid_session_end(void); // config_hid.c: closes the web session (unsaved lighting undone)
+void hid_session_end(void);             // config_hid.c: closes the web session (unsaved lighting undone); the page asked
+void hid_session_end_why(uint8_t why);  // ... for another reason (END_*)
+void config_release_captures(void);     // v29 config_mode.c: knob / NET / CONF? captures let go (after an exit)
+bool config_net_shown(void);            // v29: network mode is on and not closing (the NET screen, its knob)
+bool config_net_bye_dismiss(void);      // v29 config_oled.c: a knob press while "NET off" shows: it goes (true)
 
 // Right knob driving the focused config page (web session): its turns and
 // presses are reported to the page instead of acting normally.

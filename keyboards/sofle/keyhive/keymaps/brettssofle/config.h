@@ -55,6 +55,7 @@
 // The sleep time (default 1 min), brightness and Off are settings (v27, display.c).
 #define OLED_TIMEOUT 0
 #define OLED_UPDATE_INTERVAL 50
+#define OLED_I2C_TIMEOUT 30 // v29: a 32-byte block takes ~4 ms; a stuck bus costs the right half 30 ms a try, not 100 (oled.c recovers it)
 #define OLED_BRIGHTNESS 128 // until the left half sends the brightness (level 3 = 128)
 
 /* ---------------------------------------------------------------------------

@@ -13,8 +13,12 @@
 // Stats 0-100: food, joy, energy, clean. They drift slowly while the keyboard
 // is powered (per hour at "normal": food -5, joy -4, energy -3, clean -3, so
 // a full stat lasts about a day; asleep: energy +25, joy -1; "slow" halves,
-// "fast" doubles). Typing counts
-// as exercise: every 40 key presses, joy +1 and energy -1. It's forgiving: it
+// "fast" doubles). Typing keeps it going (v29, Brett: typing should build
+// energy, not drain it): every 35 key presses, joy +1 and energy +1. Energy
+// from typing is capped: at most a point every 2 minutes (slowly: 4, quickly:
+// 1), and only up to 80, so sleep is still what fills it. Only real presses
+// count (one per press, however long it's held; not macros, typed pages or
+// config mode). It's forgiving: it
 // only gets hungry, sad, tired or dirty, unless "can die" is on (then 24 h
 // with no food and no joy at all turns it into a ghost; "new pet" hatches a
 // new egg).
@@ -46,7 +50,9 @@
 #endif
 #define PET_SAVE_SOON_MS 15000
 #define PET_MENU_MS 6000
-#define PET_TYPING_STEP 40
+#define PET_TYPING_STEP 35
+#define PET_TYPING_ENERGY_MAX 80      // typing alone tops energy up to here; sleep does the rest
+#define PET_TYPING_ENERGY_MS 120000UL // at most a point per 2 min at normal speed
 #define PET_GET_MARK 0x9E
 #define PET_GLOW_MARK 0x9F
 #define PET_SAD_GLOW_MS 240000UL   // hungry / sad / dirty: a blue sigh at most every 4 min
@@ -108,6 +114,7 @@ static pet_store_t p;
 static bool        dirty;
 static uint32_t    minute_t, save_t, soon_t; // soon_t: 0 = no early save pending
 static uint16_t    acc[4], keys, neglect_min;
+static uint32_t    typing_energy_at; // v29: the last energy point from typing
 static uint8_t     sel, anim, anim_seq;
 static bool        menu_on;
 static uint32_t    menu_t;
@@ -397,10 +404,15 @@ bool pet_process(keyrecord_t *record, bool pet_page) {
         return false;
     }
     if (ev->type == KEY_EVENT) {
-        if (!(p.flags & (F_ASLEEP | F_DEAD)) && ++keys >= PET_TYPING_STEP) {
-            keys = 0; // typing = exercise
+        if (!(p.flags & (F_ASLEEP | F_DEAD)) && p.stage != PET_STAGE_EGG && ev->key.row < MATRIX_ROWS && ++keys >= PET_TYPING_STEP) {
+            keys = 0; // typing keeps it going
             add(S_JOY, 1);
-            if (p.stat[S_ENERGY] > 10) add(S_ENERGY, -1);
+            // Care speed: slowly 4 min, normally 2, quickly 1 per point.
+            uint32_t gap = p.decay == 0 ? PET_TYPING_ENERGY_MS * 2 : p.decay == 2 ? PET_TYPING_ENERGY_MS / 2 : PET_TYPING_ENERGY_MS;
+            if (p.stat[S_ENERGY] < PET_TYPING_ENERGY_MAX && (!typing_energy_at || timer_elapsed32(typing_energy_at) >= gap)) {
+                add(S_ENERGY, 1);
+                typing_energy_at = timer_stamp32();
+            }
             dirty = true;
         }
         return false;

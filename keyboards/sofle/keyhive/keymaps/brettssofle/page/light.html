@@ -134,7 +134,11 @@ async function connect() {
     say("");
     $("connect").classList.add("hidden"); $("tabs").classList.remove("hidden");
     $("state").textContent = "Connected";
-    setInterval(() => cmd([0xf6, 0x00, 0]).catch(() => {}), 1500); // keeps the session
+    const poll = setInterval(() => cmd([0xf6, 0x00, 0]).then((st) => { // keeps the session; v29: says when the keyboard ends it
+      if (st[3] === 2) return;
+      clearInterval(poll); $("state").textContent = "Ended";
+      say((st[31] === 1 ? "<b>Config mode ended</b> on the keyboard (Config key)." : "The keyboard ended the session.") + " Reload to connect again.", true);
+    }).catch(() => {}), 1500);
     render();
   } catch (e) {
     say(e.name === "NotAllowedError" || e.name === "SecurityError" ? "The browser blocked USB access." :

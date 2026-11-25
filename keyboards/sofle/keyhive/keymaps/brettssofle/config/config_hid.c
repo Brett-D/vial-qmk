@@ -45,8 +45,10 @@ static void hid_request(void) {
     if (deliver_state() == DL_OFF && deliver_address_typing()) {
         deliver_stop(); // the network address: a page is open already, the rest would go into it
     }
-    hid.state = HS_ASK;
-    hid.time  = timer_read32();
+    hid.state    = HS_ASK;
+    hid.time     = timer_read32();
+    hid.end_why  = END_NONE;
+    hid.end_told = false;
 }
 
 // Answer to a "CONF?" prompt (web session or keyboard-only mode).
@@ -126,14 +128,25 @@ static void hid_led_revert(void) {
 
 // The page closed or stopped polling: previews it didn't save are undone, or
 // a later save (a lighting key, Vial, keyboard-only mode) would keep them.
-void hid_session_end(void) {
+// v29: also when the keyboard ends it (Config key, network mode off), and the
+// page's next status poll is told why (byte 31), so it says so at once.
+void hid_session_end_why(uint8_t why) {
 #ifdef RGB_MATRIX_ENABLE
     if (hid.state == HS_ACTIVE && hid.led_dirty) {
         hid_led_revert();
     }
 #endif
+    if (hid.state == HS_ACTIVE || hid.state == HS_ASK) {
+        hid.end_why  = why;
+        hid.end_told = false;
+    }
     hid.state     = HS_NONE;
     hid.led_dirty = false;
+    nav.on = nav.down = false;
+}
+
+void hid_session_end(void) {
+    hid_session_end_why(END_PAGE);
 }
 
 static void cfg_raw_hid(uint8_t *data) {
@@ -394,6 +407,10 @@ static void cfg_raw_hid(uint8_t *data) {
     }
 #endif
     data[30] = (wiggler_on() ? 1 : 0) | wiggler_interval() << 1;
+    data[31] = hid.state != HS_ACTIVE ? hid.end_why : END_NONE;
+    if (data[1] == CMD_STATUS && data[31]) {
+        hid.end_told = true; // network mode may switch the USB back now (config_mode.c)
+    }
     if (data[1] == CMD_NAV) {
         data[22]    = (uint8_t)nav.turns;
         data[23]    = nav.presses;

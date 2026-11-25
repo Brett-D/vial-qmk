@@ -49,3 +49,8 @@ void diag_on_net_stack(void (*fn)(void));
 
 // Raw HID 0xF6 0x17: fills the reply (data[2..]); arg data[2] = 1 clears.
 void diag_raw_hid(uint8_t *data);
+
+// v29: the right half's hardware watchdog: if its main loop stops for
+// DIAG_WATCHDOG_MS, it restarts (INFO page: Boot wdog). Fed from housekeeping.
+void diag_watchdog_start(void);
+void diag_watchdog_feed(void);

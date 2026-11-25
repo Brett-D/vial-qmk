@@ -424,17 +424,24 @@ static void footer(uint8_t page) {
     oled_write(s, false);
 }
 
+static uint8_t pages_last = 0xFF;
+
+// v29: the screen was cleared under the page (a config screen ended, the OLED
+// was re-initialised): the next frame starts it afresh.
+void oled_pages_invalidate(void) {
+    pages_last = 0xFF;
+}
+
 // Right half: draws the selected page; false = page 0 (the caller draws the status).
 bool oled_pages_render(void) {
-    static uint8_t last  = 0xFF;
     uint8_t        shown = view.crash == 2 ? 0xFE : view.page; // 0xFE: the crash banner
     if (shown == OLED_PAGE_INFO && display_menu_showing()) {
         shown = 0xFD; // v27: the Display menu over the INFO page
     }
-    bool entered = shown != last;
+    bool entered = shown != pages_last;
     if (entered) {
         oled_clear();
-        last = shown;
+        pages_last = shown;
     }
     oled_set_cursor(0, 0);
     if (shown == 0xFE) {

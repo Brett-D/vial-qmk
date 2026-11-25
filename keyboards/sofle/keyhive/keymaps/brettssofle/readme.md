@@ -304,6 +304,22 @@ a menu to turn off via menu on the display and adjust brightness".
   sent to the right half with `RPC_ID_USER_DISP` (`oled/display.c`), and in
   backups.
 
+### Right OLED safety nets (v29)
+
+- **I2C recovery:** every OLED transfer is checked (QMK's weak `oled_send_cmd`
+  / `oled_send_data`, `oled/oled.c`). After 3 failures in a row the bus is
+  cleared (up to 9 SCL pulses until SDA is free, then a STOP), the OLED is
+  re-initialised and redrawn; at most once a second. A transfer gives up
+  after 30 ms (`OLED_I2C_TIMEOUT`, was 100).
+- **Stale config screens:** the left half sends the config state every
+  second while something is shown; if that stops for 4 s (it restarted, the
+  link dropped), the right half drops its config / NET / CONF? screen and
+  shows its page.
+- **Watchdog:** the right half's hardware watchdog restarts it if its main
+  loop stops for 3 s (INFO page: `Boot wdog`); off before QK_BOOT / reboot.
+- The left half sent the config state on every main-loop pass since v19 (a
+  compare that missed the version byte); now on change and once a second.
+
 ### Responsiveness (v27)
 
 Brett: "keyboard is also lagging sometimes, Im not sure if its led overload?"
@@ -401,8 +417,15 @@ from the start, with the state under it: `USB conn.` → `Link up DHCP` →
 `Ready`, and the seconds so far while it waits. Windows can take up to
 ~30 s, longer the first time on a new USB port (it sets up the adapter);
 the address works as soon as it says `Ready`. After 20 s without an
-address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=open`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only) and then presses **Enter**, so the page opens (v26, Brett: "could it press enter at the end too?"; before: no Enter); the OLED says `Typed`. The Enter goes out only after the computer has collected every character; Esc, a page asking for a session, or a computer that stops reading the keyboard stop it with no Enter. The page's `CONF? Web` still needs its own answer: an Enter within 1.5 s of the typed one (or 0.3 s of the prompt) doesn't count, the knob always does. Switch the Enter off on the config page (Trackpad tab, **Network mode**: `Knob=type` then, as before); saved in bit 7 of the OLED page byte, in backups. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. While a page asks for a session (`CONF? Web`), the right knob or Enter always answers it first and never types (v25b: in v22-v25 the answer was lost while the address was still being typed, or when the computer was slow to collect it; address typing now also gives up after 1 s without the computer reading the keyboard). When network mode ends, the OLED says why for a few
-seconds (`NET off`: by key / idle 10min / P). Open **http://192.168.7.1** (or http://sofle.local where
+address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=open`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only) and then presses **Enter**, so the page opens (v26, Brett: "could it press enter at the end too?"; before: no Enter); the OLED says `Typed`. The Enter goes out only after the computer has collected every character; Esc, a page asking for a session, or a computer that stops reading the keyboard stop it with no Enter. The page's `CONF? Web` still needs its own answer: an Enter within 1.5 s of the typed one (or 0.3 s of the prompt) doesn't count, the knob always does. Switch the Enter off on the config page (Trackpad tab, **Network mode**: `Knob=type` then, as before); saved in bit 7 of the OLED page byte, in backups. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. While a page asks for a session (`CONF? Web`), the right knob or Enter always answers it first and never types (v25b: in v22-v25 the answer was lost while the address was still being typed, or when the computer was slow to collect it; address typing now also gives up after 1 s without the computer reading the keyboard). **Leaving it** (v29, Brett: "clean up the exit"): the Config key or both
+knobs end network mode and the right OLED goes straight back to the page it
+was on. With a page connected, the page's next status poll (≤ 1.5 s) is told
+"Config mode ended" first, then the USB switches back (at most 2 s; keys
+and the trackpad work meanwhile). Only when network mode ends by itself
+(10 min without traffic, or `P`) does the OLED say why for about a second
+(`NET off`: idle 10min / P); any knob press ends that note. (v28 kept the
+web session for 90 s after leaving, so the OLED stayed on `NET off by key`
+and then `CONFG Web page`, and the right knob seemed dead.) Open **http://192.168.7.1** (or http://sofle.local where
 .local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
 serves the config page itself, gzipped from flash. The page asks for a
 session straight away; the OLED shows **CONF?** — press the right knob (or
@@ -528,7 +551,9 @@ works normally again; the keyboard also takes it back by itself 1.5 s after
 the page stops asking (`CMD_NAV` 0xF6 0x12).
 
 The keyboard keeps typing normally while connected. The session ends when you
-click **Disconnect**, close the page, or 90 s after the page stops polling.
+click **Disconnect**, close the page, 90 s after the page stops polling, or
+(v29) when you press **Config** on the keyboard (the OLED shows `CONFG=end`);
+the page then says why straight away (status byte 31) and offers Reconnect.
 Close Vial/VIA first (only one app can use the config channel). On Linux the
 browser needs a one-time udev rule for `/dev/hidraw*`; the page shows it if
 connecting fails.
@@ -634,7 +659,7 @@ To build without the trackpad (for troubleshooting), add `POINTING_DEVICE_ENABLE
 |---|---|
 | `keymap.c`, `config.h`, `rules.mk`, `vial.json` | keymap, layers, hooks (init / housekeeping / `process_record_user`), build options |
 | `brettssofle.h` | layers and custom keycodes only; each module has its own header |
-| `common/` | `macros` (v28: built-in macros, My macros' names), `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard word: OLED display, effect cap, screensaver), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records) |
+| `common/` | `macros` (v28: built-in macros, My macros' names), `brett_util` (timer stamp, the CRC-8 shared by the bridge and the LED map sync), `user_config` (the 32-bit EECONFIG_USER settings: press-to-click, LED idle, zones), `kb_config` (v27: the 32-bit keyboard word: OLED display, effect cap, screensaver), `perf` (v27 main-loop profiler), `eeprom_layout.c` (stable VIA magic), `diag` (crash records; v29: the right half's watchdog) |
 | `trackpad/` | gestures and press-to-click (`trackpad.c`), Cirque Z + raw HID `0xF5` (`trackpad_z.c`), mouse wiggler |
 | `oled/` | left / right OLED drawing, the right OLED's pages and their split sync, the OLED_PAGE key, `display.c` (v27: brightness / sleep / off, the INFO page's Display menu, the right half's loop profile) |
 | `pet/` | the OLED pet (state, care, EEPROM record; drawing; `pet_motion.h`: where it goes and what it does) |
@@ -767,8 +792,12 @@ clean), then the selected care action as a big icon with its name.
   0.5–2 s **hold** also leaves; longer holds are left to the hold-both-knobs
   config combo. The left knob and typing are never taken.
 - **Stats** drift while the keyboard is on: at *normally*, a full stat lasts
-  about a day (*slowly* ≈ 2 days, *quickly* ≈ 12 h). Typing is exercise:
-  every 40 key presses, fun +1 and energy −1. Sleep refills energy and it
+  about a day (*slowly* ≈ 2 days, *quickly* ≈ 12 h). Typing keeps it
+  going (v29; it used to tire it): every 35 key presses, fun +1 and energy
+  +1, but energy from typing comes at most once every 2 minutes (*slowly* 4,
+  *quickly* 1) and only up to 80, so sleep is still what fills it up. Only
+  real key presses count, once each however long they're held (not macros,
+  typed pages or config mode). Sleep refills energy and it
   wakes by itself when rested. It refuses food when full and play when tired
   or asleep (shakes its head).
 - **Forgiving:** it gets hungry, sad, tired or dirty (poop appears), but never

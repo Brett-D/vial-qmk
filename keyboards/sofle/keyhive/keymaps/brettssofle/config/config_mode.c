@@ -202,7 +202,7 @@ bool config_mode_leds_quiet(bool ambient) {
         return true;
     }
 #    ifdef NETWORK_ENABLE
-    if (ambient && net_mode_active()) {
+    if (ambient && config_net_shown()) {
         return true;
     }
 #    endif
@@ -460,12 +460,65 @@ bool config_mode_pages_visible(void) {
         return false;
     }
 #ifdef NETWORK_ENABLE
-    if (net_mode_active()) {
+    if (config_net_shown()) {
         return false;
     }
 #endif
     return true;
 }
+
+#ifdef NETWORK_ENABLE
+// v29, Brett: "clean up the exit". The Config key (or both knobs) in network
+// mode: the web session ends and the right OLED is back on its page at once
+// (v28 kept the session until it timed out, 90 s, so the OLED stayed on
+// "NET off" / "CONFG Web page" and the knob seemed dead). With a page
+// connected, network mode lasts until its next status poll has heard why
+// (CONFIG_NET_CLOSE_MS at most), so the page says so instead of just losing
+// the keyboard; keys and the trackpad work as usual meanwhile.
+static uint8_t  net_close_why;
+static uint32_t net_close_at;
+
+bool config_net_shown(void) {
+    return net_mode_active() && !net_close_why;
+}
+
+static void net_close(uint8_t why) {
+    bool page = hid.state == HS_ACTIVE;
+    if (hid.state == HS_ACTIVE || hid.state == HS_ASK) {
+        hid_session_end_why(END_KEY);
+    }
+    config_release_captures();
+    if (page && !net_close_why) {
+        net_close_why = why;
+        net_close_at  = timer_stamp32();
+        return;
+    }
+    net_close_why = 0; // no page, or a second press: now
+    net_mode_exit(why);
+}
+
+static void net_close_task(void) {
+    if (net_close_why && (hid.end_told || timer_elapsed32(net_close_at) >= CONFIG_NET_CLOSE_MS || !net_mode_active())) {
+        uint8_t why   = net_close_why;
+        net_close_why = 0;
+        net_mode_exit(why);
+    }
+    // However it ended (also by itself: 10 min idle, P): the page went with it.
+    static bool was_on;
+    bool        on = net_mode_active();
+    if (was_on && !on) {
+        if (hid.state == HS_ACTIVE || hid.state == HS_ASK) {
+            hid_session_end_why(END_NET);
+        }
+        config_release_captures();
+    }
+    was_on = on;
+}
+#else
+bool config_net_shown(void) {
+    return false;
+}
+#endif
 
 void config_mode_toggle(void) {
     if (hid.state == HS_ASK) {
@@ -473,10 +526,17 @@ void config_mode_toggle(void) {
     }
 #ifdef NETWORK_ENABLE
     if (net_mode_active()) {
-        net_mode_exit(NET_EXIT_KEY); // CONFIG / both knobs leave network mode
+        net_close(NET_EXIT_KEY); // CONFIG / both knobs leave network mode
         return;
     }
 #endif
+    if (hid.state == HS_ACTIVE && cfg.state == ST_OFF) {
+        // v29: a web page is connected (OLED: CONFG Web page): the key ends that
+        // session (the page says so) instead of asking for keyboard-only mode.
+        hid_session_end_why(END_KEY);
+        config_release_captures();
+        return;
+    }
     if (cfg.state == ST_OFF) {
         bridge_ask();
     } else if (cfg.state == ST_ASK) {
@@ -806,7 +866,7 @@ static bool     net_type_key(keyrecord_t *record) {
         return false;
     }
     if (ev->pressed) {
-        if (!net_mode_active() || nav.on || cfg.state != ST_OFF || hid.state == HS_ASK || matrix_is_on(KNOB_L_ROW, KNOB_L_COL)) {
+        if (!config_net_shown() || nav.on || cfg.state != ST_OFF || hid.state == HS_ASK || matrix_is_on(KNOB_L_ROW, KNOB_L_COL)) {
             return false;
         }
         held_swallowed[KNOB_R_ROW] |= (matrix_row_t)1 << KNOB_R_COL; // not the OLED page / pet key
@@ -814,12 +874,12 @@ static bool     net_type_key(keyrecord_t *record) {
         net_type_down    = timer_read32();
         return true;
     }
-    if (!(held_swallowed[KNOB_R_ROW] & ((matrix_row_t)1 << KNOB_R_COL)) || (!net_type_pending && !net_mode_active())) {
+    if (!(held_swallowed[KNOB_R_ROW] & ((matrix_row_t)1 << KNOB_R_COL)) || (!net_type_pending && !config_net_shown())) {
         return false;
     }
     held_swallowed[KNOB_R_ROW] &= ~((matrix_row_t)1 << KNOB_R_COL);
     uint32_t typed = deliver_address_typed_at();
-    if (net_type_pending && net_mode_active() && hid.state != HS_ASK && timer_elapsed32(net_type_down) < NET_TYPE_HOLD_MS && !matrix_is_on(KNOB_L_ROW, KNOB_L_COL) &&
+    if (net_type_pending && config_net_shown() && hid.state != HS_ASK && timer_elapsed32(net_type_down) < NET_TYPE_HOLD_MS && !matrix_is_on(KNOB_L_ROW, KNOB_L_COL) &&
         !deliver_address_typing() && (!typed || timer_elapsed32(typed) > NET_TYPE_AGAIN_MS)) {
         deliver_type_address();
     }
@@ -827,6 +887,28 @@ static bool     net_type_key(keyrecord_t *record) {
     return true;
 }
 #endif
+
+// v29: after an exit nothing may keep a key or the knob: swallowed releases
+// are kept only for keys still down, a NET-screen click or address being typed
+// is dropped, and the page no longer has the right knob.
+void config_release_captures(void) {
+    for (uint8_t r = 0; r < MATRIX_ROWS; r++) {
+        for (uint8_t c = 0; c < MATRIX_COLS; c++) {
+            if (!matrix_is_on(r, c)) {
+                held_swallowed[r] &= ~((matrix_row_t)1 << c);
+            }
+        }
+    }
+#ifdef NETWORK_ENABLE
+    net_type_pending = false;
+    if (deliver_state() == DL_OFF && deliver_address_typing()) {
+        deliver_stop();
+    }
+#endif
+    nav.on = nav.down = false;
+    nav.turns         = 0;
+    nav.presses = nav.longs = 0;
+}
 
 bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
 #ifdef RGB_MATRIX_ENABLE
@@ -901,6 +983,14 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
             held_swallowed[row] |= (matrix_row_t)1 << col;
             return false;
         }
+#ifdef NETWORK_ENABLE
+        // v29: a knob press ends the "NET off" note (network mode ended by
+        // itself); the right knob's press is used up, so the page stays.
+        if (is_key && ev->pressed && is_knob(row, col) && config_net_bye_dismiss() && row == KNOB_R_ROW && col == KNOB_R_COL) {
+            held_swallowed[row] |= (matrix_row_t)1 << col;
+            return false;
+        }
+#endif
         // v27: the OLED is Off (Display menu or the config page): a knob press
         // wakes it. The right knob's press is used up (the page stays); the left
         // knob's still does its own job.
@@ -1122,6 +1212,7 @@ void config_mode_task(void) {
     deliver_task();
 #ifdef NETWORK_ENABLE
     net_task();
+    net_close_task();
     if (fallback_deliver_at && timer_elapsed32(fallback_deliver_at) > 2500) {
         fallback_deliver_at = 0;
         deliver_start(DL_LIGHT); // the plain keyboard is back: type the page instead
@@ -1143,7 +1234,7 @@ void config_mode_task(void) {
     if (hid.state == HS_ASK && timer_elapsed32(hid.time) >= CONFIG_MODE_ASK_MS) {
         hid.state = HS_TIMEOUT;
     } else if (hid.state == HS_ACTIVE && timer_elapsed32(hid.time) >= CONFIG_HID_SESSION_IDLE_MS) {
-        hid_session_end(); // the page stopped polling
+        hid_session_end_why(END_IDLE); // the page stopped polling
     }
     if (cfg.state == ST_ASK && timer_elapsed32(cfg.ask_time) >= CONFIG_MODE_ASK_MS) {
         cfg.state = ST_OFF;

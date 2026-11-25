@@ -21,5 +21,7 @@ void    net_addr_enter_set(bool on);
 #ifdef OLED_ENABLE
 void oled_right_init(void);
 bool oled_pages_render(void); // right half: false = status page
+void oled_pages_invalidate(void); // v29: the screen was cleared under it: start the page afresh
+uint16_t oled_i2c_recoveries(void); // v29 oled.c: times the right OLED's I2C bus was cleared and the OLED re-initialised
 void oled_pages_status_footer(void);
 #endif

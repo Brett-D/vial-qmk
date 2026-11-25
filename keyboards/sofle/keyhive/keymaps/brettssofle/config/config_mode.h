@@ -23,8 +23,10 @@ bool config_mode_leds_quiet(bool ambient);
 // Right half: draws the config screen and returns true while config mode is on.
 bool config_mode_oled_task(void);
 bool config_mode_oled_busy(void); // a config / network / delivery screen must stay on
+void config_mode_oled_invalidate(void); // v29: the screen was cleared (OLED re-initialised): redraw
+uint16_t config_oled_stale_drops(void); // v29: config screens dropped because the left half stopped syncing
 #endif
 // The firmware version (the INFO page; both halves compare theirs). Bump with every release.
-#define BRETT_FW_VERSION 28
+#define BRETT_FW_VERSION 29
 // Right half: the left half's version as last synced (0 = not known: v18 or older).
 uint8_t config_mode_left_fw(void);

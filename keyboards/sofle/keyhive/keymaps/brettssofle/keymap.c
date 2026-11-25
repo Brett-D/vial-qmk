@@ -222,6 +222,9 @@ void keyboard_post_init_user(void) {
     led_layers_init();
 #endif
     config_mode_init();
+    if (!is_keyboard_master()) {
+        diag_watchdog_start(); // v29: a stuck right half restarts by itself (diag.c)
+    }
 }
 
 // v27 loop profiler (perf.c): the scan is done (left: with the split sync).
@@ -234,6 +237,7 @@ void matrix_slave_scan_user(void) {
 
 void housekeeping_task_user(void) {
     perf_mark(PF_TASKS); // everything since the scan that isn't timed on its own
+    diag_watchdog_feed(); // right half only (started there)
 #ifdef RGB_MATRIX_ENABLE
     // RGB state is owned by the master and synced to the right half.
     if (is_keyboard_master()) {

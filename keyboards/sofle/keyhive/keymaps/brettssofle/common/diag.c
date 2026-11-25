@@ -84,6 +84,36 @@ __attribute__((naked)) void HardFault_Handler(void) {
         ".ltorg           \n");
 }
 
+/* ---- right half's watchdog (v29) ---- */
+
+#ifndef DIAG_WATCHDOG_MS
+#    define DIAG_WATCHDOG_MS 3000
+#endif
+// RP2040-E1: the watchdog counts down twice per 1 us tick.
+#define WDT_LOAD ((uint32_t)DIAG_WATCHDOG_MS * 2000u)
+_Static_assert(WDT_LOAD <= 0xFFFFFFu, "watchdog time too long");
+static bool wdt_on;
+
+void diag_watchdog_start(void) {
+    watchdog_hw->load = WDT_LOAD;
+    psm_hw->wdsel     = PSM_WDSEL_BITS & ~(PSM_WDSEL_ROSC_BITS | PSM_WDSEL_XOSC_BITS);
+    hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS | WATCHDOG_CTRL_PAUSE_DBG0_BITS | WATCHDOG_CTRL_PAUSE_DBG1_BITS | WATCHDOG_CTRL_PAUSE_JTAG_BITS);
+    wdt_on = true;
+}
+
+void diag_watchdog_feed(void) {
+    if (wdt_on) {
+        watchdog_hw->load = WDT_LOAD;
+    }
+}
+
+// Before QMK jumps to the bootloader or reboots (QK_BOOT / QK_REBOOT on the right half).
+bool shutdown_user(bool jump_to_bootloader) {
+    hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    wdt_on = false;
+    return true;
+}
+
 /* ---- boot ---- */
 
 void diag_init(void) {
