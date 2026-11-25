@@ -27,7 +27,7 @@ typedef struct {
     uint8_t species; // PET_SP_* (pet_art.h)
     uint8_t stage;   // PET_STAGE_*: egg, baby, child, adult
 } pet_view_t;
-enum { PV_ON = 1, PV_ASLEEP = 2, PV_DEAD = 4, PV_MENU = 8 };
+enum { PV_ON = 1, PV_ASLEEP = 2, PV_DEAD = 4, PV_MENU = 8, PV_BIG = 16 }; // PV_BIG: v26 big pet (slim stats while the menu is closed)
 
 void pet_init(void); // master
 void pet_task(void); // master: time, saving
@@ -42,8 +42,8 @@ bool pet_process(keyrecord_t *record, bool pet_page);
 bool pet_press(void);
 void pet_menu_close(void);
 // Raw HID 0xF6 0x18 (get) / 0x19 (action; new pet: species in data[3]) /
-// 0x1A (settings) / 0x1B (species + stage, for restoring a backup); writes
-// need `allowed`.
+// 0x1A (settings) / 0x1B (species + stage, for restoring a backup) / 0x1D
+// (v26: LED reactions, big pet); writes need `allowed`.
 void pet_raw_hid(uint8_t *data, bool allowed);
 // Backup: settings + name.
 

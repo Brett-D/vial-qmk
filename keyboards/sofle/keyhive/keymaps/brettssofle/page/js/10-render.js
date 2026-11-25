@@ -252,6 +252,8 @@ function renderPad(ui) {
   if (hid) {
     $("tpOn").checked = !!t.enable;
     if (S.wiggle) { $("wgOn").checked = S.wiggle.on; setIfIdle("wgEvery", S.wiggle.every); }
+  $("netPrefs").classList.toggle("hidden", !S.prefs);
+  if (S.prefs && document.activeElement !== $("netEnter")) $("netEnter").checked = S.prefs.addrEnter;
     setIfIdle("tpThr", t.threshold); setIfIdle("tpRel", t.release);
     $("tpThrV").textContent = t.threshold; $("tpRelV").textContent = t.release;
   } else {

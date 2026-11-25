@@ -62,6 +62,14 @@ void ask_key(uint8_t row, uint8_t col) {
     if (!yes && !no) {
         return;
     }
+    // v26: the Enter the keyboard typed after the network address (or one you
+    // press out of habit right after it) opens the page; it must not also say
+    // yes to the session that page then asks for. The knob always counts.
+    uint32_t entered = deliver_address_enter_at();
+    if (hid.state == HS_ASK && yes && (base == KC_ENTER || base == KC_SPACE) &&
+        (timer_elapsed32(hid.time) < CONFIG_ASK_KEY_GUARD_MS || (entered && timer_elapsed32(entered) < CONFIG_ADDR_ENTER_GUARD_MS))) {
+        return;
+    }
     if (hid.state == HS_ASK) {
         hid.state     = yes ? HS_ACTIVE : HS_DENIED;
         hid.time      = timer_read32();
@@ -276,12 +284,21 @@ static void cfg_raw_hid(uint8_t *data) {
         case CMD_PET_ACT:
         case CMD_PET_SET:
         case CMD_PET_RESTORE:
+        case CMD_PET_GLOW:
             if (hid.state == HS_ACTIVE) {
                 hid.time = timer_read32();
             }
             pet_raw_hid(data, hid_writes_allowed());
             return;
 #endif
+        case CMD_PREFS: // v26: [2] 0 get / 1 set; [3] bit 0 = Enter after the network address
+            if (arg == 1 && hid_writes_allowed()) {
+                net_addr_enter_set(data[3] & 1);
+            }
+            data[2] = 0xA1;
+            data[3] = net_addr_enter() ? 1 : 0;
+            data[4] = arg == 1 ? (hid_writes_allowed() ? 1 : 3) : 0;
+            return;
         case CMD_REQUEST:
             hid_request();
             break;

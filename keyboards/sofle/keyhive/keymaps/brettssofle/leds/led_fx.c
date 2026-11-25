@@ -25,6 +25,7 @@
 #    include "transactions.h"
 #    include "split_util.h"
 #include "brett_util.h"
+#    include "config_mode.h"
 
 #    define LAYERS_EE_OFFSET 80 // after the LED map (0-75) and the OLED page (78-79)
 #    define LAYERS_EE_OLD 0x4C  // v6-v19: magic, base, react, hue, sat, sum
@@ -340,12 +341,50 @@ void led_layers_set_remote(uint8_t base, uint8_t react, uint8_t hue, uint8_t sat
 
 static int8_t fire_row = -1, fire_col = -1;
 
+// v26: the pet's LED reaction now (pet.c starts it on the master; the right
+// half gets type, strength and age in the lighting RPC, bytes 12-15).
+static struct {
+    uint8_t  type, seq, level, got; // got: the right half's last type | seq << 4 (0xFF: none yet)
+    uint32_t start;
+} pg = {.got = 0xFF};
+
+void led_fx_pet(uint8_t type, uint8_t level) {
+    if (type >= FXP_COUNT) {
+        return;
+    }
+    pg.type  = type;
+    pg.level = level > 100 ? 100 : level;
+    pg.seq   = (pg.seq + 1) & 15;
+    pg.start = timer_read32();
+}
+
+bool led_fx_pet_now(uint8_t *type, uint16_t *t, uint8_t *level) {
+    if (!pg.type || pg.type >= FXP_COUNT) {
+        return false;
+    }
+    uint32_t el = timer_elapsed32(pg.start);
+    if (el >= fx_pet_ms[pg.type]) {
+        pg.type = FXP_NONE;
+        return false;
+    }
+    *type  = pg.type;
+    *t     = (uint16_t)el;
+    *level = pg.level;
+    return true;
+}
+
 static void remote_handler(uint8_t in_len, const void *in_data, uint8_t out_len, void *out_data) {
     const uint8_t *p = in_data;
     fx_settings_t  s;
     if (in_len >= 10 && unpack(p, &s)) {
         s.bright  = in_len >= 11 && p[10] <= 100 ? p[10] : 0; // v21; a v20 left half: the background's
         s.curve   = in_len >= 12 && p[11] < FX_CURVE_COUNT ? p[11] : FX_CURVE_SMOOTH; // v25b; v23-v25 left halves: gamma 2.2
+        if (in_len >= 16 && p[12] != pg.got) { // v26: a new pet reaction (or the end of one): its age, so a resend can't restart it
+            pg.got   = p[12];
+            pg.type  = (p[12] & 15) < FXP_COUNT ? p[12] & 15 : FXP_NONE;
+            pg.level = p[13] > 100 ? 100 : p[13];
+            pg.start = timer_read32() - (uint16_t)(p[14] | p[15] << 8);
+        }
         fx        = s;
         remote_at = timer_stamp32();
         if (p[8] < MATRIX_ROWS && p[9] < MATRIX_COLS) {
@@ -368,21 +407,37 @@ void led_fx_task(void) {
     if (!is_keyboard_master() || !is_transport_connected()) {
         return;
     }
-    static uint8_t  sent[10];
+    static uint8_t  sent[11];
     static uint32_t sent_at;
-    uint8_t         p[12];
+    uint8_t         p[16];
+    if (pg.type && config_mode_leds_quiet(false)) {
+        pg.type = FXP_NONE; // calibration, typed delivery, keyboard-only mode: it stops
+        pg.seq  = (pg.seq + 1) & 15;
+    }
+    uint8_t  pt  = 0, lv = 0;
+    uint16_t age = 0;
+    if (pg.type) {
+        uint32_t el = timer_elapsed32(pg.start);
+        age         = el > 0xFFFF ? 0xFFFF : (uint16_t)el;
+        pt          = pg.type, lv = pg.level;
+    }
     pack(&fx, p);
     p[8]  = fire_row < 0 ? 0xFF : fire_row;
     p[9]  = fire_col < 0 ? 0xFF : fire_col;
     p[10] = fx.bright; // v21 (a v20 right half reads the first 10)
     p[11] = fx.curve;  // v25b
-    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent[9] == p[11] && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
+    p[12] = (uint8_t)(pg.seq << 4 | pt); // v26: the pet's reaction
+    p[13] = lv;
+    p[14] = age;
+    p[15] = age >> 8;
+    if (fire_row < 0 && !memcmp(p, sent, 8) && sent[8] == p[10] && sent[9] == p[11] && sent[10] == p[12] && sent_at && timer_elapsed32(sent_at) < FX_SYNC_MS) {
         return;
     }
     if (transaction_rpc_send(RPC_ID_USER_LEDFX, sizeof(p), p)) {
         memcpy(sent, p, 8);
         sent[8]  = p[10];
         sent[9]  = p[11];
+        sent[10] = p[12];
         sent_at  = timer_stamp32();
         fire_row = fire_col = -1;
     }

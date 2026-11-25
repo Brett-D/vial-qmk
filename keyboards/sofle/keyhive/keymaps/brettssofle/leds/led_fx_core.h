@@ -551,3 +551,158 @@ static inline fx_hsv_t fx_background(uint8_t id, const fx_bg_ctx_t *c, uint8_t x
     }
     return o;
 }
+
+/* ---- the pet's LED reactions (v26) ----
+ * pet.c starts one (eating, playing, happy, sad, sleeping, hatching, growing
+ * up); led_fx_draw.c draws it over everything else for a few seconds, on both
+ * halves (led_fx.c syncs the start), in the key-press brightness. It never
+ * touches the lighting settings. fx_pet_prepare once per frame, fx_pet_px per
+ * LED (no division there). */
+
+enum fx_pet { FXP_NONE, FXP_EAT, FXP_PLAY, FXP_HAPPY, FXP_SAD, FXP_SLEEP, FXP_HATCH, FXP_GROW, FXP_COUNT };
+static const uint16_t fx_pet_ms[FXP_COUNT] = {0, 2400, 3000, 1800, 6000, 5000, 1600, 2800};
+#define FXP_OLED_X 128 // the right half's OLED in LED space (y5): eating and hatching start there
+#define FXP_OLED_Y5 22
+
+typedef struct {
+    uint8_t  type, env; // env: the whole reaction's strength now (eases in and out)
+    uint16_t t;         // ms since it started
+    int16_t  r[3];      // eat: the three pulses' radii (< 0: not yet); hatch: ring, rays; play: sparkle tick
+    int16_t  bx, by5;   // play: the ball
+    int16_t  sx;        // happy / grow: the sweep's centre
+    uint8_t  hue, b;    // play: the ball's colour; sad / sleep: the breath; hatch: the flash
+} fx_pet_t;
+
+typedef struct {
+    uint8_t a, h, s, v; // strength (before env and the intensity setting), colour; v: share of the brightness
+} fx_pet_px_t;
+
+static inline void fx_pet_prepare(fx_pet_t *g, uint8_t type, uint16_t t) {
+    uint16_t len = type < FXP_COUNT ? fx_pet_ms[type] : 0;
+    g->type = t < len ? type : (uint8_t)FXP_NONE;
+    g->t    = t;
+    g->env = 0, g->bx = 0, g->by5 = 0, g->sx = 0, g->hue = 0, g->b = 0;
+    g->r[0] = g->r[1] = g->r[2] = -1;
+    if (!g->type) return;
+    uint8_t  in  = t < 120 ? (uint8_t)(t * 17 >> 3) : 255;
+    uint32_t rem = (uint32_t)(len - t);
+    uint8_t  out = rem * 4 < len ? (uint8_t)(rem * 4 * 255 / len) : 255;
+    g->env       = fx_smooth8(in < out ? in : out);
+    switch (type) {
+        case FXP_EAT: // three warm pulses from the OLED
+            for (uint8_t k = 0; k < 3; k++) g->r[k] = t >= k * 500 ? (int16_t)((uint32_t)(t - k * 500) * 3 / 25) : -1;
+            break;
+        case FXP_PLAY: { // a ball hopping across the keys and back, sparkles around it
+            uint16_t p = t % 3000, q = t % 500;
+            g->bx      = (int16_t)(8 + (uint32_t)(p < 1500 ? p : 3000 - p) * 208 / 1500);
+            g->by5     = fx_y5((uint8_t)(60 - (uint32_t)224 * q * (500 - q) / 250000));
+            g->hue     = (uint8_t)((uint32_t)t * 43 >> 8);
+            g->r[0]    = (int16_t)(t / 120);
+            break;
+        }
+        case FXP_HAPPY: // a rainbow sweep
+            g->sx = (int16_t)(-40 + (int32_t)((uint32_t)t * 304 / len));
+            break;
+        case FXP_GROW: { // there and back
+            uint16_t h = len / 2, q = t < h ? t : len - t;
+            g->sx      = (int16_t)(-40 + (int32_t)((uint32_t)q * 304 / h));
+            break;
+        }
+        case FXP_SAD: // two slow breaths (the underglow only)
+            g->b = fx_sin8((uint8_t)((uint32_t)t * 512 / len - 64));
+            break;
+        case FXP_SLEEP: // one, very dim
+            g->b = fx_sin8((uint8_t)((uint32_t)t * 256 / len - 64));
+            break;
+        case FXP_HATCH: // a starburst: flash, ring and rays from the OLED
+            g->r[0] = (int16_t)(t * 23 >> 7);
+            g->r[1] = (int16_t)(t >> 2 > 200 ? 200 : t >> 2);
+            g->b    = t < 200 ? (uint8_t)((uint32_t)(200 - t) * 255 / 200) : 0;
+            break;
+        default:
+            break;
+    }
+}
+
+static const int8_t fx_pet_dir[8][2] = {{64, 0}, {45, 45}, {0, 64}, {-45, 45}, {-64, 0}, {-45, -45}, {0, -64}, {45, -45}};
+
+// The reaction at the LED at x, y (LED space); under = an underglow LED.
+static inline fx_pet_px_t fx_pet_px(const fx_pet_t *g, uint8_t x, uint8_t y, uint8_t under) {
+    fx_pet_px_t o   = {0, 0, 255, 255};
+    int16_t     ly5 = fx_y5(y);
+    switch (g->type) {
+        case FXP_EAT: {
+            int16_t  dx = (int16_t)x - FXP_OLED_X, dy = ly5 - FXP_OLED_Y5;
+            uint16_t d  = fx_isqrt((uint32_t)(dx * dx) + (uint32_t)(dy * dy));
+            if (d >= 150) break;
+            uint8_t fall = (uint8_t)(255 - (d * 218 >> 8)); // fainter further away (half at the far end)
+            for (uint8_t k = 0; k < 3; k++) {
+                if (g->r[k] < 0) continue;
+                uint16_t off = d > g->r[k] ? d - g->r[k] : g->r[k] - d;
+                if (off >= 10) continue;
+                uint8_t a = fx_div255((uint32_t)fx_smooth8((uint8_t)(255 - off * 25)) * fall);
+                if (a > o.a) o.a = a, o.h = k & 1 ? 40 : 20; // orange, yellow, orange
+            }
+            break;
+        }
+        case FXP_PLAY: {
+            int16_t  dx = (int16_t)x - g->bx, dy = ly5 - g->by5;
+            uint16_t ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+            if (ax < 19 && ay < 19) {
+                uint16_t d = fx_isqrt((uint32_t)ax * ax + (uint32_t)ay * ay);
+                if (d < 18) o.a = fx_smooth8((uint8_t)(255 - d * 14)), o.h = g->hue;
+            }
+            if (!o.a && ax < 60) {
+                uint32_t hs = fx_hash32(((uint32_t)x << 8 | (uint32_t)ly5) ^ (uint32_t)g->r[0] * 2654435761u);
+                if (!(hs & 15)) o.a = (uint8_t)(140 + (hs >> 8 & 63)), o.h = (uint8_t)(hs >> 16), o.s = 200;
+            }
+            break;
+        }
+        case FXP_HAPPY:
+        case FXP_GROW: {
+            int16_t  dd = (int16_t)x - g->sx;
+            uint16_t ad = dd < 0 ? -dd : dd;
+            if (ad < 40) o.a = fx_smooth8((uint8_t)(255 - ad * 6)), o.h = (uint8_t)(x + (g->t >> 2));
+            break;
+        }
+        case FXP_SAD:
+            if (under) o.a = (uint8_t)(g->b * 170 >> 8), o.h = 160;
+            break;
+        case FXP_SLEEP:
+            o.a = (uint8_t)(g->b * 3 >> 2), o.h = 180, o.s = 220, o.v = 64;
+            break;
+        case FXP_HATCH: {
+            int16_t  dx = (int16_t)x - FXP_OLED_X, dy = ly5 - FXP_OLED_Y5;
+            uint16_t d  = fx_isqrt((uint32_t)(dx * dx) + (uint32_t)(dy * dy));
+            uint16_t off = d > g->r[0] ? d - g->r[0] : g->r[0] - d;
+            o.h          = 36; // gold
+            if (off < 8) o.a = fx_smooth8((uint8_t)(255 - off * 32)), o.s = 200;
+            for (uint8_t k = 0; k < 8; k++) {
+                int32_t along = ((int32_t)dx * fx_pet_dir[k][0] + (int32_t)dy * fx_pet_dir[k][1]) >> 6;
+                if (along < 0 || along > g->r[1]) continue;
+                int32_t  c    = (int32_t)dx * fx_pet_dir[k][1] - (int32_t)dy * fx_pet_dir[k][0];
+                uint16_t side = (uint16_t)((c < 0 ? -c : c) >> 6);
+                if (side >= 6) continue;
+                uint8_t a = fx_smooth8((uint8_t)(255 - side * 42));
+                if (a > o.a) o.a = a, o.s = 110;
+            }
+            if (g->b > o.a) o.a = g->b, o.s = 0; // the first flash: white
+            break;
+        }
+        default:
+            break;
+    }
+    return o;
+}
+
+// The strength setting (1-100 %) as a factor for fx_pet_alpha: even a weak
+// reaction covers at least ~a quarter of what's under it, so its colour reads
+// instead of mixing into grey with the background.
+static inline uint16_t fx_pet_k(uint8_t level) {
+    return (uint16_t)(64 + (uint16_t)(level > 100 ? 100 : level) * 192 / 100);
+}
+
+// Its final strength at an LED: env and the strength setting (k = fx_pet_k).
+static inline uint8_t fx_pet_alpha(const fx_pet_t *g, uint8_t a, uint16_t k) {
+    return (uint8_t)((uint32_t)fx_div255((uint32_t)a * g->env) * k >> 8);
+}

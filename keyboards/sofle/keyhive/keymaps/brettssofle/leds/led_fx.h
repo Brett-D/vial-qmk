@@ -26,6 +26,11 @@ void led_fx_fire(uint8_t row, uint8_t col); // a ripple from that key, on both h
 void led_fx_task(void);                     // master: settings / test ripples to the right half
 uint8_t led_fx_base(void);
 uint8_t led_fx_curve(void); // the LED output curve (fx_curve), both halves
+// v26, the pet's LED reactions (enum fx_pet; pet.c starts them on the master).
+void led_fx_pet(uint8_t type, uint8_t level);                     // level: 1-100 % strength
+bool led_fx_pet_now(uint8_t *type, uint16_t *t, uint8_t *level); // the one running on this half
+bool led_pet_frame_begin(bool calibrating);                       // rgb_driver.c, per frame: false = none
+void led_pet_pixel(uint8_t led, uint16_t rgb[3]);                 // over everything else, 8.8
 
 // The v6-v19 interface: background + key-press effect as rgb_matrix modes,
 // with the key-press colour (react: 0 = none, LED_LAYERS_KEEP = unchanged).

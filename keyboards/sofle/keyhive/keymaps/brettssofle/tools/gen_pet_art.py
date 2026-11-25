@@ -25,8 +25,14 @@ FRAMES = ["idle", "idle2", "blink", "happy", "sad", "tired", "sleep", "eat", "de
           "walk", "look", "yawn", "sneeze", "surprise", "fly1", "fly2"]  # stretch / sit: drawn taller / shorter (pet_motion.h sy)
 FLYERS = {("owl", "baby"), ("owl", "child"), ("owl", "adult"), ("dragon", "adult")}
 SCALE = {"baby": 0.62, "child": 0.78, "adult": 1.0}
-SIZE = {"baby": (18, 16), "child": (22, 20), "adult": (28, 25)}
-GLYPH = {"baby": "S", "child": "M", "adult": "L"}
+# v26 bigger pets (Brett: "can you also increase the size of the animals too"):
+# much taller, for the tall screen, and the young ones wider (adult 28 x 37
+# (dragon / flying owl 32 wide), child ~25 x 29, baby ~20 x 23; v25: 28 x 25,
+# 22 x 20, 18 x 16). At most 32 wide (one uint32 per row); adults stay 28 wide
+# so they still have room to walk side to side (32 = the whole screen).
+STRETCH = {"baby": (1.15, 1.45), "child": (1.15, 1.45), "adult": (1.0, 1.45)}
+SIZE = {st: (int(math.ceil(28 * SCALE[st] * STRETCH[st][0] - 1e-9)), int(math.ceil(25 * SCALE[st] * STRETCH[st][1] - 1e-9))) for st in SCALE}
+GLYPH = {"baby": "M", "child": "L", "adult": "L"}
 
 # ---------------------------------------------------------------- face glyphs
 # Eyes: anchor = top-left of the box; the right eye is the mirror image.
@@ -110,11 +116,12 @@ POSE = {"idle2": ("idle2", 1, 1), "walk": ("walk", 1, 1), "fly1": ("fly1", 1, 1)
 class Canvas:
     """Shapes in adult coordinates, scaled into a stage-sized grid."""
 
-    def __init__(self, w, h, s, ox=0.0, oy=0.0, sx=None, sy=None):
+    def __init__(self, w, h, s, ox=0.0, oy=0.0, sx=None, sy=None, wings=1.0):
         self.w, self.h, self.s, self.ox, self.oy = w, h, s, ox, oy
         self.sx, self.sy = sx or s, sy or s  # squash / stretch
-        self.fine = s >= 0.99   # adult: all details
-        self.mid = s >= 0.7     # child and adult
+        self.fine = s >= 0.85   # child and adult: all details
+        self.mid = s >= 0.7     # every stage (v26: babies are as big as v25's children)
+        self.wings = wings      # spread wings narrower, to stay 32 wide
         self.mask = set()
         self.detail = set()
         self.erase = set()
@@ -276,7 +283,7 @@ def owl(c, f, st):
     c.line([(12.5, 14), (13.5, 16), (14.5, 14)])  # beak
     if f in ("fly1", "fly2"):  # spread wings: up, then down
         for sgn in (-1, 1):
-            X = lambda x: 13.5 + sgn * (13.5 - x)
+            X = lambda x: 13.5 + sgn * (13.5 - x) * c.wings
             pts = [(6, 12), (-1.5, 2.5), (0.5, 8), (-2, 10.5), (5, 17)] if f == "fly1" else [(6, 11), (-2, 16.5), (0.5, 18.5), (-1, 22), (6.5, 19.5)]
             c.poly([(X(x), y) for x, y in pts])
     elif c.mid:
@@ -343,19 +350,22 @@ DRAW = {"pip": pip, "cat": cat, "dog": dog, "owl": owl, "dragon": dragon, "blob"
 
 def frame(species, stage, f):
     s = SCALE[stage]
+    kx, ky = STRETCH[stage]
     w, h = SIZE[stage]
     pose, mx_, my_ = POSE.get(f, ("idle", 1, 1))
     if pose in ("fly1", "fly2") and (species, stage) not in FLYERS:
         pose = "idle"  # can't fly: never shown flying (pet_motion.h), same as idle
+    sx, sy = s * kx * mx_, s * ky * my_
+    wings = 1.0
     if species == "dragon" and stage == "adult":
         w = 32
     if species == "owl" and pose in ("fly1", "fly2"):
-        w += 4  # the wings
-    sx, sy = s * mx_, s * my_
+        wings = min(1.0, 15.6 / (15.5 * sx))  # tip to tip at most 32
+        w = min(32, int(math.ceil(2 * 15.5 * sx * wings + 1)))
     h = int(math.ceil(25 * sy - 1e-9)) if my_ > 1 else h
     ox = (w - 28 * sx) / 2  # centred
     oy = h - 25 * sy
-    c = Canvas(w, h, s, ox, oy, sx, sy)
+    c = Canvas(w, h, s * kx, ox, oy, sx, sy, wings)
     a = DRAW[species](c, pose, stage)
     g = c.grid()
     gs = GLYPH[stage]
@@ -377,7 +387,7 @@ def frame(species, stage, f):
         stamp(g, mg, mx, my)
     if f == "dead":  # halo above the head
         hx, _ = c.T(13.5, 0)
-        hw = max(2, int(round(3.5 * s)))
+        hw = max(2, int(round(3.5 * s * kx)))
         top = max(0, int(round(c.T(0, a["top"])[1])) - 3)
         g = [[0] * w for _ in range(3)] + g  # 3 rows taller
         for x in range(int(hx) - hw, int(hx) + hw + 1):
@@ -461,6 +471,7 @@ def bits(row):
 
 def build():
     frames = []  # (w, h, rows)
+    assert max(w for w, h in SIZE.values()) <= 32
     index, seen = {}, {}
 
     def add(key, g):
@@ -579,7 +590,7 @@ def main():
 def sheet(frames, index, path):
     """Review sheet: every species x stage x state, 4x."""
     from PIL import Image, ImageDraw
-    S, cw, ch, lab = 4, 34, 32, 16
+    S, cw, ch, lab = 4, 34, 44, 16
     cols = [("egg", "egg")] + [(st, f) for st in STAGES for f in FRAMES] + [("icons", "food/play")]
     W = 70 + len(cols) * (cw * S + 6)
     H = 40 + len(SPECIES) * (ch * S + 10)

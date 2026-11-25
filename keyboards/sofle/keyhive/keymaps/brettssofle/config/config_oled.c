@@ -64,7 +64,7 @@ void oled_sync_task(void) {
     }
 #ifdef NETWORK_ENABLE
     uint32_t typed = deliver_address_typed_at();
-    now.net        = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) | (typed && timer_elapsed32(typed) < 2500 ? 0x40 : 0) : 0; // 0x40: v22 "Typed"
+    now.net        = net_mode_active() ? net_state() | (net_failed() ? 0x80 : 0) | (typed && timer_elapsed32(typed) < 2500 ? 0x40 : 0) | (net_addr_enter() ? 0x20 : 0) : 0; // 0x40: v22 "Typed", 0x20: v26 + Enter
     uint32_t ago;
     uint8_t  why = net_last_exit(&ago);
     now.net_bye  = !now.net && why && ago < CONFIG_NET_BYE_MS ? why : 0;
@@ -146,7 +146,7 @@ bool config_mode_oled_task(void) {
             oled_write_P(PSTR("s"), false);
         }
         oled_set_cursor(0, 11);
-        oled_write_P(oled_state.net & 0x40 ? PSTR("Typed     ") : PSTR("Knob =type"), oled_state.net & 0x40); // the right knob types the address
+        oled_write_P(oled_state.net & 0x40 ? PSTR("Typed     ") : oled_state.net & 0x20 ? PSTR("Knob =open") : PSTR("Knob =type"), oled_state.net & 0x40); // the right knob types the address (v26: + Enter)
         oled_set_cursor(0, 13);
         oled_write_P(PSTR("CONFG=exit "), false);
         return true;

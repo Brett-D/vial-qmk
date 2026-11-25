@@ -95,6 +95,8 @@ enum cfg_hid_cmd {
     CMD_PET_ACT     = 0x19, // care: 1 feed, 2 play, 3 sleep/wake, 4 clean, 5 new pet
     CMD_PET_SET     = 0x1A, // flags (1 on, 2 can die), decay speed, name
     CMD_PET_RESTORE = 0x1B, // species, stage (restoring a backup)
+    CMD_PET_GLOW    = 0x1D, // v26: the pet's LED reactions + big pet: 0 get, 1 set, 2 test
+    CMD_PREFS       = 0x1E, // v26: 0 get, 1 set: [3] bit 0 = Enter after the network address
     CMD_REQUEST     = 0x10, // ask for a web session (confirmed on the keyboard)
     CMD_END         = 0x11, // end the web session
 };
@@ -107,6 +109,8 @@ enum hid_state { HS_NONE, HS_ASK, HS_ACTIVE, HS_DENIED, HS_TIMEOUT };
 #define VIAL_DYNAMIC_ENTRY_OP 0x0D
 
 // Knob push switches in the matrix (keyhive keyboard.json).
+#define CONFIG_ASK_KEY_GUARD_MS 300     // CONF?: an Enter / Space this soon after it appeared isn't an answer
+#define CONFIG_ADDR_ENTER_GUARD_MS 1500 // ... nor this soon after the keyboard typed the address + Enter
 #define KNOB_L_ROW 4
 #define KNOB_L_COL 0
 #define KNOB_R_ROW 9

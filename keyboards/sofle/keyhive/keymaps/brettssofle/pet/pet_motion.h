@@ -21,6 +21,7 @@
 #include "pet_ids.h"
 
 #define PETM_FLOOR 55      // lowest floor (the front of the meadow)
+#define PETM_FLOOR_BIG 78  // v26 big pet, menu closed: the stats are slim, the meadow goes down to here
 #define PETM_TOP 18        // ground pets stay below the mood icon
 #define PETM_AIR_TOP 9     // flyers may cover it (it hides)
 #define PETM_SEG_MS 2000   // one move or rest
@@ -69,18 +70,19 @@ static inline int8_t petm_arc(uint32_t p, uint32_t len, uint8_t h) {
 }
 
 typedef struct {
-    uint8_t bw, bh, fly, xr, gmin, amin; // box, can fly, x range, floor ranges (ground, air)
+    uint8_t bw, bh, fly, xr, gmin, amin, fl; // box, can fly, x range, floor ranges (ground, air), the lowest floor
 } petm_area_t;
 
-static inline void petm_area(petm_area_t *a, uint8_t bw, uint8_t bh, bool fly, uint8_t stage) {
+// fl: the lowest floor, PETM_FLOOR or (big pet, menu closed) PETM_FLOOR_BIG.
+static inline void petm_area(petm_area_t *a, uint8_t bw, uint8_t bh, bool fly, uint8_t stage, uint8_t fl) {
     static const uint8_t depth[3] = {12, 10, 8}, air[3] = {14, 46, 46}; // babies stay low
     uint8_t s = stage >= 1 && stage <= 3 ? stage - 1 : 2;
-    a->bw = bw, a->bh = bh, a->fly = fly;
+    a->bw = bw, a->bh = bh, a->fly = fly, a->fl = fl;
     a->xr       = bw < 32 ? 32 - bw : 0;
-    int16_t g   = PETM_TOP - 1 + bh, ga = PETM_FLOOR - depth[s];
-    a->gmin     = (uint8_t)(g > ga ? (g > PETM_FLOOR ? PETM_FLOOR : g) : ga);
-    int16_t m   = PETM_AIR_TOP - 1 + bh, ma = PETM_FLOOR - air[s];
-    a->amin     = (uint8_t)(m > ma ? (m > PETM_FLOOR ? PETM_FLOOR : m) : ma);
+    int16_t g   = PETM_TOP - 1 + bh, ga = PETM_FLOOR - depth[s]; // big pet: the whole extra room is meadow too
+    a->gmin     = (uint8_t)(g > ga ? (g > fl ? fl : g) : ga);
+    int16_t m   = PETM_AIR_TOP - 1 + bh, ma = fl - air[s];
+    a->amin     = (uint8_t)(m > ma ? (m > fl ? fl : m) : ma);
 }
 
 static inline bool petm_moves(uint16_t seed, uint32_t k, uint8_t stage) {
@@ -99,7 +101,7 @@ static inline void petm_point(const petm_area_t *a, uint16_t seed, uint32_t k, i
     uint32_t r = petm_seg(seed, k);
     *x         = (int8_t)(((r >> 8) & 0xFF) % (a->xr + 1u));
     uint8_t lo = a->fly && ((r >> 24) & 3) != 0 ? a->amin : a->gmin; // flyers: in the air 3 times in 4
-    *fl        = (uint8_t)(lo + ((r >> 16) & 0xFF) % (PETM_FLOOR - lo + 1u));
+    *fl        = (uint8_t)(lo + ((r >> 16) & 0xFF) % (a->fl - lo + 1u));
 }
 
 static inline void petm_pose(pet_pose_t *o, const petm_area_t *a, uint8_t species, uint8_t stage, uint16_t seed, uint32_t mt, uint8_t mood) {

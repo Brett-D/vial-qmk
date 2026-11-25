@@ -47,6 +47,22 @@ _Static_assert(sizeof(view_t) <= RPC_M2S_BUFFER_SIZE, "view_t too big for the sp
 
 static view_t view; // master: what it sent; right half: what it shows
 
+// v26: the NET screen's knob types the address and then presses Enter (Brett:
+// "could it press enter at the end too?"), unless switched off on the config
+// page; saved in bit 7 of the page byte (0 = Enter, the default).
+static bool addr_no_enter;
+
+bool net_addr_enter(void) {
+    return !addr_no_enter;
+}
+
+void net_addr_enter_set(bool on) {
+    if (addr_no_enter != !on) {
+        addr_no_enter = !on;
+        oled_page_changed(oled_page_current());
+    }
+}
+
 static void view_handler(uint8_t in_len, const void *in_data, uint8_t out_len, void *out_data) {
     if (in_len == sizeof(view)) {
         memcpy(&view, in_data, sizeof(view));
@@ -58,13 +74,14 @@ void oled_pages_init(void) {
     if (is_keyboard_master()) {
         uint8_t ee[2];
         eeconfig_read_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee));
-        oled_page_set(ee[0] == VIEW_EE_MAGIC ? ee[1] : 0);
+        oled_page_set(ee[0] == VIEW_EE_MAGIC ? ee[1] & 0x7F : 0);
+        addr_no_enter = ee[0] == VIEW_EE_MAGIC && (ee[1] & 0x80);
     }
 }
 
 // The page itself and the OLED_PAGE key: page_key.c. Saved here when changed.
 void oled_page_changed(uint8_t page) {
-    uint8_t ee[2] = {VIEW_EE_MAGIC, page};
+    uint8_t ee[2] = {VIEW_EE_MAGIC, (uint8_t)(page | (addr_no_enter ? 0x80 : 0))};
     eeconfig_update_kb_datablock(ee, VIEW_EE_OFFSET, sizeof(ee));
 }
 

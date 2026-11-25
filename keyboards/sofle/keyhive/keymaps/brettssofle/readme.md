@@ -270,7 +270,7 @@ from the start, with the state under it: `USB conn.` → `Link up DHCP` →
 `Ready`, and the seconds so far while it waits. Windows can take up to
 ~30 s, longer the first time on a new USB port (it sets up the adapter);
 the address works as soon as it says `Ready`. After 20 s without an
-address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=type`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only, **no Enter** — press it yourself); the OLED says `Typed`. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. While a page asks for a session (`CONF? Web`), the right knob or Enter always answers it first and never types (v25b: in v22-v25 the answer was lost while the address was still being typed, or when the computer was slow to collect it; address typing now also gives up after 1 s without the computer reading the keyboard). When network mode ends, the OLED says why for a few
+address the OLED also offers `P` = type the page instead. **Click the right knob** on the NET screen (`Knob=open`) and the keyboard types `http://192.168.7.1` into the address bar you have selected (US layout, printable keys only) and then presses **Enter**, so the page opens (v26, Brett: "could it press enter at the end too?"; before: no Enter); the OLED says `Typed`. The Enter goes out only after the computer has collected every character; Esc, a page asking for a session, or a computer that stops reading the keyboard stop it with no Enter. The page's `CONF? Web` still needs its own answer: an Enter within 1.5 s of the typed one (or 0.3 s of the prompt) doesn't count, the knob always does. Switch the Enter off on the config page (Trackpad tab, **Network mode**: `Knob=type` then, as before); saved in bit 7 of the OLED page byte, in backups. It works in any state, types on release (holding it or both knobs doesn't type) and once per click. While a page asks for a session (`CONF? Web`), the right knob or Enter always answers it first and never types (v25b: in v22-v25 the answer was lost while the address was still being typed, or when the computer was slow to collect it; address typing now also gives up after 1 s without the computer reading the keyboard). When network mode ends, the OLED says why for a few
 seconds (`NET off`: by key / idle 10min / P). Open **http://192.168.7.1** (or http://sofle.local where
 .local names resolve) in any browser (Firefox and Safari too — no WebHID needed): the keyboard
 serves the config page itself, gzipped from flash. The page asks for a
@@ -314,8 +314,8 @@ from the HTML at every build) and can type either into any browser:
 | | light `sofle-light.html` (**P**) | full `sofle-config.html` (**F**) |
 |---|---|---|
 | has | keymap + knobs, LED effect / colour / speed / brightness, trackpad press threshold, Backup / Restore | everything (LED zones and calibration, background + key-press effects with the preview, pet, wiggler, knob control, keyboard-only mode, help, …) |
-| gzipped | 12.3 KB | 62.1 KB (the limit is 64 KB) |
-| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~22 s, then ~484 s |
+| gzipped | 12.3 KB | 67.7 KB (v26: the length field took the page past 64 KB, see below) |
+| typing (one clean pass) | ~22 s address + loader, then ~94 s | ~23 s, then ~528 s |
 | when done | opens in the same tab in keyboard-only mode; **Save for mouse mode next time** | Save as / Use it here |
 
 The full page is also served by network mode (quicker, and the mouse works
@@ -359,7 +359,9 @@ Enter.
 
 How the stream survives dropped keys: the page is sent in 60-byte blocks
 (`,` + 96 letters/digits `A–Z 2–7`: block number, page length, page kind,
-51 page bytes, CRC-32), every key as its own key-down and key-up report
+51 page bytes, CRC-32; v26: the page kind byte also carries bits 16-22 of
+the length, so a page can be up to 8 MB — the loader is typed by the same
+firmware, so nothing older has to understand it), every key as its own key-down and key-up report
 (4 ms per key on the first pass). A block with one key lost or doubled is
 mended by the page (it tries every insertion/deletion against the CRC);
 worse blocks are dropped and the rest kept. Repair blocks are XORs of
@@ -578,6 +580,35 @@ clean), then the selected care action as a big icon with its name.
   wag, head tilt, wing flap, squish, gill wiggle) and its own food and toy:
   apple/ball, fish/yarn, bone/ball, mouse/feather, coal/flame, jelly/bubble,
   worm/bubbles. A happy dragon puffs a little flame.
+- **Bigger** (v26, Brett: "can you also increase the size of the animals
+  too"): much taller and, while young, wider — adult 28 × 37 (dragon and
+  flying owl 32 wide), child ~25 × 29, baby ~20 × 23 (v25: 28 × 25, 22 × 20,
+  18 × 16); adults stay 28 wide so they can still walk side to side.
+  **Big pet** (on by default, Pet tab): while the care menu is closed the
+  stats shrink to four thin bars (food, fun, energy, clean; a low one blinks)
+  and the meadow goes down to row 78; opening the menu brings the full stats
+  back and the pet glides up out of their way. Art: 303 frames, 37 KB flash
+  (+11 KB).
+- **LED reactions** (v26, Brett: "maybe make led reactions to happy sad or
+  eating and playing?"): eating = warm orange/yellow pulses rippling out
+  from the right half (where the OLED is); playing = a rainbow ball hopping
+  across the keys with sparkles; happy (also cleaning) = a rainbow sweep,
+  growing up = a sweep there and back; hungry / sad / dirty = slow blue
+  breathing on the underglow only, at most every 4 minutes; asleep = a very
+  dim slow pulse (when it falls asleep and every 2 minutes); hatching = a
+  starburst from the OLED. A few seconds each, over whatever lighting runs,
+  in the key-press brightness and through the brightness curve; they never
+  change the lighting settings, and none run during keyboard-only config
+  mode, LED calibration or typed delivery (the mood and sleep ones also not
+  in network mode or while the page is connected). The maths is in
+  `leds/led_fx_core.h` (`fx_pet_*`, mirrored in `page/fx_core.js`); pet.c
+  starts them on the master and the lighting RPC gives the right half the
+  type, strength and age. Pet tab, **LED reactions**: on/off (default on),
+  strength (default 70 %), always or only while the pet's screen shows, one
+  switch and a **Test** button per reaction, and a preview over your
+  lighting. Raw HID 0xF6 0x1D: 0 get, 1 set (flags, strength, big pet),
+  2 test. Saved in the pet's record (version 3; v14-v25 pets are kept and
+  get the defaults), in backups.
 - **It moves around** (v25, `pet/pet_motion.h`): ground pets wander the
   meadow (left/right, and up the screen = further away) and each moves its
   own way: Pip hops, the dog trots with a wag, the cat walks and sometimes
@@ -614,10 +645,11 @@ clean), then the selected care action as a big icon with its name.
   it into a ghost, and the knob menu offers a new egg.
 - **Config page → Pet tab** (WebHID or network): live view, stats, stage and
   growth, the same care buttons, name, on/off, care speed, can die, and **New
-  pet…** with a species picker (a new egg). Raw HID 0xF6 0x18 (get), 0x19
-  (care; 5 = new egg + species), 0x1A (settings), 0x1B (species + stage, for
-  restoring); all but 0x18 need the confirmed session. Backups include the
-  pet's settings, name, species and stage.
+  pet…** with a species picker (a new egg), Big pet and the LED reactions.
+  Raw HID 0xF6 0x18 (get), 0x19 (care; 5 = new egg + species), 0x1A
+  (settings), 0x1B (species + stage, for restoring), 0x1D (LED reactions,
+  big pet); all writes need the confirmed session. Backups include the
+  pet's settings, name, species, stage, LED reactions and Big pet.
 - **Saved** in the last 32 EEPROM bytes (taken off the end of Vial's macro
   buffer, 1887 → 1855 bytes, so nothing else moves and settings survive):
   every 10 minutes if something changed, and 15 s after care or a settings

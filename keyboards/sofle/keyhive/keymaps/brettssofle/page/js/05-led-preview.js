@@ -20,8 +20,8 @@ function pvFire(row, col) {
   PV.ev.push({ x: led[0], y: led[1], born: performance.now() });
   if (PV.ev.length > 8) PV.ev.shift(); // the keyboard remembers the last 8 presses
 }
-function pvFrame(now) {
-  const cv = $("fxCanvas"), l = S.led;
+function pvFrame(now, cv = $("fxCanvas")) {
+  const l = S.led;
   if (!cv || !l || S.mode !== "hid" || !cv.offsetParent) return;
   const g = cv.getContext("2d"), t = Math.floor(now) >>> 0;
   const info = fxInfo(l.base), solo = !!(info.kind & FXK.SOLO), effect = solo ? 0 : l.fxEffect;
@@ -36,6 +36,9 @@ function pvFrame(now) {
   const ctx = { t, hue: l.hue, sat: l.sat, val: l.val, spd: l.speed, wpm: FX.typingWpm(PV.ev.map((e) => Math.min(65535, Math.floor(now - e.born)))),
                 n: PV.ev.length, hx: PV.ev.map((e) => e.x), ht: PV.ev.map((e) => Math.min(65535, Math.floor(now - e.born))) };
   g.fillStyle = "#0c0d10"; g.fillRect(0, 0, PV_W, PV_H);
+  // v26: the pet's LED reaction (Test, or a care action on the Pet tab), over everything (led_pet_pixel).
+  let pg = null;
+  if (PV.pet) { const el = Math.floor(now - PV.pet.born); if (el < FX.PET_MS[PV.pet.type]) pg = FX.petPrepare(PV.pet.type, el); else PV.pet = null; }
   for (const [x, y, flag] of DATA.fxLeds) {
     let rgb = [0, 0, 0];
     if (l.enable && l.base) {
@@ -52,6 +55,10 @@ function pvFrame(now) {
         FX.blend16(s.blend, rgb, top, Math.min(255, best), v);
       }
     }
+    if (pg && pg.type && l.enable && !(flag & 2 && l.zone === 2)) {
+      const o = FX.petPx(pg, x, y, flag & 2 ? 1 : 0), a = FX.petAlpha(pg, o.a, FX.petK(PV.pet.level));
+      if (a) { const v = FX.div255(FX.overlayV(l.fxBright || 0, l.val, l.max || 255) * o.v); FX.blend16(0, rgb, FX.hsv2rgb(o.h, o.s, v), a, v); }
+    }
     FX.cap16(rgb, l.max || 255);
     // The keyboard sends these values through its output curve (FX.curve16); a screen
     // applies gamma 2.2 to the colours it is given, so show curve^(1/2.2): the light the LEDs give.
@@ -62,7 +69,7 @@ function pvFrame(now) {
   }
   $("fxApprox").textContent = l.base && l.base < DATA.fxTable.ownBg ? "(QMK backgrounds are approximated here; key-press effects are exact.)" : "";
 }
-(function pvLoop(now) { try { if (!PV.loopOff && now - PV.last > 30) { PV.last = now; pvFrame(now); } } catch (e) { /* preview only */ } requestAnimationFrame(pvLoop); })(0);
+(function pvLoop(now) { try { if (!PV.loopOff && now - PV.last > 30) { PV.last = now; pvFrame(now, $("fxCanvas")); pvFrame(now, $("pgCanvas")); } } catch (e) { /* preview only */ } requestAnimationFrame(pvLoop); })(0);
 $("fxCanvas").addEventListener("click", async (ev) => {
   const r = ev.target.getBoundingClientRect(), mx = (ev.clientX - r.left) * PV_W / r.width, my = (ev.clientY - r.top) * PV_H / r.height;
   let best = null, bd = 1e9;
@@ -100,6 +107,7 @@ function fxOfReact(react) {
   return E.RING;
 }
 async function hidLoadTp() {
+  await prefsLoad();
   const d = await cmd([0xf5, 0x00]);
   S.tp = { enable: d[7], threshold: d[8], release: d[9], dirty: 0 };
 }

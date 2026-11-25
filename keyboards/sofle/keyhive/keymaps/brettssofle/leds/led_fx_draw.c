@@ -9,6 +9,7 @@
 #include QMK_KEYBOARD_H
 #include "led_fx.h"
 #include "led_map.h"
+#include "config_mode.h"
 
 #ifdef RGB_MATRIX_ENABLE
 #    define FX_DIM_STEP 24 // per frame, background dim in / out
@@ -104,6 +105,48 @@ bool led_fx_frame_begin(bool calibrating) {
     uint8_t want = any ? 255 - fx.dim * 28 : 255;
     dim_now      = dim_now < want ? (want - dim_now < FX_DIM_STEP ? want : dim_now + FX_DIM_STEP) : (dim_now - want < FX_DIM_STEP ? want : dim_now - FX_DIM_STEP);
     return true;
+}
+
+// v26: the pet's LED reaction, over everything (and the key-press layer):
+// in the key-press brightness, its strength scaled by the pet's LED setting.
+static fx_pet_t pet_g;
+static uint16_t pet_k;
+static uint8_t  pet_v;
+static bool     pet_ug_dark;
+
+bool led_pet_frame_begin(bool calibrating) {
+    uint8_t  type, level;
+    uint16_t t;
+    if (calibrating || !led_fx_pet_now(&type, &t, &level)) {
+        return false;
+    }
+    fx_pet_prepare(&pet_g, type, t);
+    if (!pet_g.type) {
+        return false;
+    }
+    fx_settings_t s;
+    led_fx_get(&s);
+    pet_k       = fx_pet_k(level);
+    pet_v       = fx_overlay_v(s.bright, rgb_matrix_get_val(), RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+    pet_ug_dark = config_mode_underglow_dark(); // "keys only": the underglow stays dark
+    return true;
+}
+
+void led_pet_pixel(uint8_t led, uint16_t rgb[3]) {
+    led_flags_t f     = g_led_config.flags[led];
+    bool        under = HAS_FLAGS(f, LED_FLAG_UNDERGLOW);
+    if (f == LED_FLAG_NONE || (under && pet_ug_dark)) {
+        return;
+    }
+    fx_pet_px_t o = fx_pet_px(&pet_g, g_led_config.point[led].x, g_led_config.point[led].y, under);
+    uint8_t     a = fx_pet_alpha(&pet_g, o.a, pet_k);
+    if (!a) {
+        return;
+    }
+    uint8_t v      = fx_div255((uint32_t)pet_v * o.v);
+    rgb_t   c      = hsv_to_rgb((hsv_t){o.h, o.s, v});
+    uint8_t top[3] = {c.r, c.g, c.b};
+    fx_blend16(FX_REPLACE, rgb, top, a, v);
 }
 
 // The overlay over one LED's background colour: in = 8-bit, out = 8.8 (v23).

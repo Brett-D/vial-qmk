@@ -16,6 +16,8 @@ void    oled_page_set(uint8_t page);        // master: at start (saved page)
 void    oled_page_changed(uint8_t page);    // oled_pages.c: saves it
 void    oled_page_key(keyrecord_t *record); // the OLED_PAGE key (page_key.c)
 void    oled_pages_task(void);              // housekeeping, master syncs the right half
+bool    net_addr_enter(void);               // v26: the NET screen's knob presses Enter after the address (saved)
+void    net_addr_enter_set(bool on);
 #ifdef OLED_ENABLE
 void oled_right_init(void);
 bool oled_pages_render(void); // right half: false = status page

@@ -1,7 +1,7 @@
 // The pet's motion: the same integer maths as pet/pet_motion.h (C/JS parity
 // test: harness pet/pet_match.py). Inlined into the page by gen_config.py.
 const PETM = (() => {
-  const FLOOR = 55, TOP = 18, AIR_TOP = 9, SEG = 2000, TRAVEL = 1400;
+  const FLOOR = 55, FLOOR_BIG = 78, TOP = 18, AIR_TOP = 9, SEG = 2000, TRAVEL = 1400;
   const M = { HAPPY: 1, SAD: 2, TIRED: 4, EXCITED: 8, ASLEEP: 16 }, P = { MIRROR: 1, AIR: 2, MOVING: 4 };
   const FX = { NONE: 0, SNEEZE: 1, EXCLAIM: 2, STAR: 3, FLAME: 4 };
   const SP = { pip: 0, cat: 1, dog: 2, owl: 3, dragon: 4, blob: 5, axolotl: 6 };
@@ -15,16 +15,16 @@ const PETM = (() => {
   };
   const seg = (seed, k) => hash(((seed * 0x10001) ^ Math.imul(k, 0x9e3779b1)) >>> 0);
   const arc = (p, len, h) => (p >= len ? 0 : Math.floor((4 * h * p * (len - p)) / (len * len)));
-  function area(bw, bh, fly, stage) {
+  function area(bw, bh, fly, stage, fl = FLOOR) {
     const depth = [12, 10, 8], air = [14, 46, 46], s = stage >= 1 && stage <= 3 ? stage - 1 : 2;
-    const g = TOP - 1 + bh, ga = FLOOR - depth[s], m = AIR_TOP - 1 + bh, ma = FLOOR - air[s];
-    return { bw, bh, fly, xr: bw < 32 ? 32 - bw : 0, gmin: g > ga ? Math.min(g, FLOOR) : ga, amin: m > ma ? Math.min(m, FLOOR) : ma };
+    const g = TOP - 1 + bh, ga = FLOOR - depth[s], m = AIR_TOP - 1 + bh, ma = fl - air[s];
+    return { bw, bh, fly, fl, xr: bw < 32 ? 32 - bw : 0, gmin: g > ga ? Math.min(g, fl) : ga, amin: m > ma ? Math.min(m, fl) : ma };
   }
   const moves = (seed, k, stage) => k % 3 === 0 || (seg(seed, k) & 7) < [3, 4, 5][stage >= 1 && stage <= 3 ? stage - 1 : 2];
   const lastMove = (seed, k, stage) => { while (!moves(seed, k, stage)) k--; return k; };
   function point(a, seed, k) {
     const r = seg(seed, k), lo = a.fly && ((r >>> 24) & 3) !== 0 ? a.amin : a.gmin;
-    return [((r >>> 8) & 0xff) % (a.xr + 1), lo + (((r >>> 16) & 0xff) % (FLOOR - lo + 1))];
+    return [((r >>> 8) & 0xff) % (a.xr + 1), lo + (((r >>> 16) & 0xff) % (a.fl - lo + 1))];
   }
   function pose(a, species, stage, seed, mt, mood) {
     const k = Math.floor(mt / SEG), u = mt % SEG, j = lastMove(seed, k, stage), rj = seg(seed, j), r = seg(seed, k);
@@ -98,5 +98,5 @@ const PETM = (() => {
     return s;
   }
   const rows = (h, sy) => Math.floor((h * sy + 8) / 16), row = (r, h, out) => Math.floor((r * h) / out);
-  return { FLOOR, M, P, FX, FR, hash, seg, area, pose, seedOf, rows, row, arc, init(frames) { frames.forEach((f, i) => (FR[f] = i)); } };
+  return { FLOOR, FLOOR_BIG, M, P, FX, FR, hash, seg, area, pose, seedOf, rows, row, arc, init(frames) { frames.forEach((f, i) => (FR[f] = i)); } };
 })();

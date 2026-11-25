@@ -86,7 +86,7 @@
   details { margin-top:16px; } pre { white-space:pre-wrap; font-size:11px; color:var(--dim); max-height:240px; overflow:auto; }
   .hidden { display:none !important; }
   .petTop { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  #petCanvas { width:96px; height:150px; flex:none; background:#0a0a1e; border-radius:8px; image-rendering:pixelated; }
+  #petCanvas { width:96px; flex:none; background:#0a0a1e; border-radius:8px; image-rendering:pixelated; }
   .petInfo { flex:1; min-width:220px; }
   #petStats .row { display:grid; grid-template-columns:70px 1fr 40px; gap:12px; padding:4px 0; }
   #petStats .v { text-align:right; font-family:ui-monospace,monospace; }
@@ -263,6 +263,11 @@
           <div class="row"><span>Mouse wiggler</span><label><input type="checkbox" id="wgOn"> on</label><span></span></div>
           <div class="row"><span>Nudge after no input for</span><select id="wgEvery"><option value="0">30 seconds</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="3">4 minutes</option></select><span></span></div>
           <p class="small dim">Keeps the computer awake: after this long without any key, knob or trackpad use, the pointer moves 1 pixel and straight back (again every interval while you're away). Applies right away and switches off whenever the keyboard is unplugged. The <b>Mouse wiggle</b> key (Special) toggles it too.</p>
+          <div class="hidden" id="netPrefs">
+            <h2 style="margin-top:14px">Network mode</h2>
+            <div class="row"><span>Typing the address</span><label><input type="checkbox" id="netEnter"> press Enter after typing <code>http://192.168.7.1</code></label><span></span></div>
+            <p class="small dim">On the NET screen, a click of the right knob types the address into the address bar you have selected; with this on (the default) it also presses Enter, so the page opens. That Enter never answers the page's <b>CONF?</b> — confirm with the knob. Saved on the keyboard.</p>
+          </div>
         </div>
         <h2 style="margin-top:14px">Live Z</h2>
         <canvas id="zbar" width="600" height="70"></canvas>
@@ -287,6 +292,17 @@
           <div class="row"><span>Name</span><input type="text" id="petName" maxlength="9" spellcheck="false"><span></span></div>
           <div class="row"><span>Needs care</span><select id="petDecay"><option value="0">Slowly (stats last ~2 days)</option><option value="1">Normally (~1 day)</option><option value="2">Quickly (~12 hours)</option></select><span></span></div>
           <div class="row"><span>Can die</span><label><input type="checkbox" id="petDie"> after a whole day with no food and no fun</label><span></span></div>
+          <div class="row pgOnly"><span>Big pet</span><label><input type="checkbox" id="petBig"> more room: thin stat bars while the care menu is closed</label><span></span></div>
+          <div class="pgOnly">
+            <h3 class="fxH">LED reactions</h3>
+            <div class="row"><span>LED reactions</span><label><input type="checkbox" id="pgOn"> the keys light up when the pet eats, plays, is happy, sad, sleeps or hatches</label><span></span></div>
+            <div class="row pgRow"><span>Strength</span><input type="range" id="pgLevel" min="5" max="100" step="5"><span class="v" id="pgLevelV"></span></div>
+            <div class="row pgRow"><span>When</span><select id="pgPage"><option value="0">Always</option><option value="1">Only while the pet's screen is showing</option></select><span></span></div>
+            <div class="pgRow" id="pgList"></div>
+            <div class="fxPrev pgRow"><canvas id="pgCanvas" width="600" height="230"></canvas>
+              <div class="small dim">Preview over your lighting: <b>Test</b> plays a reaction here and on the keyboard.</div></div>
+            <div class="small dim pgRow">A reaction lights up for a few seconds over your lighting, in the key-press brightness, and never changes the lighting settings. None during config mode, LED calibration or typed delivery (the sad and sleepy ones also not while this page is connected).</div>
+          </div>
           <div class="btns"><button id="petNew">New pet…</button></div>
           <div id="petPicker" class="hidden">
             <p class="small">Choose who hatches from the new egg. It starts as an egg (about 10 minutes), is a baby until a day old, a child until three days, then an adult. Good care keeps it growing at full speed.</p>

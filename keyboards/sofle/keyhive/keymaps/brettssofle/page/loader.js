@@ -6,8 +6,9 @@
 //
 // It receives the page in blocks (deliver.c): ',' + 96 base32 symbols
 // (A-Z, 2-7; read from KeyboardEvent.code, so any keyboard layout) = 60
-// bytes: block index u16 (bit 15 = repair block), gzip length u16, page
-// kind u8 (0 light, 1 full), 51 page bytes, CRC-32. '...' ends a pass, and
+// bytes: block index u16 (bit 15 = repair block), gzip length (low 16
+// bits), page kind (bit 0: 0 light, 1 full) + length bits 16-22 (bits 1-7),
+// 51 page bytes, CRC-32. '...' ends a pass, and
 // so do 3 s without keys (in case all three dots are lost). A block one
 // symbol short or long is mended against its CRC; 192 symbols (a lost ',')
 // are two blocks. Good blocks are kept across passes. Repair block r is the
@@ -42,9 +43,9 @@
     for (let i = 0; i < 96; i++) { a = (a << 5 | w[i]) & 4095; l += 5; if (l > 7) { l -= 8; o.push(a >> l & 255); } }
     if (crc(o) !== (o[56] << 24 | o[57] << 16 | o[58] << 8 | o[59]) >>> 0) return false;
     let x = o[0] << 8 | o[1];
-    const len = o[2] << 8 | o[3];
+    const len = (o[4] >> 1) * 65536 + (o[2] << 8 | o[3]);
     if (len !== st.L) { st.K = []; st.Q = []; st.L = len; st.N = Math.ceil(len / 51); }
-    st.J = o[4];
+    st.J = o[4] & 1;
     st.good++;
     const p = o.slice(5, 56);
     if (x < 32768) st.K[x] = p;

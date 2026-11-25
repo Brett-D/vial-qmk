@@ -189,6 +189,22 @@ static void zones_color(uint8_t *hue, uint8_t *sat) {
 
 bool map_commit_ok;
 
+bool config_mode_underglow_dark(void) {
+    return zones_zone() == ZONE_KEYS_ONLY;
+}
+
+bool config_mode_leds_quiet(bool ambient) {
+    if (config_mode_led_cal_busy() || cfg.state != ST_OFF || deliver_state() != DL_OFF || deliver_address_typing()) {
+        return true;
+    }
+#    ifdef NETWORK_ENABLE
+    if (ambient && net_mode_active()) {
+        return true;
+    }
+#    endif
+    return ambient && hid.state == HS_ACTIVE;
+}
+
 bool config_mode_led_cal_busy(void) {
     return (is_keyboard_master() ? led_cal_code() : oled_state.cal) != 0;
 }

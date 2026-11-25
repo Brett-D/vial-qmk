@@ -35,6 +35,8 @@ uint8_t deliver_seconds_left(void); // DL_DONE: until it finishes by itself
 bool     deliver_type_address(void); // false: busy
 bool     deliver_address_typing(void);
 uint32_t deliver_address_typed_at(void); // timer_read32() when it finished (0 = never)
+uint32_t deliver_address_enter_at(void); // v26: when it last finished with Enter (0 = never)
+bool     net_addr_enter(void);           // v26 setting (oled_pages.c): Enter after the address
 // Shared with the host tests / bootstrap.html.
 uint32_t deliver_hash(uint32_t r, uint32_t s);
 uint32_t deliver_crc32(const uint8_t *b, uint8_t n);

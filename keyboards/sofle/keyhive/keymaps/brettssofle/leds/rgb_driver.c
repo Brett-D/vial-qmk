@@ -130,13 +130,17 @@ static void half_flush(void) {
             }
         }
     }
-    bool fx = led_fx_frame_begin(cal);
+    bool fx  = led_fx_frame_begin(cal);
+    bool pet = led_pet_frame_begin(cal); // v26: the pet's LED reaction
     for (int i = 0; i < WS2812_LED_COUNT; i++) {
         uint16_t o[3];
         if (fx) {
             led_fx_pixel(first + i, frame[i], o);
         } else {
             for (uint8_t ch = 0; ch < 3; ch++) o[ch] = (uint16_t)frame[i][ch] << 8;
+        }
+        if (pet) {
+            led_pet_pixel(first + i, o);
         }
         fx_cap16(o, RGB_MATRIX_MAXIMUM_BRIGHTNESS);
         for (uint8_t ch = 0; ch < 3; ch++) {

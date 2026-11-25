@@ -12,6 +12,10 @@
 //   y  57      ...........
 //   y  60- 87  food / fun / energy / clean: tiny icon + bar
 //   y  90      ...........
+//
+//   Big pet (v26, the default) with the menu closed: the play area goes down
+//   to y 78 (dotted line at 80) and the stats are four thin bars at y 82-88;
+//   opening the menu brings the full stats back and the pet glides up.
 //   y  92-109  the selected care action as a big icon (boxed, with arrows,
 //              while choosing)
 //   y 112-119  its name: Feed / Play / Sleep / Wake / Clean / New   line 14
@@ -127,6 +131,22 @@ static void stats(const pet_view_t *v) {
         uint8_t w = (uint8_t)((s[i] * 23 + 50) / 100);
         if (w) {
             box(8, y + 1, 7 + w, y + 3, true);
+        }
+    }
+}
+
+// Big pet, menu closed (v26): four thin bars (food, fun, energy, clean); a low one blinks.
+static void slim_stats(const pet_view_t *v, uint8_t ph) {
+    const uint8_t *s = &v->food;
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t y = 82 + i * 2, w = (uint8_t)((s[i] * 28 + 50) / 100);
+        px(0, y, true);
+        px(31, y, true);
+        if (s[i] < 20 && (ph & 1)) {
+            continue;
+        }
+        for (uint8_t x = 0; x < w; x++) {
+            px(2 + x, y, true);
         }
     }
 }
@@ -278,9 +298,11 @@ void pet_draw(const pet_view_t *v, bool force) {
     petm_area_t area;
     static const uint8_t egg_box[2] = {16, 18};
     const uint8_t       *bx = egg ? egg_box : pet_box[sp][st - 1];
-    petm_area(&area, bx[0], bx[1], !egg && (pet_flyer[sp] >> (st - 1)) & 1, st);
+    bool        big = (v->flags & PV_BIG) && !(v->flags & PV_MENU);
+    uint8_t     FL  = big ? PETM_FLOOR_BIG : PETM_FLOOR; // the lowest floor (the meadow's front)
+    petm_area(&area, bx[0], bx[1], !egg && (pet_flyer[sp] >> (st - 1)) & 1, st, FL);
     if (egg) {
-        p.x = (32 - 16) / 2, p.floor = PETM_FLOOR;
+        p.x = (32 - 16) / 2, p.floor = FL;
     } else {
         petm_pose(&p, &area, sp, st, pet_seed(sp, v->name), mt4 / 4, mood);
     }
@@ -347,7 +369,7 @@ void pet_draw(const pet_view_t *v, bool force) {
     uint16_t fi  = show_egg ? pet_egg_index[sp] : pet_frame_index[sp][st - 1][f];
     uint8_t  fw  = pet_frames[fi].w, fh = petm_rows(pet_frames[fi].h, show_egg ? 16 : sy);
     int16_t  left = show_egg ? (32 - fw) / 2 + dx : cur_x + (bx[0] - fw) / 2 + dx;
-    int16_t  bot  = (show_egg ? PETM_FLOOR : cur_floor) + dy;
+    int16_t  bot  = (show_egg ? FL : cur_floor) + dy;
     int16_t  top  = bot + 1 - fh, cx = left + fw / 2;
     bool     food_above = false;
     if (animating && anim_type == ANIM_EAT && !show_egg) { // turn to where the food fits; no room either side: above
@@ -364,13 +386,13 @@ void pet_draw(const pet_view_t *v, bool force) {
     sprite(fi, left, bot, mir && !show_egg, show_egg ? 16 : sy);
 
     // What it's doing, around it.
-    int16_t fy = clampi(top - 9, 9, 48), side = mir ? left + fw : left - 8; // above it / in front of its face (mir as drawn)
+    int16_t fy = clampi(top - 9, 9, FL - 7), side = mir ? left + fw : left - 8; // above it / in front of its face (mir as drawn)
     if (animating) {
         switch (anim_type) {
             case ANIM_EAT: { // bite by bite
                 // The mouth side goes first: facing left, the food is on its left and loses its right columns.
                 uint8_t b = (uint8_t)(el * 9 / ANIM_MS), keep = b >= 8 ? 0 : mir ? (uint8_t)(0xFF >> b) : (uint8_t)(0xFF << b);
-                int16_t ix = food_above ? cx - 4 : side, iy = food_above ? clampi(top - 9, 9, 48) : clampi(top + fh / 3, 9, 48);
+                int16_t ix = food_above ? cx - 4 : side, iy = food_above ? clampi(top - 9, 9, FL - 7) : clampi(top + fh / 3, 9, FL - 7);
                 if (food_above) keep = b >= 8 ? 0 : (uint8_t)(0xFF << b);
                 unpaint(ix, iy, ix + 7, iy + 7);
                 icon_cols(pet_food_icon[sp], ix, iy, 1, keep);
@@ -379,17 +401,17 @@ void pet_draw(const pet_view_t *v, bool force) {
             case ANIM_PLAY:
                 if (toy == PET_ICON_BALL || toy == PET_ICON_YARN) {
                     int16_t tx = tri(el, toy == PET_ICON_BALL ? 1500 : 2000, 24);
-                    int16_t ty = toy == PET_ICON_BALL ? 47 - petm_arc(el % 500, 500, 14) : 48;
+                    int16_t ty = toy == PET_ICON_BALL ? FL - 8 - petm_arc(el % 500, 500, 14) : FL - 7;
                     unpaint(tx, ty, tx + 7, ty + 7);
                     icon(toy, tx, ty, 1);
                 } else if (toy == PET_ICON_FEATHER) { // floats down, side to side
-                    icon(toy, 4 + tri(el, 1200, 18), 9 + (int16_t)(el * 36 / PLAY_MS), 1);
+                    icon(toy, 4 + tri(el, 1200, 18), 9 + (int16_t)(el * (FL - 19) / PLAY_MS), 1);
                 } else if (toy == PET_ICON_FLAME) { // puffs of fire, rising
-                    icon(toy, cx - 4 + ((el / 200) & 1 ? 3 : -3), clampi(fy - (int16_t)((el / 100) % 4) * 2, 9, 48), 1);
+                    icon(toy, cx - 4 + ((el / 200) & 1 ? 3 : -3), clampi(fy - (int16_t)((el / 100) % 4) * 2, 9, FL - 7), 1);
                 } else { // bubbles rise
                     for (uint8_t k = 0; k < 2; k++) {
                         uint32_t q = (el + k * 500) % 1000;
-                        icon(toy, cx - 4 + (k ? 7 : -7) + ((q / 250) & 1), clampi(top - 6 - (int16_t)(q * 20 / 1000), 9, 50), 1);
+                        icon(toy, cx - 4 + (k ? 7 : -7) + ((q / 250) & 1), clampi(top - 6 - (int16_t)(q * 20 / 1000), 9, FL - 5), 1);
                     }
                 }
                 break;
@@ -430,7 +452,7 @@ void pet_draw(const pet_view_t *v, bool force) {
                 break;
             case PETFX_FLAME: // fire! rising from its mouth (a dragon is too wide for fire beside it)
                 icon(PET_ICON_FLAME, cx - 4, fy, 1);
-                icon(PET_ICON_FLAME, cx - 4 + ((now / 150) & 1 ? 5 : -5), clampi(fy - 7, 9, 48), 1);
+                icon(PET_ICON_FLAME, cx - 4 + ((now / 150) & 1 ? 5 : -5), clampi(fy - 7, 9, FL - 7), 1);
                 break;
             default:
                 break;
@@ -440,16 +462,23 @@ void pet_draw(const pet_view_t *v, bool force) {
         }
     }
     if (asleep && !(animating && anim_type == ANIM_NO)) {
-        icon(PET_ICON_Z, clampi(left + fw - 4, 0, 24), clampi(top - 6 - (ph % 3) * 3, 9, 48), 1); // zzz floating up
+        icon(PET_ICON_Z, clampi(left + fw - 4, 0, 24), clampi(top - 6 - (ph % 3) * 3, 9, FL - 7), 1); // zzz floating up
     }
     if (poop) {
-        unpaint(23, 47, 31, 56);
-        icon(PET_ICON_POOP, 24, 48, 1);
+        unpaint(23, FL - 8, 31, FL + 1);
+        icon(PET_ICON_POOP, 24, FL - 7, 1);
     }
 
     // Below: stats, then the care action.
-    dotted(57);
-    stats(v);
+    if (big) {
+        unpaint(0, 79, 31, 89);
+        dotted(80);
+        slim_stats(v, ph);
+    } else {
+        unpaint(0, 57, 31, 89); // a big pet gliding up (the menu opened) goes behind the stats
+        dotted(57);
+        stats(v);
+    }
     dotted(90);
     action(v);
     flush();

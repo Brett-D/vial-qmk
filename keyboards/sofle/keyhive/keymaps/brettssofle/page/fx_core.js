@@ -293,5 +293,77 @@ const FX = (() => {
     }
     return o;
   }
-  return { CURVE, curve16, curveConvert, E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
+  // The pet's LED reactions (led_fx_core.h fx_pet_*).
+  const PET_MS = [0, 2400, 3000, 1800, 6000, 5000, 1600, 2800], PET = { NONE: 0, EAT: 1, PLAY: 2, HAPPY: 3, SAD: 4, SLEEP: 5, HATCH: 6, GROW: 7 };
+  const PET_DIR = [[64, 0], [45, 45], [0, 64], [-45, 45], [-64, 0], [-45, -45], [0, -64], [45, -45]];
+  function petPrepare(type, t) {
+    const len = type < 8 ? PET_MS[type] : 0, g = { type: t < len ? type : 0, t, env: 0, bx: 0, by5: 0, sx: 0, hue: 0, b: 0, r: [-1, -1, -1] };
+    if (!g.type) return g;
+    const inn = t < 120 ? (t * 17) >> 3 : 255, rem = len - t, out = rem * 4 < len ? Math.floor((rem * 4 * 255) / len) : 255;
+    g.env = smooth8(inn < out ? inn : out);
+    switch (type) {
+      case PET.EAT: for (let k = 0; k < 3; k++) g.r[k] = t >= k * 500 ? Math.floor(((t - k * 500) * 3) / 25) : -1; break;
+      case PET.PLAY: {
+        const p = t % 3000, q = t % 500;
+        g.bx = 8 + Math.floor(((p < 1500 ? p : 3000 - p) * 208) / 1500);
+        g.by5 = y5(60 - Math.floor((224 * q * (500 - q)) / 250000));
+        g.hue = ((t * 43) >>> 8) & 255; g.r[0] = Math.floor(t / 120); break;
+      }
+      case PET.HAPPY: g.sx = -40 + Math.floor((t * 304) / len); break;
+      case PET.GROW: { const h = len >> 1, q = t < h ? t : len - t; g.sx = -40 + Math.floor((q * 304) / h); break; }
+      case PET.SAD: g.b = sin8(Math.floor((t * 512) / len) - 64); break;
+      case PET.SLEEP: g.b = sin8(Math.floor((t * 256) / len) - 64); break;
+      case PET.HATCH: g.r[0] = (t * 23) >> 7; g.r[1] = t >> 2 > 200 ? 200 : t >> 2; g.b = t < 200 ? Math.floor(((200 - t) * 255) / 200) : 0; break;
+    }
+    return g;
+  }
+  function petPx(g, x, y, under) {
+    const o = { a: 0, h: 0, s: 255, v: 255 }, ly5 = y5(y);
+    switch (g.type) {
+      case PET.EAT: {
+        const dx = x - 128, dy = ly5 - 22, d = isqrt(dx * dx + dy * dy);
+        if (d >= 150) break;
+        const fall = 255 - ((d * 218) >> 8);
+        for (let k = 0; k < 3; k++) {
+          if (g.r[k] < 0) continue;
+          const off = Math.abs(d - g.r[k]);
+          if (off >= 10) continue;
+          const a = div255(smooth8(255 - off * 25) * fall);
+          if (a > o.a) { o.a = a; o.h = k & 1 ? 40 : 20; }
+        }
+        break;
+      }
+      case PET.PLAY: {
+        const ax = Math.abs(x - g.bx), ay = Math.abs(ly5 - g.by5);
+        if (ax < 19 && ay < 19) { const d = isqrt(ax * ax + ay * ay); if (d < 18) { o.a = smooth8(255 - d * 14); o.h = g.hue; } }
+        if (!o.a && ax < 60) {
+          const hs = hash32(((x << 8) | ly5) ^ mul32(g.r[0], 2654435761));
+          if (!(hs & 15)) { o.a = 140 + ((hs >>> 8) & 63); o.h = (hs >>> 16) & 255; o.s = 200; }
+        }
+        break;
+      }
+      case PET.HAPPY: case PET.GROW: { const ad = Math.abs(x - g.sx); if (ad < 40) { o.a = smooth8(255 - ad * 6); o.h = (x + (g.t >> 2)) & 255; } break; }
+      case PET.SAD: if (under) { o.a = (g.b * 170) >> 8; o.h = 160; } break;
+      case PET.SLEEP: o.a = (g.b * 3) >> 2; o.h = 180; o.s = 220; o.v = 64; break;
+      case PET.HATCH: {
+        const dx = x - 128, dy = ly5 - 22, d = isqrt(dx * dx + dy * dy), off = Math.abs(d - g.r[0]);
+        o.h = 36;
+        if (off < 8) { o.a = smooth8(255 - off * 32); o.s = 200; }
+        for (const [cx, cy] of PET_DIR) {
+          const along = (dx * cx + dy * cy) >> 6;
+          if (along < 0 || along > g.r[1]) continue;
+          const side = Math.abs(dx * cy - dy * cx) >> 6;
+          if (side >= 6) continue;
+          const a = smooth8(255 - side * 42);
+          if (a > o.a) { o.a = a; o.s = 110; }
+        }
+        if (g.b > o.a) { o.a = g.b; o.s = 0; }
+        break;
+      }
+    }
+    return o;
+  }
+  const petK = (level) => 64 + Math.floor((Math.min(100, level) * 192) / 100);
+  const petAlpha = (g, a, k) => (div255(a * g.env) * k) >> 8;
+  return { div255, CURVE, curve16, curveConvert, PET, PET_MS, petPrepare, petPx, petAlpha, petK, E, B, prepare, event, alive, intensity, hue, sat, overlayV, cap16, blend16, smooth8, gammaK, gamma16, hsv2rgb, typingWpm, background, sin8, hash32, isqrt, y5 };
 })();

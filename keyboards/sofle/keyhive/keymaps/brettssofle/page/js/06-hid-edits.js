@@ -144,6 +144,20 @@ async function wgInput() {
   render();
 }
 ["wgOn", "wgEvery"].forEach((id) => $(id).addEventListener("input", wgInput));
+// v26 keyboard preferences (0xF6 0x1E): Enter after the typed network address.
+async function prefsLoad() {
+  try { const d = await cmd([0xf6, 0x1e, 0]); S.prefs = d[0] === 0xf6 && d[2] === 0xa1 ? { addrEnter: !!(d[3] & 1) } : null; } catch (e) { S.prefs = null; }
+}
+async function prefsSet(p) {
+  const d = await cmd([0xf6, 0x1e, 1, p.addrEnter ? 1 : 0]);
+  if (d[2] !== 0xa1 || d[4] !== 1) throw new Error("refused");
+  S.prefs = { addrEnter: !!(d[3] & 1) };
+}
+$("netEnter").addEventListener("input", async () => {
+  try { await prefsSet({ addrEnter: $("netEnter").checked }); toast($("netEnter").checked ? "Enter after the address: on" : "Enter after the address: off"); }
+  catch (e) { toast("Failed: " + e.message, true); }
+  render();
+});
 $("ledSave").addEventListener("click", ledSave);
 $("ledRevert").addEventListener("click", ledRevert);
 

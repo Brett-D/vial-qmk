@@ -27,7 +27,9 @@ async function makeBackup() {
     ledMap: S.mapMeasured ? await calReadMap() : null, // null = the built-in map
     trackpad: { enable: S.tp.enable, threshold: S.tp.threshold, release: S.tp.release },
     wiggler: { on: S.wiggle.on, every: S.wiggle.every },
-    pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name, species: S.pet.species, stage: S.pet.stage } : undefined, // not its stats
+    prefs: S.prefs ? { addrEnter: S.prefs.addrEnter } : undefined, // v26
+    pet: S.pet ? { on: S.pet.on, canDie: S.pet.canDie, decay: S.pet.decay, name: S.pet.name, species: S.pet.species, stage: S.pet.stage,
+                   ...(S.pet.glowOk ? { big: S.pet.big, glow: S.pet.glow, glowLevel: S.pet.glowLevel } : {}) } : undefined, // not its stats
   };
 }
 async function backupDownload() {
@@ -93,9 +95,11 @@ function backupDiff(b) {
   const wg = b.wiggler && (b.wiggler.on !== S.wiggle.on || b.wiggler.every !== S.wiggle.every);
   out.push({ id: "wiggler", title: "Mouse wiggler (until unplugged)", n: wg ? 1 : 0, data: b.wiggler,
     lines: wg ? [`${S.wiggle.on ? "on" : "off"} → ${b.wiggler.on ? "on" : "off"}, every ${($("wgEvery").options[b.wiggler.every] || {}).text || b.wiggler.every}`] : [] });
+  const pf = b.prefs && S.prefs && b.prefs.addrEnter !== undefined && b.prefs.addrEnter !== S.prefs.addrEnter;
+  if (b.prefs && S.prefs) out.push({ id: "prefs", title: "Network mode", n: pf ? 1 : 0, data: b.prefs, lines: pf ? [`Enter after the address: ${S.prefs.addrEnter ? "on" : "off"} → ${b.prefs.addrEnter ? "on" : "off"}`] : [] });
   if (b.pet && S.pet) {
-    const f = ["on", "canDie", "decay", "name", "species", "stage"].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
-    const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name", species: "Species", stage: "Stage" };
+    const f = ["on", "canDie", "decay", "name", "species", "stage", ...(S.pet.glowOk ? ["big", "glow", "glowLevel"] : [])].filter((k) => b.pet[k] !== undefined && b.pet[k] !== S.pet[k]);
+    const lbl = { on: "Pet", canDie: "Can die", decay: "Needs care", name: "Name", species: "Species", stage: "Stage", big: "Big pet", glow: "LED reactions (which)", glowLevel: "LED reaction strength" };
     const val = (k, v) => (k === "decay" ? ["slowly", "normally", "quickly"][v] : k === "species" ? speciesName(v) : k === "stage" ? PET_STAGES[v] : typeof v === "boolean" ? (v ? "on" : "off") : v);
     out.push({ id: "pet", title: "Pet (settings, species, stage)", n: f.length, data: b.pet, lines: f.map((k) => `${lbl[k]}: ${val(k, S.pet[k])} → ${val(k, b.pet[k])}`) });
   }
@@ -189,6 +193,10 @@ async function restoreApply() {
     if (want.has("pet")) {
       prog("Pet…");
       await petSettings(b.pet);
+    }
+    if (want.has("prefs")) {
+      prog("Network mode…");
+      await prefsSet(b.prefs);
     }
     if (want.has("wiggler")) {
       prog("Mouse wiggler…");

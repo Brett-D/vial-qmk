@@ -22,8 +22,9 @@
 // 4. On the third Enter the keyboard types the page as base32 keystrokes
 //    A-Z/2-7, in blocks:
 //
-//      ',' + 96 symbols (60 bytes: block index u16, gzip length u16, page
-//      kind u8, 51 page bytes, CRC-32)   ... one block after another, '...'
+//      ',' + 96 symbols (60 bytes: block index u16, gzip length low 16
+//      bits, page kind (bit 0) + gzip length bits 16-22 (bits 1-7; v26: the
+//      full page passed 64 KB), 51 page bytes, CRC-32)   ... one block after another, '...'
 //      at the end of the pass.
 //
 //    Every key is a key-down report and a separate key-up report, 2 ms apart
@@ -81,7 +82,8 @@
 #define DL_KNOB_COL 5
 
 _Static_assert(DL_BLOCK_BYTES * 8 == DL_BLOCK_SYMBOLS * 5, "a block must be whole base32 symbols");
-_Static_assert(CONFIG_PAGE_GZ_LEN < 65536 && CONFIG_LIGHT_GZ_LEN < 65536, "gzip length is sent as 16 bits");
+_Static_assert(CONFIG_PAGE_GZ_LEN < (1ul << 23) && CONFIG_LIGHT_GZ_LEN < (1ul << 23), "gzip length is sent as 23 bits");
+_Static_assert((CONFIG_PAGE_GZ_LEN + DL_BLOCK_PAYLOAD - 1) / DL_BLOCK_PAYLOAD < 32768, "block index is 15 bits");
 
 extern usb_endpoint_in_t usb_endpoints_in[USB_ENDPOINT_IN_COUNT];
 
@@ -109,10 +111,12 @@ static matrix_row_t dl_swallowed[MATRIX_ROWS];
 // (config_mode.c): US layout, printable keys only, no Enter (Brett presses it).
 #define ADDR_IDLE 0xFF
 #define DL_ADDR_GIVE_UP_MS 1000 // a report not collected for this long: stop typing the address
+#define ADDR_KEYS (2 * sizeof(addr_keys)) // reports: down + up per character; then Enter down + up (v26)
 static const uint8_t addr_keys[] PROGMEM = {KC_H, KC_T, KC_T, KC_P, 0x80 | KC_SCLN, KC_SLSH, KC_SLSH, KC_1, KC_9, KC_2, KC_DOT, KC_1, KC_6, KC_8, KC_DOT, KC_7, KC_DOT, KC_1};
-_Static_assert(2 * sizeof(addr_keys) < ADDR_IDLE, "address too long");
+_Static_assert(2 * sizeof(addr_keys) + 2 < ADDR_IDLE, "address too long");
 static uint8_t  addr_pos = ADDR_IDLE; // report index (2 per character)
-static uint32_t addr_done_at;
+static uint32_t addr_done_at, addr_enter_at;
+static bool     addr_enter; // this time: Enter at the end (the setting: net_addr_enter, oled_pages.c)
 
 uint8_t deliver_state(void) {
     return dl.state;
@@ -198,7 +202,8 @@ bool deliver_type_address(void) {
         return false;
     }
     release_all();
-    addr_pos = 0;
+    addr_pos   = 0;
+    addr_enter = net_addr_enter();
     return true;
 }
 
@@ -208,6 +213,10 @@ bool deliver_address_typing(void) {
 
 uint32_t deliver_address_typed_at(void) {
     return addr_done_at;
+}
+
+uint32_t deliver_address_enter_at(void) {
+    return addr_enter_at;
 }
 
 static void address_task(void) {
@@ -221,9 +230,17 @@ static void address_task(void) {
         }
         return;
     }
-    if (addr_pos >= 2 * sizeof(addr_keys)) {
+    if (addr_pos >= ADDR_KEYS + (addr_enter ? 2 : 0)) {
         addr_pos     = ADDR_IDLE;
-        addr_done_at = timer_read32() | 1;
+        addr_done_at = timer_stamp32();
+        if (addr_enter) {
+            addr_enter_at = addr_done_at;
+        }
+        return;
+    }
+    if (addr_pos >= ADDR_KEYS) { // v26: every character collected by the computer: Enter (down, up)
+        report(addr_pos == ADDR_KEYS ? KC_ENTER : 0, false);
+        addr_pos++;
         return;
     }
     uint8_t k = pgm_read_byte(&addr_keys[addr_pos / 2]);
@@ -239,7 +256,7 @@ static const uint8_t *page_gz(void) {
     return dl.kind == DL_FULL ? config_page_gz : config_light_gz;
 }
 
-static uint16_t page_len(void) {
+static uint32_t page_len(void) {
     return dl.kind == DL_FULL ? CONFIG_PAGE_GZ_LEN : CONFIG_LIGHT_GZ_LEN;
 }
 
@@ -276,12 +293,13 @@ uint32_t deliver_crc32(const uint8_t *b, uint8_t n) {
 // Block `n` of this pass into dl.buf.
 static void build_block(uint16_t n) {
     uint16_t index = dl.pass == 1 ? n : (0x8000 | (dl.repair_next + n));
-    uint16_t len = page_len(), count = page_blocks();
+    uint32_t len   = page_len();
+    uint16_t count = page_blocks();
     dl.buf[0]    = index >> 8;
     dl.buf[1]    = index;
     dl.buf[2]    = len >> 8;
     dl.buf[3]    = len;
-    dl.buf[4]    = dl.kind;
+    dl.buf[4]    = (uint8_t)(dl.kind | (len >> 16) << 1);
     uint8_t *p   = dl.buf + 5;
     if (dl.pass == 1) {
         for (uint8_t j = 0; j < DL_BLOCK_PAYLOAD; j++) {
